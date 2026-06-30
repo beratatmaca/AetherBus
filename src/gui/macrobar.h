@@ -1,8 +1,7 @@
-// Quick-send macros + send-history recall for the injection panel.
-//
-// Self-contained so it can be dropped into the layout with a single connect():
-// it owns its macro definitions (persisted via QSettings) and a rolling history
-// of recent sends, and emits send() with the bytes + target side.
+/**
+ * @file macrobar.h
+ * @brief Quick-send macros and send-history recall for the injection panel.
+ */
 #pragma once
 
 #include <QByteArray>
@@ -14,21 +13,40 @@ class QHBoxLayout;
 
 namespace aether {
 
+/**
+ * @brief One-click transmit macros plus a rolling recall history.
+ *
+ * Self-contained so it drops into a layout with a single @ref send()
+ * connection: it owns its macro definitions (named hex payloads persisted via
+ * @c QSettings) and a bounded history of recent sends, re-emitting either on
+ * request.
+ */
 class MacroBar : public QWidget {
     Q_OBJECT
 
 public:
+    /** @brief Construct the bar and load saved macros. @param parent Optional parent. */
     explicit MacroBar(QWidget *parent = nullptr);
 
-    /// Record a just-sent payload at the top of the recall history.
+    /**
+     * @brief Record a just-sent payload at the top of the recall history.
+     * @param bytes    The payload that was sent (ignored if empty).
+     * @param toDevice @c true if it went to the device, @c false to the app.
+     */
     void pushHistory(const QByteArray &bytes, bool toDevice);
 
 signals:
-    /// Request that @p bytes be transmitted; @p toDevice picks the side.
+    /**
+     * @brief Request that a payload be transmitted.
+     * @param bytes    Bytes to send.
+     * @param toDevice @c true targets the device, @c false the application.
+     */
     void send(const QByteArray &bytes, bool toDevice);
 
 private slots:
+    /** @brief Open the editor dialog to define/replace the macro set. */
     void editMacros();
+    /** @brief Re-emit @ref send() for the currently selected history entry. */
     void resendSelected();
 
 private:

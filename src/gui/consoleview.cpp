@@ -47,30 +47,50 @@ void ConsoleView::appendChunk(const aether::CapturedChunk &chunk) {
     emit countsChanged(m_rx, m_tx);
 
     m_pending.append(chunk);
+    m_history.append(chunk);
+    if (m_history.size() > kMaxBlocks) {
+        m_history.removeFirst();
+    }
 }
 
 void ConsoleView::clearConsole() {
     m_pending.clear();
+    m_history.clear();
     m_curBytes.clear();
     m_openRendered = false;
     clear();
 }
 
-void ConsoleView::setFormats(bool hex, bool dec, bool bin, bool ascii) {
-    m_showHex = hex;
-    m_showDec = dec;
-    m_showBin = bin;
-    // Always keep at least one column visible so lines never render empty.
-    m_showAscii = (!hex && !dec && !bin) ? true : ascii;
+void ConsoleView::setFormat(Format format) {
+    m_format = format;
+    reapplyHistory();
+}
+
+void ConsoleView::reapplyHistory() {
+    // Temporarily disable logging to avoid duplication during replay
+    QFile *tempLog = m_logFile;
+    m_logFile = nullptr;
+
+    m_curBytes.clear();
+    m_openRendered = false;
+    clear();
+
+    for (const CapturedChunk &chunk : m_history) {
+        processChunk(chunk);
+    }
+
+    m_logFile = tempLog;
 }
 
 void ConsoleView::setNewlineMode(NewlineMode mode, int param) {
     m_mode = mode;
     m_newlineParam = param;
+    reapplyHistory();
 }
 
 void ConsoleView::setShowControlChars(bool on) {
     m_showControl = on;
+    reapplyHistory();
 }
 
 void ConsoleView::setAutoScroll(bool on) {
@@ -91,34 +111,56 @@ void ConsoleView::resetCounts() {
 }
 
 QString ConsoleView::buildLineHtml() const {
-    QStringList cols;
-    if (m_showHex) {
-        cols << codec::toHex(m_curBytes).toHtmlEscaped();
-    }
-    if (m_showDec) {
-        cols << codec::toDecimal(m_curBytes).toHtmlEscaped();
-    }
-    if (m_showBin) {
-        cols << codec::toBinary(m_curBytes).toHtmlEscaped();
-    }
-    if (m_showAscii) {
-        const QString ascii = m_showControl ? codec::toAsciiEscaped(m_curBytes) : codec::toAscii(m_curBytes);
-        cols << ascii.toHtmlEscaped();
-    }
-
     const QString ts = QDateTime::fromMSecsSinceEpoch(m_curTs).toString(QStringLiteral("HH:mm:ss.zzz"));
     const bool rx = m_curDir == Direction::Rx;
     const QString tag = rx ? QStringLiteral("Rx") : QStringLiteral("Tx");
     const QString color = rx ? kRxColor : kTxColor;
-    const QString sep = QStringLiteral(
-                            "</span><span style='color:%1'>  |  </span>"
-                            "<span style='color:%2'>")
-                            .arg(kMetaColor, color);
+
+    // Premium solid background highlights fully supported by Qt
+    QString cellStyle;
+    if (rx) {
+        cellStyle = QStringLiteral("background-color: #162c3d; color: #4fc3f7; font-family: monospace; font-size: 13px; font-weight: bold;");
+    } else {
+        cellStyle = QStringLiteral("background-color: #2b1d14; color: #ffb74d; font-family: monospace; font-size: 13px; font-weight: bold;");
+    }
+
+    QStringList byteCells;
+    for (int i = 0; i < m_curBytes.size(); ++i) {
+        const auto b = static_cast<unsigned char>(m_curBytes.at(i));
+        QString val;
+        switch (m_format) {
+            case Format::Hex:
+                val = QStringLiteral("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
+                break;
+            case Format::Decimal:
+                val = QStringLiteral("%1").arg(b, 3, 10, QLatin1Char('0'));
+                break;
+            case Format::Binary:
+                val = QStringLiteral("%1").arg(b, 8, 2, QLatin1Char('0'));
+                break;
+            case Format::Ascii:
+                val = (b >= 0x20 && b < 0x7F) ? QString(QLatin1Char(static_cast<char>(b))) : QStringLiteral(".");
+                break;
+            case Format::HexAscii: {
+                const QString hex = QStringLiteral("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
+                const QString asc = (b >= 0x20 && b < 0x7F) ? QString(QLatin1Char(static_cast<char>(b))) : QStringLiteral(".");
+                val = QStringLiteral("%1:%2").arg(hex, asc);
+                break;
+            }
+        }
+        byteCells << QStringLiteral("<span style='%1'>&nbsp;%2&nbsp;</span>").arg(cellStyle, val.toHtmlEscaped());
+    }
+
+    QString asciiPart;
+    if (m_format != Format::Ascii && m_format != Format::HexAscii) {
+        const QString ascii = m_showControl ? codec::toAsciiEscaped(m_curBytes) : codec::toAscii(m_curBytes);
+        asciiPart = QStringLiteral("<span style='color:%1; font-family:monospace; margin-left: 10px;'>|  %2</span>").arg(kMetaColor, ascii.toHtmlEscaped());
+    }
 
     return QStringLiteral(
                "<span style='color:%1'>[%2 %3]</span> "
-               "<span style='color:%4'>%5</span>")
-        .arg(kMetaColor, ts, tag, color, cols.join(sep));
+               "%4%5")
+        .arg(kMetaColor, ts, tag, byteCells.join(QStringLiteral(" ")), asciiPart);
 }
 
 void ConsoleView::renderOpenLine() {
@@ -137,22 +179,41 @@ void ConsoleView::renderOpenLine() {
 }
 
 QString ConsoleView::buildLinePlain() const {
-    QStringList cols;
-    if (m_showHex) {
-        cols << codec::toHex(m_curBytes);
+    QString out;
+    switch (m_format) {
+        case Format::Hex:
+            out = codec::toHex(m_curBytes);
+            break;
+        case Format::Decimal:
+            out = codec::toDecimal(m_curBytes);
+            break;
+        case Format::Binary:
+            out = codec::toBinary(m_curBytes);
+            break;
+        case Format::Ascii:
+            out = (m_showControl ? codec::toAsciiEscaped(m_curBytes) : codec::toAscii(m_curBytes));
+            break;
+        case Format::HexAscii: {
+            QStringList parts;
+            for (int i = 0; i < m_curBytes.size(); ++i) {
+                const auto b = static_cast<unsigned char>(m_curBytes.at(i));
+                const QString hex = QStringLiteral("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
+                const QString asc = (b >= 0x20 && b < 0x7F) ? QString(QLatin1Char(static_cast<char>(b))) : QStringLiteral(".");
+                parts << QStringLiteral("%1:%2").arg(hex, asc);
+            }
+            out = parts.join(QStringLiteral(" "));
+            break;
+        }
     }
-    if (m_showDec) {
-        cols << codec::toDecimal(m_curBytes);
+
+    if (m_format != Format::Ascii && m_format != Format::HexAscii) {
+        const QString ascii = (m_showControl ? codec::toAsciiEscaped(m_curBytes) : codec::toAscii(m_curBytes));
+        out += QStringLiteral("  |  ") + ascii;
     }
-    if (m_showBin) {
-        cols << codec::toBinary(m_curBytes);
-    }
-    if (m_showAscii) {
-        cols << (m_showControl ? codec::toAsciiEscaped(m_curBytes) : codec::toAscii(m_curBytes));
-    }
+
     const QString ts = QDateTime::fromMSecsSinceEpoch(m_curTs).toString(QStringLiteral("HH:mm:ss.zzz"));
     const QString tag = m_curDir == Direction::Rx ? QStringLiteral("Rx") : QStringLiteral("Tx");
-    return QStringLiteral("[%1 %2] %3").arg(ts, tag, cols.join(QStringLiteral("  |  ")));
+    return QStringLiteral("[%1 %2] %3").arg(ts, tag, out);
 }
 
 void ConsoleView::finalizeLine() {

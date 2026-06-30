@@ -116,7 +116,7 @@ void MacroBar::editMacros() {
     QVector<Macro> parsed;
     const QStringList lines = editor->toPlainText().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString &line : lines) {
-        const int eq = line.indexOf(QLatin1Char('='));
+        const qsizetype eq = line.indexOf(QLatin1Char('='));
         if (eq < 0) {
             continue;
         }
@@ -138,7 +138,7 @@ void MacroBar::pushHistory(const QByteArray &bytes, bool toDevice) {
     }
     const HistoryItem item{bytes, toDevice};
     // Drop any existing identical entry so the newest floats to the top.
-    for (int i = m_history.size() - 1; i >= 0; --i) {
+    for (int i = static_cast<int>(m_history.size()) - 1; i >= 0; --i) {
         if (m_history.at(i).bytes == bytes && m_history.at(i).toDevice == toDevice) {
             m_history.remove(i);
             m_historyBox->removeItem(i);
@@ -157,7 +157,7 @@ void MacroBar::pushHistory(const QByteArray &bytes, bool toDevice) {
 
 void MacroBar::resendSelected() {
     const int idx = m_historyBox->currentIndex();
-    if (idx < 0 || idx >= m_history.size()) {
+    if (idx < 0 || idx >= static_cast<int>(m_history.size())) {
         return;
     }
     const HistoryItem &item = m_history.at(idx);

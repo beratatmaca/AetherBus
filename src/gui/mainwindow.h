@@ -19,6 +19,7 @@ namespace aether {
 class PtyProxy;
 class ConsoleView;
 class ThemeController;
+class MacroBar;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -68,10 +69,7 @@ private:
     QLabel *m_statusLabel = nullptr;
 
     // Console display toolbar.
-    QCheckBox *m_hexCheck = nullptr;
-    QCheckBox *m_decCheck = nullptr;
-    QCheckBox *m_binCheck = nullptr;
-    QCheckBox *m_asciiCheck = nullptr;
+    QComboBox *m_formatBox = nullptr;
     QComboBox *m_newlineModeBox = nullptr;
     QLineEdit *m_newlineParamEdit = nullptr;
     QCheckBox *m_autoScrollCheck = nullptr;
@@ -93,6 +91,7 @@ private:
     QLineEdit *m_repeatIntervalEdit = nullptr;
     QTimer *m_repeatTimer = nullptr;
     bool m_repeatToDevice = true;
+    MacroBar *m_macroBar = nullptr;
 
     // Signal control + modem-line status.
     QCheckBox *m_rtsCheck = nullptr;

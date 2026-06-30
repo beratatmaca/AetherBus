@@ -108,6 +108,8 @@ add_library(aether_gui STATIC
     src/gui/mainwindow.h
     src/gui/consoleview.cpp
     src/gui/consoleview.h
+    src/gui/macrobar.cpp
+    src/gui/macrobar.h
     src/gui/theme_controller.cpp
     src/gui/theme_controller.h
 )

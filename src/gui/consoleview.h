@@ -27,6 +27,8 @@ class ConsoleView : public QPlainTextEdit {
     Q_OBJECT
 
 public:
+    enum class Format : std::uint8_t { Hex, Ascii, Binary, Decimal, HexAscii };
+
     /// How accumulated bytes are split into display lines.
     enum class NewlineMode : std::uint8_t {
         PerChunk,    ///< one line per captured chunk (legacy behaviour)
@@ -46,8 +48,8 @@ public slots:
     /// Drop all buffered and displayed content (does not reset counters).
     void clearConsole();
 
-    /// Choose which representation columns are shown side by side.
-    void setFormats(bool hex, bool dec, bool bin, bool ascii);
+    /// Choose the active representation format.
+    void setFormat(Format format);
 
     /// Set the line-splitting rule. @p param is the delimiter byte value for
     /// Delimiter mode, or the byte count for FixedCount mode.
@@ -90,6 +92,7 @@ private slots:
     void flush();
 
 private:
+    void reapplyHistory();
     void processChunk(const CapturedChunk &chunk);
     void beginLineIfEmpty(const CapturedChunk &chunk);
     void renderOpenLine();
@@ -108,15 +111,13 @@ private:
     bool m_openRendered = false;  ///< true if the last document block is m_curBytes
 
     // Display options.
-    bool m_showHex = true;
-    bool m_showDec = false;
-    bool m_showBin = false;
-    bool m_showAscii = true;
+    Format m_format = Format::Hex;
     NewlineMode m_mode = NewlineMode::Delimiter;
     int m_newlineParam = 0x0A;
     bool m_showControl = false;
     bool m_autoScroll = true;
     bool m_paused = false;
+    QVector<CapturedChunk> m_history;
 
     // Running byte counters.
     qint64 m_rx = 0;
