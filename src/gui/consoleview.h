@@ -15,11 +15,14 @@
 
 #include <QPlainTextEdit>
 #include <QVector>
+#include <QRegularExpression>
 
 #include <cstdint>
 
 class QTimer;
 class QFile;
+
+#include <QMimeData>
 
 namespace aether {
 
@@ -27,8 +30,6 @@ class ConsoleView : public QPlainTextEdit {
     Q_OBJECT
 
 public:
-    enum class Format : std::uint8_t { Hex, Ascii, Binary, Decimal, HexAscii };
-
     /// How accumulated bytes are split into display lines.
     enum class NewlineMode : std::uint8_t {
         PerChunk,    ///< one line per captured chunk (legacy behaviour)
@@ -48,8 +49,14 @@ public slots:
     /// Drop all buffered and displayed content (does not reset counters).
     void clearConsole();
 
-    /// Choose the active representation format.
-    void setFormat(Format format);
+    /// Choose which representation layers are stacked.
+    void setFormats(bool hex, bool dec, bool bin, bool ascii);
+
+    /// Find search text dynamically translating hex/ascii.
+    bool findQuery(const QString &query, QTextDocument::FindFlags flags);
+
+    /// Set the TLV parsing parameters.
+    void setTlvParams(int headerSize, int lenOffset, int lenSize);
 
     /// Set the line-splitting rule. @p param is the delimiter byte value for
     /// Delimiter mode, or the byte count for FixedCount mode.
@@ -88,10 +95,14 @@ signals:
     /// Emitted when the text selection changes; @p chars is the selected length.
     void selectionChars(int chars);
 
+protected:
+    QMimeData *createMimeDataFromSelection() const override;
+
 private slots:
     void flush();
 
 private:
+    QRegularExpression buildSearchRegex(const QString &query) const;
     void reapplyHistory();
     void processChunk(const CapturedChunk &chunk);
     void beginLineIfEmpty(const CapturedChunk &chunk);
@@ -111,7 +122,10 @@ private:
     bool m_openRendered = false;  ///< true if the last document block is m_curBytes
 
     // Display options.
-    Format m_format = Format::Hex;
+    bool m_showHex = true;
+    bool m_showDec = false;
+    bool m_showBin = false;
+    bool m_showAscii = true;
     NewlineMode m_mode = NewlineMode::Delimiter;
     int m_newlineParam = 0x0A;
     bool m_showControl = false;

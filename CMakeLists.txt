@@ -46,10 +46,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
-find_package(Qt6 COMPONENTS SerialPort)
-if(Qt6SerialPort_FOUND)
-    add_compile_definitions(HAVE_QT_SERIALPORT)
-endif()
 
 # Prebuilt Qt 6 for macOS AGL framework fix
 if(APPLE)
@@ -96,9 +92,6 @@ if(UNIX)
 endif()
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
 target_link_libraries(aether_core PUBLIC Qt6::Core)
-if(Qt6SerialPort_FOUND)
-    target_link_libraries(aether_core PUBLIC Qt6::SerialPort)
-endif()
 target_include_directories(aether_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/generated)

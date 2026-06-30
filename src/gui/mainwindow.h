@@ -68,8 +68,10 @@ private:
     QPushButton *m_startButton = nullptr;
     QLabel *m_statusLabel = nullptr;
 
-    // Console display toolbar.
-    QComboBox *m_formatBox = nullptr;
+    QCheckBox *m_hexCheck = nullptr;
+    QCheckBox *m_decCheck = nullptr;
+    QCheckBox *m_binCheck = nullptr;
+    QCheckBox *m_asciiCheck = nullptr;
     QComboBox *m_newlineModeBox = nullptr;
     QLineEdit *m_newlineParamEdit = nullptr;
     QCheckBox *m_autoScrollCheck = nullptr;

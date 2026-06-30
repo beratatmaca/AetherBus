@@ -121,6 +121,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
 
         m_symlinkEdit->setText(settings.value(QStringLiteral("connection/symlink")).toString());
         m_directCheck->setChecked(settings.value(QStringLiteral("connection/directMode"), false).toBool());
+
+        m_hexCheck->setChecked(settings.value(QStringLiteral("connection/showHex"), true).toBool());
+        m_decCheck->setChecked(settings.value(QStringLiteral("connection/showDec"), false).toBool());
+        m_binCheck->setChecked(settings.value(QStringLiteral("connection/showBin"), false).toBool());
+        m_asciiCheck->setChecked(settings.value(QStringLiteral("connection/showAscii"), true).toBool());
     }
 
     connect(m_proxy, &PtyProxy::chunkCaptured, m_console, &ConsoleView::appendChunk);
@@ -255,16 +260,17 @@ QWidget *MainWindow::buildConsolePanel(QWidget *parent) {
 
     // --- Toolbar row 1: formats + newline rule + control chars --------------
     auto *row1 = new QHBoxLayout();
-    row1->addWidget(new QLabel(QStringLiteral("Format:"), panel));
-    m_formatBox = new QComboBox(panel);
-    m_formatBox->addItem(QStringLiteral("HEX"), static_cast<int>(ConsoleView::Format::Hex));
-    m_formatBox->addItem(QStringLiteral("DECIMAL"), static_cast<int>(ConsoleView::Format::Decimal));
-    m_formatBox->addItem(QStringLiteral("BINARY"), static_cast<int>(ConsoleView::Format::Binary));
-    m_formatBox->addItem(QStringLiteral("ASCII"), static_cast<int>(ConsoleView::Format::Ascii));
-    m_formatBox->setFixedWidth(100);
-    m_formatBox->setToolTip(QStringLiteral("Choose active data display format"));
-    connect(m_formatBox, &QComboBox::currentIndexChanged, this, &MainWindow::applyFormats);
-    row1->addWidget(m_formatBox);
+    m_hexCheck = new QCheckBox(QStringLiteral("HEX"), panel);
+    m_decCheck = new QCheckBox(QStringLiteral("DEC"), panel);
+    m_binCheck = new QCheckBox(QStringLiteral("BIN"), panel);
+    m_asciiCheck = new QCheckBox(QStringLiteral("ASCII"), panel);
+    m_hexCheck->setChecked(true);
+    m_asciiCheck->setChecked(true);
+    for (QCheckBox *c : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
+        c->setToolTip(QStringLiteral("Toggle this format layered display inside each byte cell"));
+        connect(c, &QCheckBox::toggled, this, &MainWindow::applyFormats);
+        row1->addWidget(c);
+    }
 
     row1->addSpacing(12);
     row1->addWidget(new QLabel(QStringLiteral("Newline:"), panel));
@@ -551,8 +557,12 @@ void MainWindow::setRunningState(bool running) {
 }
 
 void MainWindow::applyFormats() {
-    const auto format = static_cast<ConsoleView::Format>(m_formatBox->currentData().toInt());
-    m_console->setFormat(format);
+    m_console->setFormats(m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked());
+    QSettings settings;
+    settings.setValue(QStringLiteral("connection/showHex"), m_hexCheck->isChecked());
+    settings.setValue(QStringLiteral("connection/showDec"), m_decCheck->isChecked());
+    settings.setValue(QStringLiteral("connection/showBin"), m_binCheck->isChecked());
+    settings.setValue(QStringLiteral("connection/showAscii"), m_asciiCheck->isChecked());
 }
 
 void MainWindow::applyNewlineMode() {
@@ -658,12 +668,12 @@ void MainWindow::doFind(bool backward) {
     if (backward) {
         flags |= QTextDocument::FindBackward;
     }
-    if (!m_console->find(query, flags)) {
+    if (!m_console->findQuery(query, flags)) {
         // Wrap around to the other end and retry once.
         QTextCursor cursor = m_console->textCursor();
         cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
         m_console->setTextCursor(cursor);
-        m_console->find(query, flags);
+        m_console->findQuery(query, flags);
     }
 }
 
