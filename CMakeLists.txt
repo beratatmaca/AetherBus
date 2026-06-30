@@ -80,12 +80,22 @@ if(APPLE)
     endif()
 endif()
 
-add_library(aether_core STATIC
-    src/core/bus_protocol.cpp
-    src/core/bus_protocol.h
-    src/core/IBusDriver.h
+# Core interception backend. The POSIX PTY proxy is UNIX-only; on other
+# platforms the library still builds with the pure codec + value types.
+set(AETHER_CORE_SOURCES
+    src/core/serial_types.h
+    src/core/format_codec.cpp
+    src/core/format_codec.h
 )
-target_link_libraries(aether_core PUBLIC Qt6::Core Qt6::Network)
+if(UNIX)
+    list(APPEND AETHER_CORE_SOURCES
+        src/core/pty_proxy.cpp
+        src/core/pty_proxy.h
+        src/core/linux_baud.cpp
+        src/core/linux_baud.h)
+endif()
+add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
+target_link_libraries(aether_core PUBLIC Qt6::Core)
 if(Qt6SerialPort_FOUND)
     target_link_libraries(aether_core PUBLIC Qt6::SerialPort)
 endif()
@@ -94,14 +104,12 @@ target_include_directories(aether_core PUBLIC
     ${CMAKE_BINARY_DIR}/generated)
 
 add_library(aether_gui STATIC
-    src/gui/interfacewindow.cpp
-    src/gui/interfacewindow.h
-    src/gui/configdialog.cpp
-    src/gui/configdialog.h
     src/gui/mainwindow.cpp
     src/gui/mainwindow.h
-    src/gui/frametablemodel.cpp
-    src/gui/frametablemodel.h
+    src/gui/consoleview.cpp
+    src/gui/consoleview.h
+    src/gui/theme_controller.cpp
+    src/gui/theme_controller.h
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
 
@@ -120,7 +128,7 @@ if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     enable_testing()
     add_executable(bus_test tests/bus_test.cpp)
-    target_link_libraries(bus_test PRIVATE aether_gui Qt6::Core Qt6::Network Qt6::Test)
+    target_link_libraries(bus_test PRIVATE aether_core Qt6::Core Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
 endif()
 

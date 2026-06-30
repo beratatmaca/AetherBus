@@ -1,59 +1,112 @@
+// Top-level diagnostic window: serial configuration controls, the HTerm-style
+// console with its display toolbar, and a direct byte-injection panel, all
+// wired to a PtyProxy.
 #pragma once
 
+#include "core/serial_types.h"
+
 #include <QMainWindow>
-#include <QVariantMap>
-#include <QTableView>
-#include <QTreeView>
-#include <QTextEdit>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QLabel>
-#include <QStandardItemModel>
-#include "frametablemodel.h"
+
+class QCheckBox;
+class QComboBox;
+class QLineEdit;
+class QPushButton;
+class QLabel;
+class QTimer;
+
+namespace aether {
+
+class PtyProxy;
+class ConsoleView;
+class ThemeController;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+
 public:
-    explicit MainWindow(const QVariantMap& config, QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 private slots:
-    void toggleCapture();
-    void onFrameSelected(const QModelIndex& index);
-    void injectSingleMessage();
-    void clearTrace();
+    void toggleProxy();
+    void onStarted(const QString &slavePath);
+    void onStopped();
+    void onError(const QString &message);
+    void applyFormats();
+    void applyNewlineMode();
+    void updateCounts(qint64 rx, qint64 tx);
+    void saveReceived();
+    void toggleLogging();
+    void sendFile();
+    void pollModemLines();
+    void onDisconnected();
 
 private:
-    void setupUI();
-    void updateHTermView(const AetherFrame& frame);
-    void updateDetailsTree(const AetherFrame& frame);
+    void buildUi();
+    QWidget *buildConfigPanel(QWidget *parent);
+    QWidget *buildConsolePanel(QWidget *parent);
+    QWidget *buildSignalPanel(QWidget *parent);
+    void populateDevices();
+    void setRunningState(bool running);
+    QByteArray encodeInjection(bool &ok);
+    void sendInjection(bool toDevice);
+    void doFind(bool backward);
 
-    QVariantMap m_config;
-    bool m_capturing;
-    class SimulatorWorker* m_simulator;
+    PtyProxy *m_proxy;
+    ConsoleView *m_console;
+    ThemeController *m_theme = nullptr;
 
-    // Table Model for Zone 1
-    FrameTableModel* m_tableModel;
+    // Connection settings.
+    QComboBox *m_deviceBox = nullptr;
+    QComboBox *m_baudBox = nullptr;
+    QComboBox *m_dataBitsBox = nullptr;
+    QComboBox *m_parityBox = nullptr;
+    QComboBox *m_stopBitsBox = nullptr;
+    QComboBox *m_flowBox = nullptr;
+    QLineEdit *m_symlinkEdit = nullptr;
+    QPushButton *m_startButton = nullptr;
+    QLabel *m_statusLabel = nullptr;
 
-    // Tree Model for Zone 3
-    QStandardItemModel* m_treeModel;
+    // Console display toolbar.
+    QCheckBox *m_hexCheck = nullptr;
+    QCheckBox *m_decCheck = nullptr;
+    QCheckBox *m_binCheck = nullptr;
+    QCheckBox *m_asciiCheck = nullptr;
+    QComboBox *m_newlineModeBox = nullptr;
+    QLineEdit *m_newlineParamEdit = nullptr;
+    QCheckBox *m_autoScrollCheck = nullptr;
+    QCheckBox *m_pauseCheck = nullptr;
+    QCheckBox *m_showCtrlCheck = nullptr;
+    QLabel *m_countsLabel = nullptr;
+    QLineEdit *m_findEdit = nullptr;
 
-    // GUI Widgets
-    QTableView* m_traceTableView;
-    QTreeView* m_detailsTreeView;
+    QLabel *m_selLabel = nullptr;
+    QPushButton *m_logBtn = nullptr;
 
-    // HTerm Views (Zone 2)
-    QTextEdit* m_htermAscii;
-    QTextEdit* m_htermHex;
-    QTextEdit* m_htermBin;
-    QTextEdit* m_htermDec;
+    // Injection panel.
+    QLineEdit *m_injectEdit = nullptr;
+    QComboBox *m_injectFormatBox = nullptr;
+    QComboBox *m_injectEndingBox = nullptr;
+    QPushButton *m_toAppBtn = nullptr;
+    QCheckBox *m_directCheck = nullptr;
+    QCheckBox *m_repeatCheck = nullptr;
+    QLineEdit *m_repeatIntervalEdit = nullptr;
+    QTimer *m_repeatTimer = nullptr;
+    bool m_repeatToDevice = true;
 
-    // Injection Widgets (Zone 4)
-    QLineEdit* m_injectIdInput;
-    QLineEdit* m_injectDataInput;
-    QPushButton* m_injectButton;
+    // Signal control + modem-line status.
+    QCheckBox *m_rtsCheck = nullptr;
+    QCheckBox *m_dtrCheck = nullptr;
+    QLabel *m_ctsLed = nullptr;
+    QLabel *m_dsrLed = nullptr;
+    QLabel *m_dcdLed = nullptr;
+    QLabel *m_riLed = nullptr;
+    QTimer *m_modemTimer = nullptr;
 
-    // Toolbar Widgets
-    QPushButton* m_captureButton;
-    QLineEdit* m_filterBar;
-    QLabel* m_statusLabel;
+    // Auto-reconnect.
+    QCheckBox *m_reconnectCheck = nullptr;
+    QTimer *m_reconnectTimer = nullptr;
+    SerialConfig m_lastConfig;
 };
+
+}  // namespace aether

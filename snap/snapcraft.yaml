@@ -1,0 +1,75 @@
+name: aetherbus
+title: AetherBus
+base: core24
+adopt-info: aetherbus
+icon: snap/gui/icon.png
+summary: Transparent serial-port interceptor with an HTerm-style sniffer console
+description: |
+  AetherBus is a modern, lightweight, open-source serial-port interceptor and protocol sniffer for Linux, built on Qt 6 and C++17.
+
+  It transparently proxies a physical UART through a kernel pseudo-terminal, so an unmodified target application keeps talking to the device while AetherBus captures, decodes, and injects every byte in real time — like interceptty wired to an HTerm-style diagnostic console.
+
+  Key Features:
+  - **Transparent Interception**: Opens the real device and exposes a virtual port (pseudo-terminal) the target application connects to instead, mirroring all traffic.
+  - **Directional Capture**: A POSIX poll() multiplexing loop tags every chunk as Rx (from the device) or Tx (from the application), timestamped to the millisecond.
+  - **HTerm-Style Console**: Side-by-side HEX / ASCII / BINARY / DECIMAL views, colour-coded by direction, batch-rendered at 60 Hz for high-baud streams.
+  - **Live Byte Injection**: Send crafted hex byte sequences directly to either the device or the application side of the link.
+
+  Perfect for: reverse-engineering serial protocols, debugging embedded firmware links, and man-in-the-middle diagnostics of UART traffic.
+license: MIT
+contact: https://github.com/beratatmaca/AetherBus/issues
+issues: https://github.com/beratatmaca/AetherBus/issues
+website: https://github.com/beratatmaca/AetherBus
+source-code: https://github.com/beratatmaca/AetherBus
+
+grade: stable
+confinement: strict
+
+layout:
+  /usr/lib/x86_64-linux-gnu/libproxy:
+    bind: $SNAP/usr/lib/x86_64-linux-gnu/libproxy
+
+apps:
+  aetherbus:
+    command: usr/local/bin/aetherbus
+    extensions: [ kde-neon-6 ]
+    environment:
+      QT_QPA_PLATFORM: "wayland;xcb"
+    plugs:
+      - network
+      - network-bind
+      - serial-port
+      - raw-usb
+
+parts:
+  aetherbus:
+    plugin: cmake
+    source: .
+    cmake-parameters:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+    build-packages:
+      - build-essential
+      - qt6-base-dev
+      - libgl1-mesa-dev
+      - git
+    stage-packages:
+      - libqt6core6
+      - libqt6network6
+      - libqt6gui6t64
+      - libqt6widgets6t64
+      - qt6-wayland
+      - libxcb-cursor0
+      - libgl1
+      - libegl1
+      - libopengl0
+      - libfontconfig1
+      - libgraphite2-3
+      - libharfbuzz0b
+      - libmd4c0
+      - libproxy1v5
+    override-pull: |
+      craftctl default
+      base=$(tr -d '[:space:]' < VERSION)
+      build=$(git rev-list --count HEAD)
+      craftctl set version="${base}.${build}"
