@@ -136,16 +136,25 @@ MainWindow::~MainWindow() = default;
 void MainWindow::buildUi() {
     auto *central = new QWidget(this);
     auto *outer = new QVBoxLayout(central);
+    outer->setContentsMargins(4, 4, 4, 4);
 
-    auto *splitter = new QSplitter(Qt::Vertical, central);
-    splitter->addWidget(buildConfigPanel(central));
-    splitter->addWidget(buildSignalPanel(central));
-    splitter->addWidget(buildConsolePanel(central));
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 0);
-    splitter->setStretchFactor(2, 1);
+    auto *mainSplitter = new QSplitter(Qt::Horizontal, central);
 
-    outer->addWidget(splitter);
+    auto *leftSplitter = new QSplitter(Qt::Vertical, mainSplitter);
+    leftSplitter->addWidget(buildConfigPanel(central));
+    leftSplitter->addWidget(buildSignalPanel(central));
+    leftSplitter->setStretchFactor(0, 0);
+    leftSplitter->setStretchFactor(1, 1);
+
+    mainSplitter->addWidget(leftSplitter);
+    mainSplitter->addWidget(buildConsolePanel(central));
+    mainSplitter->setStretchFactor(0, 0);
+    mainSplitter->setStretchFactor(1, 1);
+
+    // Initial width distribution: sidebar gets 300px, console gets 700px
+    mainSplitter->setSizes({300, 700});
+
+    outer->addWidget(mainSplitter);
     setCentralWidget(central);
 }
 
