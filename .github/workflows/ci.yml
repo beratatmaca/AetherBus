@@ -1,0 +1,128 @@
+name: AetherBus CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format cmake qt6-base-dev
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=OFF
+      - name: Check formatting
+        run: cmake --build build --target format-check
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake qt6-base-dev doxygen graphviz
+      - name: Configure CMake
+        run: cmake -S . -B build -DBUILD_TESTING=OFF
+      - name: Generate Documentation
+        run: cmake --build build --target docs
+
+  lint:
+    name: Static Analysis
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev clang-tidy
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build -j$(nproc)
+      - name: Run clang-tidy
+        run: cmake --build build --target tidy
+
+  unit-tests:
+    name: Unit Tests
+    needs: format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt 6 SDK
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: "6.6.3"
+          cache: false
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgl1-mesa-dev cmake g++ qt6-base-dev
+
+      - name: Configure CMake
+        run: |
+          cmake -G "Unix Makefiles" -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DAETHER_SANITIZER=address+undefined
+
+      - name: Compile Code
+        run: |
+          cmake --build build --config Debug -j$(nproc)
+
+      - name: Run Unit Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=0:abort_on_error=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          ctest --test-dir build --output-on-failure -C Debug
+
+  coverage:
+    name: Coverage
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev lcov
+      - name: Configure (coverage)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_COVERAGE=ON
+      - name: Build
+        run: cmake --build build -j$(nproc)
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./build/bus_test -o -,txt -o junit.xml,junitxml
+      - name: Capture coverage
+        run: |
+          lcov --capture --directory build --output-file coverage.info \
+               --ignore-errors mismatch,gcov,source
+          lcov --remove coverage.info '/usr/*' '*/build/*' '*/tests/*' \
+               '*_autogen/*' --output-file coverage.info --ignore-errors unused
+          lcov --list coverage.info
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

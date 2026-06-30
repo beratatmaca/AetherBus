@@ -1,0 +1,180 @@
+name: AetherBus Release Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Compute Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+      sha: ${{ steps.v.outputs.sha }}
+      is_tag: ${{ steps.v.outputs.is_tag }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve version
+        id: v
+        shell: bash
+        run: |
+          base=$(tr -d '[:space:]' < VERSION)
+          build=$(git rev-list --count HEAD)
+          sha=$(git rev-parse --short HEAD)
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            is_tag=true
+          else
+            version="${base}.${build}"
+            is_tag=false
+          fi
+          {
+            echo "version=$version"
+            echo "build=$build"
+            echo "sha=$sha"
+            echo "is_tag=$is_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version (build $build, commit $sha)"
+
+  build-and-release:
+    name: Build and Package on ${{ matrix.os }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact-name: "AetherBus-Linux-Debian"
+          - os: macos-latest
+            artifact-name: "AetherBus-macOS-DMG"
+          - os: windows-latest
+            artifact-name: "AetherBus-Windows-MSI"
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt 6 SDK
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: "6.6.3"
+          cache: false
+
+      # Linux Setup & Compilation
+      - name: Install Linux Build Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgl1-mesa-dev
+
+      - name: Configure CMake (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -G "Unix Makefiles" -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBUILD_COVERAGE=OFF \
+            -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} \
+            -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
+
+      # macOS Setup & Compilation
+      - name: Configure CMake (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake -G "Unix Makefiles" -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DBUILD_COVERAGE=OFF \
+            -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} \
+            -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
+
+      # Windows Setup & Compilation
+      - name: Configure CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
+
+      - name: Compile Code (All Platforms)
+        run: |
+          cmake --build build --config Release -j2
+
+      # Linux Packaging via CPack
+      - name: Generate DEB Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd build
+          cpack -G DEB
+
+      # Windows Packaging via CPack + WiX
+      - name: Generate MSI Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd build
+          cpack -G WIX
+
+      # macOS Deployment and Packaging
+      - name: Package app (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          macdeployqt build/aetherbus.app -dmg
+          mv build/aetherbus.dmg build/AetherBus.dmg
+
+      # Upload Build Artifacts to Workflow Run
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            build/*.deb
+            build/*.dmg
+            build/*.msi
+            build/*.zip
+
+  publish-release:
+    name: Create GitHub Release
+    needs: [version, build-and-release]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten Artifact Directory
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "*.deb" -o -name "*.dmg" -o -name "*.msi" \) -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-files/*
+          tag_name: ${{ needs.version.outputs.is_tag == 'true' && github.ref_name || 'latest' }}
+          name: ${{ needs.version.outputs.is_tag == 'true' && format('AetherBus v{0}', needs.version.outputs.version) || format('AetherBus v{0} (latest main)', needs.version.outputs.version) }}
+          prerelease: ${{ needs.version.outputs.is_tag != 'true' }}
+          body: |
+            Automated build of AetherBus.
+
+            - **Version:** ${{ needs.version.outputs.version }}
+            - **Build number:** ${{ needs.version.outputs.build }}
+            - **Commit:** ${{ needs.version.outputs.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
