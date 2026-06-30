@@ -8,6 +8,7 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 #include <fcntl.h>
@@ -63,7 +64,11 @@ bool writeAll(int fd, const char *data, size_t len) {
                 continue;
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                continue;  // device buffer full; spin briefly
+                // Wait (yielding the CPU) for the fd to become writable instead
+                // of spinning. Bounded timeout so a wedged device can't hang us.
+                pollfd pfd{fd, POLLOUT, 0};
+                ::poll(&pfd, 1, 100 /*ms*/);
+                continue;
             }
             return false;
         }
@@ -83,7 +88,10 @@ PtyProxy::~PtyProxy() {
 }
 
 bool PtyProxy::open(const SerialConfig &config) {
-    if (m_running.load()) {
+    // Reclaim any prior worker — including one that exited on its own after a
+    // device drop (joinable but with m_running already false). This also frees
+    // descriptors/symlink left open by the self-terminating loop.
+    if (m_worker.joinable()) {
         close();
     }
 
@@ -272,6 +280,7 @@ void PtyProxy::runLoop() {
                 CapturedChunk chunk{QDateTime::currentMSecsSinceEpoch(), Direction::Rx, data};
                 emit chunkCaptured(chunk);
                 if (!m_directMode.load() && m_masterFd >= 0) {
+                    std::lock_guard<std::mutex> lk(m_writeMutex);
                     writeAll(m_masterFd, data.constData(), static_cast<size_t>(data.size()));
                 }
             } else if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
@@ -287,6 +296,7 @@ void PtyProxy::runLoop() {
                 QByteArray data(buf.data(), static_cast<int>(n));
                 CapturedChunk chunk{QDateTime::currentMSecsSinceEpoch(), Direction::Tx, data};
                 emit chunkCaptured(chunk);
+                std::lock_guard<std::mutex> lk(m_writeMutex);
                 writeAll(m_uartFd, data.constData(), static_cast<size_t>(data.size()));
             }
         }
@@ -335,7 +345,11 @@ bool PtyProxy::injectToDevice(const QByteArray &bytes) {
     if (m_uartFd < 0 || bytes.isEmpty()) {
         return false;
     }
-    const bool ok = writeAll(m_uartFd, bytes.constData(), static_cast<size_t>(bytes.size()));
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> lk(m_writeMutex);
+        ok = writeAll(m_uartFd, bytes.constData(), static_cast<size_t>(bytes.size()));
+    }
     if (ok) {
         emit chunkCaptured({QDateTime::currentMSecsSinceEpoch(), Direction::Tx, bytes});
     }
@@ -346,7 +360,11 @@ bool PtyProxy::injectToApp(const QByteArray &bytes) {
     if (m_masterFd < 0 || bytes.isEmpty()) {
         return false;
     }
-    const bool ok = writeAll(m_masterFd, bytes.constData(), static_cast<size_t>(bytes.size()));
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> lk(m_writeMutex);
+        ok = writeAll(m_masterFd, bytes.constData(), static_cast<size_t>(bytes.size()));
+    }
     if (ok) {
         emit chunkCaptured({QDateTime::currentMSecsSinceEpoch(), Direction::Rx, bytes});
     }

@@ -93,10 +93,14 @@ void ConsoleView::setNewlineMode(NewlineMode mode, int param) {
     reapplyHistory();
 }
 
-void ConsoleView::setShowControlChars(bool on) {
-    m_showControl = on;
+void ConsoleView::setTlvParams(int headerSize, int lenOffset, int lenSize) {
+    m_tlvHeaderSize = qMax(1, headerSize);
+    m_tlvLenOffset  = qBound(0, lenOffset, m_tlvHeaderSize - 1);
+    m_tlvLenSize    = (lenSize >= 2) ? 2 : 1;
+    m_tlvTargetSize = -1;
     reapplyHistory();
 }
+
 
 void ConsoleView::setAutoScroll(bool on) {
     m_autoScroll = on;
@@ -149,7 +153,11 @@ QString ConsoleView::buildLineHtml() const {
         for (const QString &line : cellLines) {
             escapedLines << line.toHtmlEscaped();
         }
-        const QString cellContent = escapedLines.join(QStringLiteral("<br>"));
+        // U+2028 LINE SEPARATOR = soft line-break within a single paragraph block.
+        // Unlike <br> (which creates a new QTextBlock/paragraph), U+2028 keeps
+        // all format layers inside one block so the cell background styling is
+        // preserved across layers and renderOpenLine anchor tracking stays clean.
+        const QString cellContent = escapedLines.join(QStringLiteral("\u2028"));
         byteCells << QStringLiteral("<span style='%1'>&nbsp;%2&nbsp;</span>").arg(cellStyle, cellContent);
     }
 
@@ -162,14 +170,23 @@ QString ConsoleView::buildLineHtml() const {
 void ConsoleView::renderOpenLine() {
     const QString html = buildLineHtml();
     QTextCursor cursor(document());
-    cursor.movePosition(QTextCursor::End);
-    if (m_openRendered) {
-        // Replace the current (last) block's contents in place.
-        cursor.select(QTextCursor::LineUnderCursor);
+
+    if (m_openRendered && m_lineAnchorPos >= 0) {
+        // Select from the recorded anchor to the very end of the document
+        // and replace it all.  This correctly handles HTML that inserted
+        // multiple blocks (e.g. <br> inside cell spans).
+        cursor.setPosition(m_lineAnchorPos);
+        cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
         cursor.removeSelectedText();
-    } else if (!document()->isEmpty()) {
-        cursor.insertBlock();
+    } else {
+        cursor.movePosition(QTextCursor::End);
+        if (!document()->isEmpty()) {
+            cursor.insertBlock();
+        }
     }
+
+    // Record where this line starts before inserting HTML.
+    m_lineAnchorPos = cursor.position();
     cursor.insertHtml(html);
     m_openRendered = true;
 }
@@ -206,6 +223,8 @@ void ConsoleView::finalizeLine() {
     }
     m_curBytes.clear();
     m_openRendered = false;
+    m_lineAnchorPos = -1;  // reset open-line anchor
+    m_tlvTargetSize = -1;  // reset TLV state for the next packet
 }
 
 bool ConsoleView::startLogging(const QString &path) {
@@ -276,6 +295,36 @@ void ConsoleView::processChunk(const CapturedChunk &chunk) {
             }
             if (!m_curBytes.isEmpty()) {
                 renderOpenLine();
+            }
+            break;
+        }
+
+        case NewlineMode::TLV: {
+            for (const char c : chunk.data) {
+                beginLineIfEmpty(chunk);
+                m_curBytes.append(c);
+
+                // Once we have the full header, decode the payload length.
+                if (m_tlvTargetSize == -1 && m_curBytes.size() >= m_tlvHeaderSize) {
+                    const auto *hdr = reinterpret_cast<const unsigned char *>(m_curBytes.constData());
+                    int payloadLen = 0;
+                    if (m_tlvLenSize >= 2) {
+                        // Big-endian 2-byte length field
+                        payloadLen = (static_cast<int>(hdr[m_tlvLenOffset]) << 8)
+                                   |  static_cast<int>(hdr[m_tlvLenOffset + 1]);
+                    } else {
+                        payloadLen = static_cast<int>(hdr[m_tlvLenOffset]);
+                    }
+                    m_tlvTargetSize = m_tlvHeaderSize + payloadLen;
+                }
+
+                if (m_tlvTargetSize > 0 && m_curBytes.size() >= m_tlvTargetSize) {
+                    renderOpenLine();
+                    finalizeLine();  // resets m_tlvTargetSize to -1
+                }
+            }
+            if (!m_curBytes.isEmpty()) {
+                renderOpenLine();  // show partial packet while streaming
             }
             break;
         }

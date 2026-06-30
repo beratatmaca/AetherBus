@@ -35,6 +35,8 @@ public:
         PerChunk,    ///< one line per captured chunk (legacy behaviour)
         Delimiter,   ///< break after a chosen byte value (e.g. 0x0A)
         FixedCount,  ///< break every N bytes
+        TLV,         ///< split on length encoded in a fixed-size header (Type-Length-Value)
+        CrLf,        ///< break on \r, \n, or \r\n (CR+LF counted as one newline)
     };
 
     explicit ConsoleView(QWidget *parent = nullptr);
@@ -62,8 +64,6 @@ public slots:
     /// Delimiter mode, or the byte count for FixedCount mode.
     void setNewlineMode(NewlineMode mode, int param);
 
-    /// Render control bytes as visible escapes (\r \n \t, else \xHH).
-    void setShowControlChars(bool on);
 
     /// When off, the view does not auto-jump to the newest line.
     void setAutoScroll(bool on);
@@ -119,7 +119,8 @@ private:
     QByteArray m_curBytes;
     Direction m_curDir = Direction::Rx;
     qint64 m_curTs = 0;
-    bool m_openRendered = false;  ///< true if the last document block is m_curBytes
+    bool m_openRendered = false;  ///< true if the document tail contains m_curBytes
+    int  m_lineAnchorPos = -1;    ///< character position in document where open line starts
 
     // Display options.
     bool m_showHex = true;
@@ -128,7 +129,16 @@ private:
     bool m_showAscii = true;
     NewlineMode m_mode = NewlineMode::Delimiter;
     int m_newlineParam = 0x0A;
-    bool m_showControl = false;
+
+    // TLV header-based splitting.
+    int m_tlvHeaderSize = 3;   ///< total header byte count
+    int m_tlvLenOffset  = 1;   ///< byte offset of length field inside header
+    int m_tlvLenSize    = 1;   ///< width of length field in bytes (1 or 2 BE)
+    int m_tlvTargetSize = -1;  ///< computed full packet size; -1 = waiting for header
+
+    // CrLf mode: absorb the \n of a \r\n pair so it doesn't produce a second line.
+    bool m_pendingCr = false;
+
     bool m_autoScroll = true;
     bool m_paused = false;
     QVector<CapturedChunk> m_history;

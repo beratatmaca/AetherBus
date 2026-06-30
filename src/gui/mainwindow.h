@@ -76,7 +76,6 @@ private:
     QLineEdit *m_newlineParamEdit = nullptr;
     QCheckBox *m_autoScrollCheck = nullptr;
     QCheckBox *m_pauseCheck = nullptr;
-    QCheckBox *m_showCtrlCheck = nullptr;
     QLabel *m_countsLabel = nullptr;
     QLineEdit *m_findEdit = nullptr;
 

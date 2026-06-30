@@ -10,6 +10,7 @@
 #include <QString>
 
 #include <atomic>
+#include <mutex>
 #include <thread>
 
 namespace aether {
@@ -76,12 +77,12 @@ public:
 
     /** @brief Snapshot of the modem control lines on the physical UART. */
     struct ModemLines {
-        bool cts = false; ///< Clear To Send (input).
-        bool dsr = false; ///< Data Set Ready (input).
-        bool dcd = false; ///< Data Carrier Detect (input).
-        bool ri = false;  ///< Ring Indicator (input).
-        bool rts = false; ///< Request To Send (output).
-        bool dtr = false; ///< Data Terminal Ready (output).
+        bool cts = false;  ///< Clear To Send (input).
+        bool dsr = false;  ///< Data Set Ready (input).
+        bool dcd = false;  ///< Data Carrier Detect (input).
+        bool ri = false;   ///< Ring Indicator (input).
+        bool rts = false;  ///< Request To Send (output).
+        bool dtr = false;  ///< Data Terminal Ready (output).
     };
 
     /** @return The current modem control lines read from the physical UART. */
@@ -138,6 +139,7 @@ private:
     QString m_symlinkPath;  // created symlink, if any (unlinked on close)
 
     std::thread m_worker;
+    std::mutex m_writeMutex;  // serializes all writes to m_uartFd / m_masterFd
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_directMode{false};

@@ -105,6 +105,7 @@ add_library(aether_gui STATIC
     src/gui/macrobar.h
     src/gui/theme_controller.cpp
     src/gui/theme_controller.h
+    src/gui/resources.qrc          # compiled-in icon & assets
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
 

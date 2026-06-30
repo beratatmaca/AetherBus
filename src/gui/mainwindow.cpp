@@ -12,6 +12,8 @@
 #include <QMenu>
 #include <QAction>
 #include <QActionGroup>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QSettings>
 #include <QApplication>
@@ -29,6 +31,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSplitter>
+#include <QTextBrowser>
 #include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -89,12 +92,68 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
     QMenu *helpMenu = menu->addMenu(tr("&Help"));
     QAction *aboutAct = helpMenu->addAction(tr("&About AetherBus…"));
     connect(aboutAct, &QAction::triggered, this, [this]() {
-        QMessageBox::about(this, tr("About AetherBus"),
-                           tr("<h3>AetherBus %1</h3>"
-                              "<p>A modern, lightweight, high-performance cross-platform message bus GUI & CLI dashboard.</p>"
-                              "<p>Built with <b>Qt %2</b> and C++17/C++20.</p>"
-                              "<p>License: <b>MIT</b> &nbsp;·&nbsp; Copyright &copy; 2026 AetherBus Project</p>")
-                               .arg(QString::fromLatin1(AETHER_VERSION_STRING), QString::fromLatin1(qVersion())));
+        auto *dlg = new QDialog(this);
+        dlg->setWindowTitle(tr("About AetherBus"));
+        dlg->setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
+        dlg->setFixedWidth(440);
+
+        auto *root = new QVBoxLayout(dlg);
+        root->setSpacing(12);
+        root->setContentsMargins(24, 24, 24, 20);
+
+        // Logo + app name row
+        auto *headerRow = new QHBoxLayout();
+        QLabel *logoLbl = new QLabel(dlg);
+        logoLbl->setPixmap(QPixmap(QStringLiteral(":/aetherbus/icon.png")).scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLbl->setFixedSize(64, 64);
+        headerRow->addWidget(logoLbl);
+
+        auto *titleCol = new QVBoxLayout();
+        QLabel *nameLbl = new QLabel(QStringLiteral("<b style='font-size:18pt'>AetherBus</b>"), dlg);
+        QLabel *tagLbl  = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
+        titleCol->addWidget(nameLbl);
+        titleCol->addWidget(tagLbl);
+        titleCol->addStretch();
+        headerRow->addSpacing(12);
+        headerRow->addLayout(titleCol);
+        headerRow->addStretch();
+        root->addLayout(headerRow);
+
+        // Separator
+        auto *sep = new QFrame(dlg);
+        sep->setFrameShape(QFrame::HLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        root->addWidget(sep);
+
+        // Details
+        auto *body = new QTextBrowser(dlg);
+        body->setOpenExternalLinks(true);
+        body->setFrameStyle(QFrame::NoFrame);
+        body->setReadOnly(true);
+        body->setHtml(QStringLiteral(
+            "<table cellspacing='4' style='font-size:10pt'>" \
+            "<tr><td><b>Version</b></td><td>&nbsp;</td><td>%1</td></tr>" \
+            "<tr><td><b>Commit</b></td><td>&nbsp;</td><td><code>%2</code></td></tr>" \
+            "<tr><td><b>Qt</b></td><td>&nbsp;</td><td>%3</td></tr>" \
+            "<tr><td><b>License</b></td><td>&nbsp;</td><td>MIT</td></tr>" \
+            "<tr><td><b>Copyright</b></td><td>&nbsp;</td><td>&copy; 2026 AetherBus Project</td></tr>" \
+            "</table>" \
+            "<p style='margin-top:8px; font-size:9pt; color:#888'>" \
+            "A modern, lightweight serial sniffer &amp; bus monitor." \
+            "</p>")
+            .arg(QString::fromLatin1(AETHER_VERSION_STRING),
+                 QString::fromLatin1(AETHER_GIT_SHA),
+                 QString::fromLatin1(qVersion())));
+        body->setMaximumHeight(160);
+        root->addWidget(body);
+
+        // OK button
+        auto *btns = new QDialogButtonBox(QDialogButtonBox::Ok, dlg);
+        connect(btns, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+        root->addWidget(btns);
+
+        dlg->exec();
+        dlg->deleteLater();
     });
 
     // Load config persistence
@@ -135,13 +194,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
     connect(m_proxy, &PtyProxy::disconnected, this, &MainWindow::onDisconnected);
 
     setWindowTitle(QStringLiteral("AetherBus — Serial Interceptor"));
-    
-    // Set application window icon
-    QIcon appIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/assets/icon.png"));
-    if (appIcon.isNull()) {
-        appIcon = QIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/../assets/icon.png"));
-    }
-    setWindowIcon(appIcon);
+
+    // Icon is compiled into the binary via resources.qrc — no runtime path needed.
+    setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
+    qApp->setWindowIcon(windowIcon());  // propagate to taskbar / dock
 
     resize(1000, 720);
 }
@@ -157,9 +213,7 @@ void MainWindow::buildUi() {
 
     auto *leftSplitter = new QSplitter(Qt::Vertical, mainSplitter);
     leftSplitter->addWidget(buildConfigPanel(central));
-    leftSplitter->addWidget(buildSignalPanel(central));
-    leftSplitter->setStretchFactor(0, 0);
-    leftSplitter->setStretchFactor(1, 1);
+    leftSplitter->setStretchFactor(0, 1);
 
     mainSplitter->addWidget(leftSplitter);
     mainSplitter->addWidget(buildConsolePanel(central));
@@ -248,6 +302,62 @@ QWidget *MainWindow::buildConfigPanel(QWidget *parent) {
     m_statusLabel->setWordWrap(true);
     form->addRow(QStringLiteral("Status"), m_statusLabel);
 
+    // ── Signal lines ──────────────────────────────────────────────────────────
+    auto *sigLabel = new QLabel(QStringLiteral("<b>Signal lines</b>"), configGroup);
+    form->addRow(sigLabel);
+
+    m_rtsCheck = new QCheckBox(QStringLiteral("RTS"), configGroup);
+    m_dtrCheck = new QCheckBox(QStringLiteral("DTR"), configGroup);
+    m_rtsCheck->setToolTip(QStringLiteral("Assert/deassert the RTS output line"));
+    m_dtrCheck->setToolTip(QStringLiteral("Assert/deassert the DTR output line"));
+    connect(m_rtsCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setRts(on); });
+    connect(m_dtrCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setDtr(on); });
+
+    auto *breakBtn = new QPushButton(QStringLiteral("Break"), configGroup);
+    breakBtn->setToolTip(QStringLiteral("Send a serial BREAK signal"));
+    connect(breakBtn, &QPushButton::clicked, this, [this] { (void)m_proxy->sendBreak(); });
+
+    auto *outRow = new QHBoxLayout();
+    outRow->addWidget(new QLabel(QStringLiteral("Output:"), configGroup));
+    outRow->addWidget(m_rtsCheck);
+    outRow->addWidget(m_dtrCheck);
+    outRow->addWidget(breakBtn);
+    outRow->addStretch(1);
+    form->addRow(outRow);
+
+    m_ctsLed = new QLabel(QStringLiteral("CTS"), configGroup);
+    m_dsrLed = new QLabel(QStringLiteral("DSR"), configGroup);
+    m_dcdLed = new QLabel(QStringLiteral("DCD"), configGroup);
+    m_riLed  = new QLabel(QStringLiteral("RI"),  configGroup);
+    for (QLabel *led : {m_ctsLed, m_dsrLed, m_dcdLed, m_riLed}) {
+        led->setStyleSheet(QStringLiteral("color:#555"));
+    }
+    m_reconnectCheck = new QCheckBox(QStringLiteral("Auto-reconnect"), configGroup);
+    m_reconnectCheck->setToolTip(QStringLiteral("Automatically reopen the port if the device disconnects"));
+
+    auto *inRow = new QHBoxLayout();
+    inRow->addWidget(new QLabel(QStringLiteral("Input:"), configGroup));
+    inRow->addWidget(m_ctsLed);
+    inRow->addWidget(m_dsrLed);
+    inRow->addWidget(m_dcdLed);
+    inRow->addWidget(m_riLed);
+    inRow->addStretch(1);
+    inRow->addWidget(m_reconnectCheck);
+    form->addRow(inRow);
+
+    // Poll modem status lines while connected.
+    m_modemTimer = new QTimer(this);
+    m_modemTimer->setInterval(250);
+    connect(m_modemTimer, &QTimer::timeout, this, &MainWindow::pollModemLines);
+
+    // Retry opening the device while auto-reconnect is armed.
+    m_reconnectTimer = new QTimer(this);
+    m_reconnectTimer->setInterval(1000);
+    connect(m_reconnectTimer, &QTimer::timeout, this, [this] {
+        if (m_proxy->isRunning()) { m_reconnectTimer->stop(); return; }
+        if (m_proxy->open(m_lastConfig)) { m_reconnectTimer->stop(); }
+    });
+
     return configGroup;
 }
 
@@ -278,20 +388,17 @@ QWidget *MainWindow::buildConsolePanel(QWidget *parent) {
     m_newlineModeBox->addItem(QStringLiteral("Per chunk"));
     m_newlineModeBox->addItem(QStringLiteral("On delimiter (hex)"));
     m_newlineModeBox->addItem(QStringLiteral("Every N bytes"));
+    m_newlineModeBox->addItem(QStringLiteral("TLV header"));
     m_newlineModeBox->setCurrentIndex(1);
-    m_newlineModeBox->setToolTip(QStringLiteral("Select how incoming streams are split into lines"));
+    m_newlineModeBox->setToolTip(QStringLiteral("Select how incoming streams are split into lines.\nTLV: enter header params as hdrSize,lenOffset,lenSize (e.g. 3,1,1)"));
     m_newlineParamEdit = new QLineEdit(QStringLiteral("0A"), panel);
-    m_newlineParamEdit->setFixedWidth(64);
-    m_newlineParamEdit->setToolTip(QStringLiteral("Delimiter byte value (in Hex) or block size N"));
+    m_newlineParamEdit->setFixedWidth(80);
+    m_newlineParamEdit->setToolTip(QStringLiteral("Delimiter byte (hex), N bytes, or TLV params (hdrSize,lenOffset,lenSize)"));
     connect(m_newlineModeBox, &QComboBox::currentIndexChanged, this, &MainWindow::applyNewlineMode);
     connect(m_newlineParamEdit, &QLineEdit::editingFinished, this, &MainWindow::applyNewlineMode);
     row1->addWidget(m_newlineModeBox);
     row1->addWidget(m_newlineParamEdit);
 
-    m_showCtrlCheck = new QCheckBox(QStringLiteral("Show ctrl"), panel);
-    m_showCtrlCheck->setToolTip(QStringLiteral("Render non-printable control characters as escapes (e.g. \\r, \\n)"));
-    connect(m_showCtrlCheck, &QCheckBox::toggled, m_console, &ConsoleView::setShowControlChars);
-    row1->addWidget(m_showCtrlCheck);
     row1->addStretch(1);
     layout->addLayout(row1);
 
@@ -586,6 +693,15 @@ void MainWindow::applyNewlineMode() {
         if (!ok || param <= 0) {
             param = 16;
         }
+    } else if (idx == 3) {
+        mode = ConsoleView::NewlineMode::TLV;
+        // Parse TLV params: "hdrSize,lenOffset,lenSize"  e.g. "3,1,1"
+        const QStringList parts = m_newlineParamEdit->text().split(QLatin1Char(','));
+        int hdrSize = 3, lenOff = 1, lenSz = 1;
+        if (parts.size() >= 1) { bool ok; int v = parts[0].trimmed().toInt(&ok); if (ok && v > 0) hdrSize = v; }
+        if (parts.size() >= 2) { bool ok; int v = parts[1].trimmed().toInt(&ok); if (ok && v >= 0) lenOff  = v; }
+        if (parts.size() >= 3) { bool ok; int v = parts[2].trimmed().toInt(&ok); if (ok && v > 0) lenSz   = v; }
+        m_console->setTlvParams(hdrSize, lenOff, lenSz);
     }
     m_console->setNewlineMode(mode, param);
 }
@@ -759,55 +875,9 @@ void MainWindow::onDisconnected() {
 }
 
 QWidget *MainWindow::buildSignalPanel(QWidget *parent) {
-    auto *group = new QGroupBox(QStringLiteral("Signal lines"), parent);
-    auto *row = new QHBoxLayout(group);
-
-    m_rtsCheck = new QCheckBox(QStringLiteral("RTS"), group);
-    m_dtrCheck = new QCheckBox(QStringLiteral("DTR"), group);
-    connect(m_rtsCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setRts(on); });
-    connect(m_dtrCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setDtr(on); });
-    auto *breakBtn = new QPushButton(QStringLiteral("Break"), group);
-    connect(breakBtn, &QPushButton::clicked, this, [this] { (void)m_proxy->sendBreak(); });
-
-    row->addWidget(new QLabel(QStringLiteral("Output:"), group));
-    row->addWidget(m_rtsCheck);
-    row->addWidget(m_dtrCheck);
-    row->addWidget(breakBtn);
-    row->addSpacing(16);
-
-    row->addWidget(new QLabel(QStringLiteral("Input:"), group));
-    m_ctsLed = new QLabel(QStringLiteral("CTS"), group);
-    m_dsrLed = new QLabel(QStringLiteral("DSR"), group);
-    m_dcdLed = new QLabel(QStringLiteral("DCD"), group);
-    m_riLed = new QLabel(QStringLiteral("RI"), group);
-    for (QLabel *led : {m_ctsLed, m_dsrLed, m_dcdLed, m_riLed}) {
-        led->setStyleSheet(QStringLiteral("color:#555"));
-        row->addWidget(led);
-    }
-
-    row->addStretch(1);
-    m_reconnectCheck = new QCheckBox(QStringLiteral("Auto-reconnect"), group);
-    row->addWidget(m_reconnectCheck);
-
-    // Poll the modem status lines a few times a second while connected.
-    m_modemTimer = new QTimer(this);
-    m_modemTimer->setInterval(250);
-    connect(m_modemTimer, &QTimer::timeout, this, &MainWindow::pollModemLines);
-
-    // Retry opening the device while auto-reconnect is armed.
-    m_reconnectTimer = new QTimer(this);
-    m_reconnectTimer->setInterval(1000);
-    connect(m_reconnectTimer, &QTimer::timeout, this, [this] {
-        if (m_proxy->isRunning()) {
-            m_reconnectTimer->stop();
-            return;
-        }
-        if (m_proxy->open(m_lastConfig)) {
-            m_reconnectTimer->stop();
-        }
-    });
-
-    return group;
+    // Signal lines have been merged into buildConfigPanel.
+    // Return an empty placeholder widget so legacy call-sites compile.
+    return new QWidget(parent);
 }
 
 }  // namespace aether

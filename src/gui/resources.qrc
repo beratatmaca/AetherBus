@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/aetherbus">
+        <file alias="icon.ico">../../assets/icon.ico</file>
+        <file alias="icon.png">../../assets/icon.png</file>
+    </qresource>
+</RCC>
