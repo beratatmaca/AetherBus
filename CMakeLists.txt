@@ -46,6 +46,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+find_package(Qt6 COMPONENTS SerialPort)
+if(Qt6SerialPort_FOUND)
+    add_compile_definitions(HAVE_QT_SERIALPORT)
+endif()
 
 # Prebuilt Qt 6 for macOS AGL framework fix
 if(APPLE)
@@ -79,25 +83,44 @@ endif()
 add_library(aether_core STATIC
     src/core/bus_protocol.cpp
     src/core/bus_protocol.h
+    src/core/IBusDriver.h
 )
 target_link_libraries(aether_core PUBLIC Qt6::Core Qt6::Network)
+if(Qt6SerialPort_FOUND)
+    target_link_libraries(aether_core PUBLIC Qt6::SerialPort)
+endif()
 target_include_directories(aether_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/generated)
+
+add_library(aether_gui STATIC
+    src/gui/interfacewindow.cpp
+    src/gui/interfacewindow.h
+    src/gui/configdialog.cpp
+    src/gui/configdialog.h
+    src/gui/mainwindow.cpp
+    src/gui/mainwindow.h
+    src/gui/frametablemodel.cpp
+    src/gui/frametablemodel.h
+)
+target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
 
 if(APPLE)
     add_executable(aetherbus MACOSX_BUNDLE src/main.cpp)
 else()
     add_executable(aetherbus src/main.cpp)
 endif()
-target_link_libraries(aetherbus PRIVATE aether_core)
+target_link_libraries(aetherbus PRIVATE aether_gui)
+
+# Copy assets to build directory for local execution reference
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     enable_testing()
     add_executable(bus_test tests/bus_test.cpp)
-    target_link_libraries(bus_test PRIVATE aether_core Qt6::Core Qt6::Network Qt6::Test)
+    target_link_libraries(bus_test PRIVATE aether_gui Qt6::Core Qt6::Network Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
 endif()
 
