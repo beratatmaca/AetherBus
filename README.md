@@ -11,6 +11,10 @@ AetherBus is a modern, lightweight, open-source serial-port interceptor and prot
 
 Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a kernel pseudo-terminal — letting an unmodified target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
+## Screenshot
+
+![AetherBus connected to the simulator, showing live Rx and Tx serial traffic](docs/screenshots/aetherbus-main-window.png)
+
 ## How It Works
 
 AetherBus sits transparently between your application and the hardware. It opens the real device, hands your application a virtual port (a pseudo-terminal), and shuttles every byte across while tagging its direction:
