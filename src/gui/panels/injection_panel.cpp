@@ -1,4 +1,4 @@
-#include "gui/injection_panel.hpp"
+#include "gui/panels/injection_panel.hpp"
 #include "core/common/format_codec.hpp"
 #include <QHBoxLayout>
 #include <QVBoxLayout>

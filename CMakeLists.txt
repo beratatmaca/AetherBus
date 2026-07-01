@@ -126,35 +126,37 @@ target_include_directories(aether_core PUBLIC
 add_library(aether_gui STATIC
     src/gui/mainwindow.cpp
     src/gui/mainwindow.hpp
-    src/gui/session_view.hpp
-    src/gui/session_widget.cpp
-    src/gui/session_widget.hpp
-    src/gui/can_session_widget.cpp
-    src/gui/can_session_widget.hpp
-    src/gui/can_decoder_panel.cpp
-    src/gui/can_decoder_panel.hpp
-    src/gui/config_panel.cpp
-    src/gui/config_panel.hpp
-    src/gui/can_config_panel.cpp
-    src/gui/can_config_panel.hpp
-    src/gui/signal_panel.cpp
-    src/gui/signal_panel.hpp
-    src/gui/injection_panel.cpp
-    src/gui/injection_panel.hpp
-    src/gui/consoleview.cpp
-    src/gui/consoleview.hpp
-    src/gui/console_panel.cpp
-    src/gui/console_panel.hpp
-    src/gui/consoleview_paint.cpp
-    src/gui/consoleview_search.cpp
-    src/gui/macrobar.cpp
-    src/gui/macrobar.hpp
-    src/gui/theme_controller.cpp
-    src/gui/theme_controller.hpp
-    src/gui/throughput_chart.cpp
-    src/gui/throughput_chart.hpp
-    src/gui/statspanel.cpp
-    src/gui/statspanel.hpp
+    src/gui/sessions/session_view.hpp
+    src/gui/sessions/session_widget.cpp
+    src/gui/sessions/session_widget.hpp
+    src/gui/sessions/can_session_widget.cpp
+    src/gui/sessions/can_session_widget.hpp
+    src/gui/panels/can_decoder_panel.cpp
+    src/gui/panels/can_decoder_panel.hpp
+    src/gui/panels/config_panel.cpp
+    src/gui/panels/config_panel.hpp
+    src/gui/panels/can_config_panel.cpp
+    src/gui/panels/can_config_panel.hpp
+    src/gui/panels/signal_panel.cpp
+    src/gui/panels/signal_panel.hpp
+    src/gui/panels/injection_panel.cpp
+    src/gui/panels/injection_panel.hpp
+    src/gui/widgets/consoleview.cpp
+    src/gui/widgets/consoleview.hpp
+    src/gui/widgets/console_panel.cpp
+    src/gui/widgets/console_panel.hpp
+    src/gui/widgets/byte_inspector_panel.cpp
+    src/gui/widgets/byte_inspector_panel.hpp
+    src/gui/widgets/consoleview_paint.cpp
+    src/gui/widgets/consoleview_search.cpp
+    src/gui/widgets/macrobar.cpp
+    src/gui/widgets/macrobar.hpp
+    src/gui/common/theme_controller.cpp
+    src/gui/common/theme_controller.hpp
+    src/gui/widgets/throughput_chart.cpp
+    src/gui/widgets/throughput_chart.hpp
+    src/gui/widgets/statspanel.cpp
+    src/gui/widgets/statspanel.hpp
     src/gui/resources.qrc
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)

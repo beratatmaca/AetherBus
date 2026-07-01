@@ -150,6 +150,8 @@ public slots:
     /// Choose how the Find query is interpreted (text / hex / dec / bin / auto).
     void setSearchMode(SearchMode mode);
 
+    [[nodiscard]] QString selectedText() const;
+
 signals:
     /// Emitted whenever the running byte totals change.
     void countsChanged(qint64 rx, qint64 tx, qint64 rxRate, qint64 txRate);
@@ -208,7 +210,6 @@ private:
     /// Full rendered plain text of a line for measuring selection.
     QString fullLineText(int li) const;
 
-    [[nodiscard]] QString selectedText() const;
     void copySelectionToClipboard(int layerIndex) const;
 
     void reapplyHistory();

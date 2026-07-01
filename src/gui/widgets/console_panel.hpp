@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/consoleview.hpp"
+#include "gui/widgets/consoleview.hpp"
 #include <QWidget>
 
 class QComboBox;
@@ -67,14 +67,17 @@ signals:
 private slots:
     void updateConsoleFormats();
     void doFind(bool backward);
+    void onSelectionChanged();
 
 private:
     ConsoleView *m_console = nullptr;
+    class ByteInspectorPanel *m_inspector = nullptr;
 
     QPushButton *m_hexCheck = nullptr;
     QPushButton *m_decCheck = nullptr;
     QPushButton *m_binCheck = nullptr;
     QPushButton *m_asciiCheck = nullptr;
+    QPushButton *m_inspectCheck = nullptr;
 
     // Split mode controls
     QWidget *m_splitContainer = nullptr;

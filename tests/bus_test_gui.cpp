@@ -1,7 +1,7 @@
 #include "bus_test.hpp"
-#include "gui/consoleview.hpp"
-#include "gui/macrobar.hpp"
-#include "gui/theme_controller.hpp"
+#include "gui/widgets/consoleview.hpp"
+#include "gui/widgets/macrobar.hpp"
+#include "gui/common/theme_controller.hpp"
 #include "gui/mainwindow.hpp"
 
 #include <QComboBox>

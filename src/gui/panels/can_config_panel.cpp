@@ -1,4 +1,4 @@
-#include "gui/can_config_panel.hpp"
+#include "gui/panels/can_config_panel.hpp"
 
 #include <QApplication>
 #include <QCheckBox>

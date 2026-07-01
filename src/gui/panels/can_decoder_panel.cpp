@@ -1,4 +1,4 @@
-#include "gui/can_decoder_panel.hpp"
+#include "gui/panels/can_decoder_panel.hpp"
 #include <QDialog>
 #include <QFormLayout>
 #include <QFileDialog>

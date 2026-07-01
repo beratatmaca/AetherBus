@@ -1,4 +1,4 @@
-#include "gui/macrobar.hpp"
+#include "gui/widgets/macrobar.hpp"
 
 #include "core/common/format_codec.hpp"
 

@@ -3,7 +3,7 @@
 #include "core/can/can_types.hpp"
 #include "core/serial/serial_types.hpp"
 #include "core/common/stats_calculator.hpp"
-#include "gui/session_view.hpp"
+#include "gui/sessions/session_view.hpp"
 
 class QLineEdit;
 class QPushButton;

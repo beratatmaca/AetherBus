@@ -1,4 +1,4 @@
-#include "gui/consoleview.hpp"
+#include "gui/widgets/consoleview.hpp"
 
 #include "core/common/format_codec.hpp"
 

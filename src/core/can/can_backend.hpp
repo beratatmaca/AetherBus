@@ -3,7 +3,7 @@
  * @brief SocketCAN capture/transmit backend implementing @ref aether::IBusBackend.
  *
  * Linux-only under the hood; the class is declared on every platform so the GUI
- * can reference it unconditionally and gate on @ref CanBackend::isSupported(). On non-Linux
+ * can reference it unconditionally and gate on @ref aether::CanBackend::isSupported(). On non-Linux
  * builds every operation is a safe no-op that reports the transport as
  * unsupported.
  *

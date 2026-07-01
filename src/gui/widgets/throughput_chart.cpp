@@ -1,4 +1,4 @@
-#include "gui/throughput_chart.hpp"
+#include "gui/widgets/throughput_chart.hpp"
 #include <QPainter>
 #include <QPainterPath>
 #include <QDateTime>
