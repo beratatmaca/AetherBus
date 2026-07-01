@@ -1,9 +1,9 @@
 /**
- * @file can_types.h
+ * @file can_types.hpp
  * @brief Value types describing a SocketCAN connection.
  *
  * Dependency-light (Qt Core only) so the CAN backend can be unit tested without
- * pulling in Qt Widgets, mirroring @ref serial_types.h.
+ * pulling in Qt Widgets, mirroring @ref serial_types.hpp.
  */
 #pragma once
 

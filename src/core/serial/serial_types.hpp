@@ -1,5 +1,5 @@
 /**
- * @file serial_types.h
+ * @file serial_types.hpp
  * @brief Core value types shared between the interception backend and the GUI.
  *
  * This header is deliberately dependency-light (Qt Core only) so the backend

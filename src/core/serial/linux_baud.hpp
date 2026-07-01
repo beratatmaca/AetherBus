@@ -1,5 +1,5 @@
 /**
- * @file linux_baud.h
+ * @file linux_baud.hpp
  * @brief Arbitrary (non-standard) baud-rate support for Linux.
  *
  * Standard rates map to termios @c Bxxxx constants, but custom rates require

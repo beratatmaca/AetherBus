@@ -190,10 +190,18 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
 
     connect(m_txFormatBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
         switch (idx) {
-            case 0: m_txDataEdit->setPlaceholderText(QStringLiteral("payload hex, e.g. DE AD BE EF")); break;
-            case 1: m_txDataEdit->setPlaceholderText(QStringLiteral("payload ascii, e.g. hello")); break;
-            case 2: m_txDataEdit->setPlaceholderText(QStringLiteral("payload decimal, e.g. 65 66")); break;
-            case 3: m_txDataEdit->setPlaceholderText(QStringLiteral("payload binary, e.g. 01000001")); break;
+            case 0:
+                m_txDataEdit->setPlaceholderText(QStringLiteral("payload hex, e.g. DE AD BE EF"));
+                break;
+            case 1:
+                m_txDataEdit->setPlaceholderText(QStringLiteral("payload ascii, e.g. hello"));
+                break;
+            case 2:
+                m_txDataEdit->setPlaceholderText(QStringLiteral("payload decimal, e.g. 65 66"));
+                break;
+            case 3:
+                m_txDataEdit->setPlaceholderText(QStringLiteral("payload binary, e.g. 01000001"));
+                break;
         }
     });
 
@@ -222,7 +230,8 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     m_txHistoryBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     m_txHistoryBox->setToolTip(QStringLiteral("Recall recently transmitted CAN frames"));
     connect(m_txHistoryBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        if (index < 0 || index >= m_txHistory.size()) return;
+        if (index < 0 || index >= m_txHistory.size())
+            return;
         const auto &item = m_txHistory.at(index);
         m_txIdEdit->setText(QString::number(item.id, 16).toUpper());
         m_txDataEdit->setText(item.payload.toHex(' ').toUpper());
@@ -236,7 +245,8 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     auto *txResendBtn = makeAction(QStringLiteral("Resend"), QStringLiteral("Re-transmit the selected history frame"));
     connect(txResendBtn, &QPushButton::clicked, this, [this] {
         const int idx = m_txHistoryBox->currentIndex();
-        if (idx < 0 || idx >= m_txHistory.size()) return;
+        if (idx < 0 || idx >= m_txHistory.size())
+            return;
         const auto &item = m_txHistory.at(idx);
         m_backend->sendFrame(item.id, item.flags, item.payload);
     });
@@ -257,7 +267,8 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
 
     macroRow->addStretch(1);
 
-    auto *saveMacroBtn = makeAction(QStringLiteral("★ Save as macro"), QStringLiteral("Save current transmit fields as a quick-send macro"));
+    auto *saveMacroBtn =
+        makeAction(QStringLiteral("★ Save as macro"), QStringLiteral("Save current transmit fields as a quick-send macro"));
     connect(saveMacroBtn, &QPushButton::clicked, this, &CanSessionWidget::saveCurrentAsMacro);
     macroRow->addWidget(saveMacroBtn);
 
@@ -355,7 +366,7 @@ void CanSessionWidget::transmit() {
                               .arg(QString::number(id, 16).toUpper())
                               .arg(payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(payload.toHex(' ').toUpper()));
         m_txHistoryBox->insertItem(0, display);
-        
+
         m_txHistoryBox->blockSignals(true);
         m_txHistoryBox->setCurrentIndex(0);
         m_txHistoryBox->blockSignals(false);
@@ -369,7 +380,8 @@ void CanSessionWidget::transmit() {
 }
 
 void CanSessionWidget::applyFormats() {
-    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(), m_consolePanel->isAsciiChecked());
+    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(),
+                                          m_consolePanel->isAsciiChecked());
 }
 
 void CanSessionWidget::updateCounts() {
@@ -439,20 +451,20 @@ void CanSessionWidget::rebuildMacroButtons() {
         auto *btn = new QPushButton(macro.name, m_macroContainer);
         btn->setProperty("toolbarAction", true);
         btn->setCursor(Qt::PointingHandCursor);
-        
-        QString details = QStringLiteral("ID: %1 | Data: %2")
-                              .arg(QString::number(macro.id, 16).toUpper())
-                              .arg(macro.payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(macro.payload.toHex(' ').toUpper()));
+
+        QString details =
+            QStringLiteral("ID: %1 | Data: %2")
+                .arg(QString::number(macro.id, 16).toUpper())
+                .arg(macro.payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(macro.payload.toHex(' ').toUpper()));
         btn->setToolTip(details);
 
-        connect(btn, &QPushButton::clicked, this, [this, macro] {
-            m_backend->sendFrame(macro.id, macro.flags, macro.payload);
-        });
+        connect(btn, &QPushButton::clicked, this, [this, macro] { m_backend->sendFrame(macro.id, macro.flags, macro.payload); });
 
         btn->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(btn, &QPushButton::customContextMenuRequested, this, [this, i](const QPoint &pos) {
-            auto *senderBtn = qobject_cast<QPushButton*>(sender());
-            if (!senderBtn) return;
+            auto *senderBtn = qobject_cast<QPushButton *>(sender());
+            if (!senderBtn)
+                return;
             QMenu menu(this);
             auto *deleteAct = menu.addAction(QStringLiteral("Delete Macro"));
             connect(deleteAct, &QAction::triggered, this, [this, i] {
@@ -500,8 +512,7 @@ void CanSessionWidget::saveCurrentAsMacro() {
     }
 
     bool nameOk = false;
-    QString name = QInputDialog::getText(this, QStringLiteral("Save CAN Macro"),
-                                         QStringLiteral("Enter a name for this macro:"),
+    QString name = QInputDialog::getText(this, QStringLiteral("Save CAN Macro"), QStringLiteral("Enter a name for this macro:"),
                                          QLineEdit::Normal, QString(), &nameOk);
     if (!nameOk || name.trimmed().isEmpty()) {
         return;

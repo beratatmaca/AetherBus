@@ -1,5 +1,5 @@
 /**
- * @file i_bus_backend.h
+ * @file i_bus_backend.hpp
  * @brief Transport-neutral backend interface shared by every capture source.
  *
  * Views and the session controller depend only on this interface and on

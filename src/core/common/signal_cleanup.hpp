@@ -1,5 +1,5 @@
 /**
- * @file signal_cleanup.h
+ * @file signal_cleanup.hpp
  * @brief Crash- and signal-safe release of proxy descriptors and symlinks.
  *
  * A running @ref aether::PtyProxy may create a symlink to its slave PTY node.

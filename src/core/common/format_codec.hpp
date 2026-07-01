@@ -1,5 +1,5 @@
 /**
- * @file format_codec.h
+ * @file format_codec.hpp
  * @brief Pure byte <-> text conversions for the HTerm-style multi-format view.
  *
  * Every function here is free of I/O and global state so it can be exercised

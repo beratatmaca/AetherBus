@@ -216,7 +216,7 @@ void BusTest::statsCalculatorPerId() {
 
 void BusTest::canDbcDecoding() {
     DbcDatabase db;
-    
+
     // Construct a mock DBC content:
     // BO_ 500 EngineStatus: 8 Vector__XXX
     //  SG_ EngineRPM : 0|16@1+ (0.25,0) [0|16000] "rpm" Vector__XXX
@@ -226,27 +226,26 @@ void BusTest::canDbcDecoding() {
         "BO_ 500 EngineStatus: 8 Vector__XXX\n"
         " SG_ EngineRPM : 0|16@1+ (0.25,0) [0|16000] \"rpm\" Vector__XXX\n"
         " SG_ CoolantTemp : 16|8@1+ (1,-40) [-40|215] \"C\" Vector__XXX\n"
-        " SG_ ThrottlePos : 31|8@0+ (0.5,0) [0|100] \"%\" Vector__XXX\n"
-    );
+        " SG_ ThrottlePos : 31|8@0+ (0.5,0) [0|100] \"%\" Vector__XXX\n");
 
     QVERIFY(db.parse(dbcContent));
     QVERIFY(db.contains(500));
-    
+
     const auto &msg = db.getMessage(500);
     QCOMPARE(msg.name, QStringLiteral("EngineStatus"));
     QCOMPARE(msg.signalList.size(), 3);
-    
+
     // Let's create a raw mock payload
     // Payload: EngineRPM = 3200 (Intel 16-bit: raw = 3200 / 0.25 = 12800 = 0x3200) -> Little Endian = 00 32
     // CoolantTemp = 90 (Intel 8-bit: raw = 90 - (-40) = 130 = 0x82)
     // ThrottlePos = 80% (Motorola 8-bit, factor = 0.5: raw = 80 / 0.5 = 160 = 0xA0)
     // Payloads: Byte 0 = 0x00, Byte 1 = 0x32, Byte 2 = 0x82, Byte 3 = 0xA0
     QByteArray payload = QByteArray::fromHex("003282A000000000");
-    
+
     double rpm = DbcDatabase::decodeSignal(payload, msg.signalList[0]);
     double temp = DbcDatabase::decodeSignal(payload, msg.signalList[1]);
     double throttle = DbcDatabase::decodeSignal(payload, msg.signalList[2]);
-    
+
     QCOMPARE(rpm, 3200.0);
     QCOMPARE(temp, 90.0);
     QCOMPARE(throttle, 80.0);

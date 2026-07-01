@@ -1,5 +1,5 @@
 /**
- * @file capture_replay.h
+ * @file capture_replay.hpp
  * @brief Offline replay of previously captured traffic.
  *
  * The live backend (@ref aether::PtyProxy) can record traffic to a

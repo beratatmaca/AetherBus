@@ -10,8 +10,10 @@ bool DbcDatabase::parse(const QString &content) {
 
     // Regex for BO_ line: BO_ <id> <name>: <dlc> <transmitter>
     QRegularExpression msgRegex(QStringLiteral(R"(^BO_\s+(\d+)\s+(\w+)\s*:\s*(\d+))"));
-    // Regex for SG_ line: SG_ <name> [MUX] : <startBit>|<bitLength>@<endianness><sign> (<factor>,<offset>) [<min>|<max>] "<unit>" <receiver>
-    QRegularExpression sigRegex(QStringLiteral(R"(^\s*SG_\s+(\w+)\s*(?:\s*[M\w\d]*)?\s*:\s*(\d+)\|(\d+)@(\d+)([\+-])\s*\(([\d\.eE-]+),([\d\.eE-]+)\)\s*\[([\d\.eE-]+)\|([\d\.eE-]+)\]\s*\"([^\"]*)\")"));
+    // Regex for SG_ line: SG_ <name> [MUX] : <startBit>|<bitLength>@<endianness><sign> (<factor>,<offset>) [<min>|<max>] "<unit>"
+    // <receiver>
+    QRegularExpression sigRegex(QStringLiteral(
+        R"(^\s*SG_\s+(\w+)\s*(?:\s*[M\w\d]*)?\s*:\s*(\d+)\|(\d+)@(\d+)([\+-])\s*\(([\d\.eE-]+),([\d\.eE-]+)\)\s*\[([\d\.eE-]+)\|([\d\.eE-]+)\]\s*\"([^\"]*)\")"));
 
     DbcMessage currentMsg;
     bool hasCurrentMsg = false;
@@ -37,7 +39,7 @@ bool DbcDatabase::parse(const QString &content) {
                 sig.name = match.captured(1);
                 sig.startBit = match.captured(2).toInt();
                 sig.bitLength = match.captured(3).toInt();
-                sig.isBigEndian = (match.captured(4).toInt() == 0); // 0 = Motorola, 1 = Intel
+                sig.isBigEndian = (match.captured(4).toInt() == 0);  // 0 = Motorola, 1 = Intel
                 sig.isSigned = (match.captured(5) == QStringLiteral("-"));
                 sig.factor = match.captured(6).toDouble();
                 sig.offset = match.captured(7).toDouble();
@@ -57,7 +59,8 @@ bool DbcDatabase::parse(const QString &content) {
 }
 
 double DbcDatabase::decodeSignal(const QByteArray &payload, const DbcSignal &sig) {
-    if (payload.isEmpty() || sig.bitLength <= 0) return 0.0;
+    if (payload.isEmpty() || sig.bitLength <= 0)
+        return 0.0;
 
     quint64 rawVal = 0;
     if (sig.isBigEndian) {
@@ -110,4 +113,4 @@ double DbcDatabase::decodeSignal(const QByteArray &payload, const DbcSignal &sig
     return (sig.factor * value) + sig.offset;
 }
 
-} // namespace aether
+}  // namespace aether

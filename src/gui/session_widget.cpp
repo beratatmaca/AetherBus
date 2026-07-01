@@ -278,7 +278,8 @@ void SessionWidget::onError(const QString &message) {
 }
 
 void SessionWidget::applyFormats() {
-    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(), m_consolePanel->isAsciiChecked());
+    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(),
+                                          m_consolePanel->isAsciiChecked());
     QSettings settings;
     settings.setValue(QStringLiteral("connection/showHex"), m_consolePanel->isHexChecked());
     settings.setValue(QStringLiteral("connection/showDec"), m_consolePanel->isDecChecked());

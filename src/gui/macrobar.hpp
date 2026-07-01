@@ -1,5 +1,5 @@
 /**
- * @file macrobar.h
+ * @file macrobar.hpp
  * @brief Quick-send macros and send-history recall for the injection panel.
  */
 #pragma once

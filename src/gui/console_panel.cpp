@@ -185,11 +185,11 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
     row2->addWidget(makeSectionLabel(QStringLiteral("Find")));
 
     auto *searchModeBox = new QComboBox(this);
-    searchModeBox->addItems({QStringLiteral("Auto"), QStringLiteral("Text"), QStringLiteral("HEX"), QStringLiteral("DEC"), QStringLiteral("BIN")});
+    searchModeBox->addItems(
+        {QStringLiteral("Auto"), QStringLiteral("Text"), QStringLiteral("HEX"), QStringLiteral("DEC"), QStringLiteral("BIN")});
     searchModeBox->setToolTip(QStringLiteral("Interpret search input mode"));
-    connect(searchModeBox, &QComboBox::currentIndexChanged, this, [this](int index) {
-        m_console->setSearchMode(static_cast<ConsoleView::SearchMode>(index));
-    });
+    connect(searchModeBox, &QComboBox::currentIndexChanged, this,
+            [this](int index) { m_console->setSearchMode(static_cast<ConsoleView::SearchMode>(index)); });
     row2->addWidget(searchModeBox);
 
     m_findEdit = new QLineEdit(this);
@@ -219,35 +219,72 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
     layout->addWidget(m_console, 1);
 
     // Track active selection count
-    connect(m_console, &ConsoleView::selectionChars, this, [this](int count) {
-        m_selLabel->setText(QStringLiteral("Sel: %1").arg(count));
-    });
+    connect(m_console, &ConsoleView::selectionChars, this,
+            [this](int count) { m_selLabel->setText(QStringLiteral("Sel: %1").arg(count)); });
 }
 
 ConsolePanel::~ConsolePanel() = default;
 
-bool ConsolePanel::isHexChecked() const { return m_hexCheck->isChecked(); }
-bool ConsolePanel::isDecChecked() const { return m_decCheck->isChecked(); }
-bool ConsolePanel::isBinChecked() const { return m_binCheck->isChecked(); }
-bool ConsolePanel::isAsciiChecked() const { return m_asciiCheck->isChecked(); }
-bool ConsolePanel::isTimeChecked() const { return m_tsCheck->isChecked(); }
-bool ConsolePanel::isPausedChecked() const { return m_pauseCheck->isChecked(); }
-bool ConsolePanel::isAutoScrollChecked() const { return m_autoScrollCheck->isChecked(); }
+bool ConsolePanel::isHexChecked() const {
+    return m_hexCheck->isChecked();
+}
+bool ConsolePanel::isDecChecked() const {
+    return m_decCheck->isChecked();
+}
+bool ConsolePanel::isBinChecked() const {
+    return m_binCheck->isChecked();
+}
+bool ConsolePanel::isAsciiChecked() const {
+    return m_asciiCheck->isChecked();
+}
+bool ConsolePanel::isTimeChecked() const {
+    return m_tsCheck->isChecked();
+}
+bool ConsolePanel::isPausedChecked() const {
+    return m_pauseCheck->isChecked();
+}
+bool ConsolePanel::isAutoScrollChecked() const {
+    return m_autoScrollCheck->isChecked();
+}
 
-void ConsolePanel::setHexChecked(bool checked) { m_hexCheck->setChecked(checked); }
-void ConsolePanel::setDecChecked(bool checked) { m_decCheck->setChecked(checked); }
-void ConsolePanel::setBinChecked(bool checked) { m_binCheck->setChecked(checked); }
-void ConsolePanel::setAsciiChecked(bool checked) { m_asciiCheck->setChecked(checked); }
-void ConsolePanel::setTimeChecked(bool checked) { m_tsCheck->setChecked(checked); }
-void ConsolePanel::setPausedChecked(bool checked) { m_pauseCheck->setChecked(checked); }
-void ConsolePanel::setAutoScrollChecked(bool checked) { m_autoScrollCheck->setChecked(checked); }
+void ConsolePanel::setHexChecked(bool checked) {
+    m_hexCheck->setChecked(checked);
+}
+void ConsolePanel::setDecChecked(bool checked) {
+    m_decCheck->setChecked(checked);
+}
+void ConsolePanel::setBinChecked(bool checked) {
+    m_binCheck->setChecked(checked);
+}
+void ConsolePanel::setAsciiChecked(bool checked) {
+    m_asciiCheck->setChecked(checked);
+}
+void ConsolePanel::setTimeChecked(bool checked) {
+    m_tsCheck->setChecked(checked);
+}
+void ConsolePanel::setPausedChecked(bool checked) {
+    m_pauseCheck->setChecked(checked);
+}
+void ConsolePanel::setAutoScrollChecked(bool checked) {
+    m_autoScrollCheck->setChecked(checked);
+}
 
-void ConsolePanel::setSplitControlsVisible(bool visible) { m_splitContainer->setVisible(visible); }
-void ConsolePanel::setExtraActionsVisible(bool visible) { m_extraActionsContainer->setVisible(visible); }
-void ConsolePanel::setSelectionLabelVisible(bool visible) { m_selLabel->setVisible(visible); }
+void ConsolePanel::setSplitControlsVisible(bool visible) {
+    m_splitContainer->setVisible(visible);
+}
+void ConsolePanel::setExtraActionsVisible(bool visible) {
+    m_extraActionsContainer->setVisible(visible);
+}
+void ConsolePanel::setSelectionLabelVisible(bool visible) {
+    m_selLabel->setVisible(visible);
+}
 
-void ConsolePanel::setCountsText(const QString &text) { m_countsLabel->setText(text); }
-void ConsolePanel::setSelectionText(const QString &text) { m_selLabel->setText(text); }
+void ConsolePanel::setCountsText(const QString &text) {
+    m_countsLabel->setText(text);
+}
+void ConsolePanel::setSelectionText(const QString &text) {
+    m_selLabel->setText(text);
+}
 
 void ConsolePanel::updateConsoleFormats() {
     m_console->setFormats(m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked());

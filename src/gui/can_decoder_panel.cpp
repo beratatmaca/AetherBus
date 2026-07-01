@@ -20,9 +20,9 @@ namespace aether {
 // Inline Dialog to Add/Edit custom signals
 class SignalEditDialog : public QDialog {
 public:
-    explicit SignalEditDialog(QWidget *parent = nullptr, const DbcSignal *existingSig = nullptr, quint32 existingId = 0, const QString &existingMsgName = QString())
-        : QDialog(parent)
-    {
+    explicit SignalEditDialog(QWidget *parent = nullptr, const DbcSignal *existingSig = nullptr, quint32 existingId = 0,
+                              const QString &existingMsgName = QString())
+        : QDialog(parent) {
         setWindowTitle(existingSig ? QStringLiteral("Edit Signal Decoder") : QStringLiteral("Add Custom Signal Decoder"));
         auto *layout = new QVBoxLayout(this);
         auto *form = new QFormLayout();
@@ -30,48 +30,58 @@ public:
         m_idEdit = new QLineEdit(this);
         m_idEdit->setPlaceholderText(QStringLiteral("e.g. 1A4"));
         m_idEdit->setToolTip(QStringLiteral("CAN Frame ID in hexadecimal"));
-        if (existingId > 0) m_idEdit->setText(QString::number(existingId, 16).toUpper());
+        if (existingId > 0)
+            m_idEdit->setText(QString::number(existingId, 16).toUpper());
         form->addRow(QStringLiteral("CAN ID (Hex):"), m_idEdit);
 
         m_msgEdit = new QLineEdit(this);
         m_msgEdit->setPlaceholderText(QStringLiteral("e.g. EngineStatus"));
-        if (!existingMsgName.isEmpty()) m_msgEdit->setText(existingMsgName);
+        if (!existingMsgName.isEmpty())
+            m_msgEdit->setText(existingMsgName);
         form->addRow(QStringLiteral("Message Name:"), m_msgEdit);
 
         m_nameEdit = new QLineEdit(this);
         m_nameEdit->setPlaceholderText(QStringLiteral("e.g. EngineRPM"));
-        if (existingSig) m_nameEdit->setText(existingSig->name);
+        if (existingSig)
+            m_nameEdit->setText(existingSig->name);
         form->addRow(QStringLiteral("Signal Name:"), m_nameEdit);
 
         m_startEdit = new QLineEdit(QStringLiteral("0"), this);
-        if (existingSig) m_startEdit->setText(QString::number(existingSig->startBit));
+        if (existingSig)
+            m_startEdit->setText(QString::number(existingSig->startBit));
         form->addRow(QStringLiteral("Start Bit (0-511):"), m_startEdit);
 
         m_lengthEdit = new QLineEdit(QStringLiteral("8"), this);
-        if (existingSig) m_lengthEdit->setText(QString::number(existingSig->bitLength));
+        if (existingSig)
+            m_lengthEdit->setText(QString::number(existingSig->bitLength));
         form->addRow(QStringLiteral("Bit Length (1-64):"), m_lengthEdit);
 
         m_endianBox = new QComboBox(this);
         m_endianBox->addItem(QStringLiteral("Intel (Little Endian)"), 0);
         m_endianBox->addItem(QStringLiteral("Motorola (Big Endian)"), 1);
-        if (existingSig) m_endianBox->setCurrentIndex(existingSig->isBigEndian ? 1 : 0);
+        if (existingSig)
+            m_endianBox->setCurrentIndex(existingSig->isBigEndian ? 1 : 0);
         form->addRow(QStringLiteral("Byte Order:"), m_endianBox);
 
         m_signedCheck = new QCheckBox(QStringLiteral("Signed Value"), this);
-        if (existingSig) m_signedCheck->setChecked(existingSig->isSigned);
+        if (existingSig)
+            m_signedCheck->setChecked(existingSig->isSigned);
         form->addRow(QStringLiteral("Type:"), m_signedCheck);
 
         m_factorEdit = new QLineEdit(QStringLiteral("1.0"), this);
-        if (existingSig) m_factorEdit->setText(QString::number(existingSig->factor));
+        if (existingSig)
+            m_factorEdit->setText(QString::number(existingSig->factor));
         form->addRow(QStringLiteral("Scaling Factor:"), m_factorEdit);
 
         m_offsetEdit = new QLineEdit(QStringLiteral("0.0"), this);
-        if (existingSig) m_offsetEdit->setText(QString::number(existingSig->offset));
+        if (existingSig)
+            m_offsetEdit->setText(QString::number(existingSig->offset));
         form->addRow(QStringLiteral("Scaling Offset:"), m_offsetEdit);
 
         m_unitEdit = new QLineEdit(this);
         m_unitEdit->setPlaceholderText(QStringLiteral("e.g. rpm, C, V"));
-        if (existingSig) m_unitEdit->setText(existingSig->unit);
+        if (existingSig)
+            m_unitEdit->setText(existingSig->unit);
         form->addRow(QStringLiteral("Unit:"), m_unitEdit);
 
         layout->addLayout(form);
@@ -86,7 +96,10 @@ public:
         layout->addLayout(buttons);
     }
 
-    quint32 canId() const { bool ok; return m_idEdit->text().trimmed().toUInt(&ok, 16); }
+    quint32 canId() const {
+        bool ok;
+        return m_idEdit->text().trimmed().toUInt(&ok, 16);
+    }
     QString messageName() const { return m_msgEdit->text().trimmed(); }
     DbcSignal getSignal() const {
         DbcSignal sig;
@@ -113,7 +126,6 @@ private:
     QLineEdit *m_offsetEdit = nullptr;
     QLineEdit *m_unitEdit = nullptr;
 };
-
 
 CanDecoderPanel::CanDecoderPanel(QWidget *parent) : QGroupBox(QStringLiteral("CAN DBC Decoder"), parent) {
     setupUi();
@@ -144,18 +156,12 @@ void CanDecoderPanel::setupUi() {
 
     m_tree = new QTreeWidget(this);
     m_tree->setColumnCount(6);
-    m_tree->setHeaderLabels({
-        QStringLiteral("Signal / Message"),
-        QStringLiteral("Live Value"),
-        QStringLiteral("Unit"),
-        QStringLiteral("Type"),
-        QStringLiteral("Start"),
-        QStringLiteral("Length")
-    });
+    m_tree->setHeaderLabels({QStringLiteral("Signal / Message"), QStringLiteral("Live Value"), QStringLiteral("Unit"),
+                             QStringLiteral("Type"), QStringLiteral("Start"), QStringLiteral("Length")});
     m_tree->header()->setStretchLastSection(true);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &CanDecoderPanel::onSignalItemContextMenu);
-    
+
     layout->addWidget(m_tree);
 }
 
@@ -167,7 +173,7 @@ void CanDecoderPanel::updateTable() {
         auto *msgItem = new QTreeWidgetItem(m_tree);
         msgItem->setText(0, QStringLiteral("%1 (0x%2)").arg(msg.name).arg(QString::number(msg.id, 16).toUpper()));
         msgItem->setData(0, Qt::UserRole, msg.id);
-        msgItem->setData(0, Qt::UserRole + 1, false); // isCustom = false
+        msgItem->setData(0, Qt::UserRole + 1, false);  // isCustom = false
 
         for (const auto &sig : msg.signalList) {
             addOrUpdateSignalItem(msg, sig, false);
@@ -184,7 +190,7 @@ void CanDecoderPanel::updateTable() {
         auto *msgItem = new QTreeWidgetItem(m_tree);
         msgItem->setText(0, QStringLiteral("%1 (0x%2)").arg(mockMsg.name).arg(QString::number(id, 16).toUpper()));
         msgItem->setData(0, Qt::UserRole, id);
-        msgItem->setData(0, Qt::UserRole + 1, true); // isCustom = true
+        msgItem->setData(0, Qt::UserRole + 1, true);  // isCustom = true
 
         for (const auto &sig : it.value()) {
             addOrUpdateSignalItem(mockMsg, sig, true);
@@ -205,11 +211,12 @@ void CanDecoderPanel::addOrUpdateSignalItem(const DbcMessage &msg, const DbcSign
         }
     }
 
-    if (!parentItem) return;
+    if (!parentItem)
+        return;
 
     auto *sigItem = new QTreeWidgetItem(parentItem);
     sigItem->setText(0, sig.name);
-    
+
     // Check if we have a last value cached
     QString cacheKey = QStringLiteral("%1_%2").arg(msg.id).arg(sig.name);
     sigItem->setText(1, m_lastValues.value(cacheKey, QStringLiteral("---")));
@@ -217,15 +224,16 @@ void CanDecoderPanel::addOrUpdateSignalItem(const DbcMessage &msg, const DbcSign
     sigItem->setText(3, sig.isSigned ? QStringLiteral("Signed") : QStringLiteral("Unsigned"));
     sigItem->setText(4, QString::number(sig.startBit));
     sigItem->setText(5, QString::number(sig.bitLength));
-    
+
     // Store metadata on child node
     sigItem->setData(0, Qt::UserRole, msg.id);
     sigItem->setData(0, Qt::UserRole + 1, isCustom);
-    sigItem->setData(0, Qt::UserRole + 2, sig.name); // signal name
+    sigItem->setData(0, Qt::UserRole + 2, sig.name);  // signal name
 }
 
 void CanDecoderPanel::processChunk(const CapturedChunk &chunk) {
-    if (!chunk.isFrame) return;
+    if (!chunk.isFrame)
+        return;
 
     quint32 id = chunk.frameId;
 
@@ -267,7 +275,8 @@ void CanDecoderPanel::processChunk(const CapturedChunk &chunk) {
 void CanDecoderPanel::onLoadDbcClicked() {
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Open CAN DBC File"), QString(),
                                                       QStringLiteral("DBC database files (*.dbc);;All files (*)"));
-    if (path.isEmpty()) return;
+    if (path.isEmpty())
+        return;
 
     QFile file(path);
     if (!file.open(QFile::ReadOnly | QFile::Text)) {
@@ -291,7 +300,7 @@ void CanDecoderPanel::onAddCustomSignalClicked() {
     if (dlg.exec() == QDialog::Accepted) {
         quint32 id = dlg.canId();
         DbcSignal sig = dlg.getSignal();
-        
+
         m_customSignals[id].append(sig);
         updateTable();
         saveSettings();
@@ -300,13 +309,15 @@ void CanDecoderPanel::onAddCustomSignalClicked() {
 
 void CanDecoderPanel::onSignalItemContextMenu(const QPoint &pos) {
     auto *item = m_tree->itemAt(pos);
-    if (!item) return;
+    if (!item)
+        return;
 
     // We can only edit/delete custom signal nodes
     bool isCustom = item->data(0, Qt::UserRole + 1).toBool();
     QString sigName = item->data(0, Qt::UserRole + 2).toString();
 
-    if (!isCustom || sigName.isEmpty()) return; // Message root or DBC signal cannot be edited
+    if (!isCustom || sigName.isEmpty())
+        return;  // Message root or DBC signal cannot be edited
 
     QMenu menu(this);
     auto *editAct = menu.addAction(QStringLiteral("Edit Signal Decoder…"));
@@ -320,12 +331,14 @@ void CanDecoderPanel::onSignalItemContextMenu(const QPoint &pos) {
 
 void CanDecoderPanel::editSelectedSignal() {
     auto *item = m_tree->currentItem();
-    if (!item) return;
+    if (!item)
+        return;
 
     quint32 id = item->data(0, Qt::UserRole).toUInt();
     QString sigName = item->data(0, Qt::UserRole + 2).toString();
 
-    if (!m_customSignals.contains(id)) return;
+    if (!m_customSignals.contains(id))
+        return;
 
     // Find the signal
     auto &sigs = m_customSignals[id];
@@ -357,7 +370,8 @@ void CanDecoderPanel::editSelectedSignal() {
 
 void CanDecoderPanel::deleteSelectedSignal() {
     auto *item = m_tree->currentItem();
-    if (!item) return;
+    if (!item)
+        return;
 
     quint32 id = item->data(0, Qt::UserRole).toUInt();
     QString sigName = item->data(0, Qt::UserRole + 2).toString();
@@ -382,7 +396,7 @@ void CanDecoderPanel::deleteSelectedSignal() {
 
 void CanDecoderPanel::loadSettings() {
     QSettings settings;
-    
+
     // Restore DBC file path
     m_loadedDbcPath = settings.value(QStringLiteral("can/dbc_path")).toString();
     if (!m_loadedDbcPath.isEmpty()) {
@@ -398,7 +412,7 @@ void CanDecoderPanel::loadSettings() {
     for (int i = 0; i < size; ++i) {
         settings.setArrayIndex(i);
         quint32 id = settings.value(QStringLiteral("id")).toUInt();
-        
+
         DbcSignal sig;
         sig.name = settings.value(QStringLiteral("name")).toString();
         sig.startBit = settings.value(QStringLiteral("start_bit")).toInt();
@@ -408,7 +422,7 @@ void CanDecoderPanel::loadSettings() {
         sig.factor = settings.value(QStringLiteral("factor"), 1.0).toDouble();
         sig.offset = settings.value(QStringLiteral("offset"), 0.0).toDouble();
         sig.unit = settings.value(QStringLiteral("unit")).toString();
-        
+
         m_customSignals[id].append(sig);
     }
     settings.endArray();
@@ -441,4 +455,4 @@ void CanDecoderPanel::saveSettings() {
     settings.endArray();
 }
 
-} // namespace aether
+}  // namespace aether

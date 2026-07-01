@@ -1,9 +1,9 @@
 /**
- * @file can_backend.h
- * @brief SocketCAN capture/transmit backend implementing @ref IBusBackend.
+ * @file can_backend.hpp
+ * @brief SocketCAN capture/transmit backend implementing @ref aether::IBusBackend.
  *
  * Linux-only under the hood; the class is declared on every platform so the GUI
- * can reference it unconditionally and gate on @ref isSupported(). On non-Linux
+ * can reference it unconditionally and gate on @ref CanBackend::isSupported(). On non-Linux
  * builds every operation is a safe no-op that reports the transport as
  * unsupported.
  *

@@ -1,5 +1,5 @@
 /**
- * @file session_view.h
+ * @file session_view.hpp
  * @brief Abstract tab contents hosted by MainWindow.
  *
  * Lets the main window manage serial and CAN sessions uniformly (title, close,
