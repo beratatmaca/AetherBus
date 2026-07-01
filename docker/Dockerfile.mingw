@@ -1,0 +1,21 @@
+# Cross-compile AetherBus for Windows (x86_64) using MinGW-w64 + Qt 6.
+#
+# Fedora ships first-class MinGW cross packages: the Qt 6 build is patched to use
+# native host moc/rcc/uic, and the `mingw64-cmake` wrapper preconfigures the
+# toolchain + QT_HOST_PATH so AUTOMOC/AUTORCC "just work" when cross-building.
+#
+# Build the image:   docker build -t aetherbus-mingw -f docker/Dockerfile.mingw .
+# It is normally invoked via scripts/build-windows.sh.
+FROM fedora:40
+
+RUN dnf -y install \
+        mingw64-gcc-c++ \
+        mingw64-qt6-qtbase \
+        mingw64-qt6-qttools \
+        cmake \
+        ninja-build \
+        make \
+        git \
+    && dnf clean all
+
+WORKDIR /src

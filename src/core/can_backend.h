@@ -70,7 +70,7 @@ public:
 
 private:
     void runLoop();
-    void wakeLoop();
+    void wakeLoop() const;
     void teardown();
 
     int m_sockFd = -1;

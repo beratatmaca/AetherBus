@@ -2,6 +2,7 @@
 
 #include "core/serial_types.h"
 #include "core/stats_calculator.h"
+#include "gui/session_view.h"
 #include <QWidget>
 
 class QTimer;
@@ -22,20 +23,17 @@ class ConfigPanel;
 class SignalPanel;
 class InjectionPanel;
 
-class SessionWidget : public QWidget {
+class SessionWidget : public SessionView {
     Q_OBJECT
 
 public:
     explicit SessionWidget(QWidget *parent = nullptr);
     ~SessionWidget() override;
 
-    bool isRunning() const;
-    void stopSession();
+    [[nodiscard]] bool isRunning() const override;
+    void stopSession() override;
 
     StatsCalculator &stats() { return m_stats; }
-
-signals:
-    void sessionTitleChanged(const QString &title);
 
 private slots:
     void startInterception(const SerialConfig &cfg);

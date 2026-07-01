@@ -1,5 +1,6 @@
 #include "gui/mainwindow.h"
 
+#include "gui/can_session_widget.h"
 #include "gui/session_widget.h"
 #include "gui/theme_controller.h"
 #include "aether/version.h"
@@ -37,9 +38,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QMenu *fileMenu = menu->addMenu(tr("&File"));
 
-    QAction *newSessionAct = fileMenu->addAction(tr("&New Session"));
+    QAction *newSessionAct = fileMenu->addAction(tr("New &Serial Session"));
     newSessionAct->setShortcut(QKeySequence::New);
     connect(newSessionAct, &QAction::triggered, this, &MainWindow::addNewSession);
+
+    QAction *newCanSessionAct = fileMenu->addAction(tr("New &CAN Session"));
+    connect(newCanSessionAct, &QAction::triggered, this, &MainWindow::addNewCanSession);
 
     QAction *closeSessionAct = fileMenu->addAction(tr("&Close Session"));
     closeSessionAct->setShortcut(QKeySequence::Close);
@@ -186,28 +190,44 @@ void MainWindow::buildUi() {
     m_tabWidget->setMovable(true);
     connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, &MainWindow::closeSessionTab);
 
-    // An add button in the corner of the tab bar
+    // An add button in the corner of the tab bar, offering a session type.
     auto *addTabButton = new QPushButton(QStringLiteral("+"), this);
     addTabButton->setToolTip(tr("Open new session"));
     addTabButton->setFlat(true);
     addTabButton->setFixedWidth(30);
-    connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewSession);
+    auto *addMenu = new QMenu(addTabButton);
+    addMenu->addAction(tr("Serial Session"), this, &MainWindow::addNewSession);
+    addMenu->addAction(tr("CAN Session"), this, &MainWindow::addNewCanSession);
+    addTabButton->setMenu(addMenu);
     m_tabWidget->setCornerWidget(addTabButton, Qt::TopRightCorner);
 
     setCentralWidget(m_tabWidget);
 }
 
 void MainWindow::addNewSession() {
-    auto *session = new SessionWidget(this);
+    addSession(SessionType::Serial);
+}
 
-    // Default name
-    int count = m_tabWidget->count() + 1;
-    QString title = QStringLiteral("Session %1").arg(count);
+void MainWindow::addNewCanSession() {
+    addSession(SessionType::Can);
+}
 
-    int index = m_tabWidget->addTab(session, title);
+void MainWindow::addSession(SessionType type) {
+    SessionView *session = nullptr;
+    QString title;
+    const int count = m_tabWidget->count() + 1;
+    if (type == SessionType::Can) {
+        session = new CanSessionWidget(this);
+        title = QStringLiteral("CAN Session %1").arg(count);
+    } else {
+        session = new SessionWidget(this);
+        title = QStringLiteral("Session %1").arg(count);
+    }
 
-    connect(session, &SessionWidget::sessionTitleChanged, this, [this, session](const QString &newTitle) {
-        int idx = m_tabWidget->indexOf(session);
+    const int index = m_tabWidget->addTab(session, title);
+
+    connect(session, &SessionView::sessionTitleChanged, this, [this, session](const QString &newTitle) {
+        const int idx = m_tabWidget->indexOf(session);
         if (idx != -1) {
             m_tabWidget->setTabText(idx, newTitle);
         }
@@ -221,7 +241,7 @@ void MainWindow::closeSessionTab(int index) {
         return;
     }
 
-    auto *session = qobject_cast<SessionWidget *>(m_tabWidget->widget(index));
+    auto *session = qobject_cast<SessionView *>(m_tabWidget->widget(index));
     if (!session) {
         return;
     }

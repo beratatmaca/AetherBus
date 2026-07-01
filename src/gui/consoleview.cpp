@@ -194,11 +194,15 @@ void ConsoleView::beginLineIfEmpty(const CapturedChunk &chunk) {
     if (m_openLine.bytes.isEmpty()) {
         m_openLine.dir = chunk.dir;
         m_openLine.timestampMs = chunk.timestampMs;
+        m_openLine.isFrame = chunk.isFrame;
+        m_openLine.frameId = chunk.frameId;
+        m_openLine.frameFlags = chunk.frameFlags;
     }
 }
 
 void ConsoleView::renderOpenLine() {
-    m_openLine = buildLine(m_openLine.dir, m_openLine.timestampMs, m_openLine.bytes);
+    m_openLine =
+        buildLine(m_openLine.dir, m_openLine.timestampMs, m_openLine.bytes, m_openLine.isFrame, m_openLine.frameId, m_openLine.frameFlags);
     if (m_openLineActive) {
         m_lines.last() = m_openLine;
     } else {
@@ -240,6 +244,7 @@ void ConsoleView::processChunk(const CapturedChunk &chunk) {
     }
 
     switch (m_mode) {
+        case NewlineMode::Frame:  // CAN: one atomic line per frame, with a frame header
         case NewlineMode::PerChunk:
             beginLineIfEmpty(chunk);
             m_openLine.bytes.append(chunk.data);
@@ -328,11 +333,30 @@ void ConsoleView::processChunk(const CapturedChunk &chunk) {
     }
 }
 
-DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes) const {
+QString ConsoleView::frameHeader(quint32 id, quint16 flags, int payloadLen) {
+    const int width = (flags & FrameExtendedId) != 0 ? 8 : 3;
+    QString header = QStringLiteral("%1 [%2]").arg(id, width, 16, QLatin1Char('0')).toUpper().arg(payloadLen);
+    if ((flags & FrameRemote) != 0) {
+        header += QStringLiteral(" R");
+    }
+    if ((flags & FrameError) != 0) {
+        header += QStringLiteral(" ERR");
+    }
+    if ((flags & FrameFd) != 0) {
+        header += (flags & FrameBitRateSwitch) != 0 ? QStringLiteral(" FD/BRS") : QStringLiteral(" FD");
+    }
+    return header;
+}
+
+DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame, quint32 frameId,
+                                   quint16 frameFlags) const {
     DisplayLine dl;
     dl.dir = dir;
     dl.timestampMs = tsMs;
     dl.bytes = bytes;
+    dl.isFrame = isFrame;
+    dl.frameId = frameId;
+    dl.frameFlags = frameFlags;
 
     const QString tag = (dir == Direction::Rx) ? QStringLiteral("Rx") : QStringLiteral("Tx");
     if (m_showTimestamps) {
@@ -340,6 +364,9 @@ DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray 
         dl.prefix = QStringLiteral("[%1 %2]").arg(ts, tag);
     } else {
         dl.prefix = QStringLiteral("[%1]").arg(tag);
+    }
+    if (isFrame) {
+        dl.prefix += QLatin1Char(' ') + frameHeader(frameId, frameFlags, static_cast<int>(bytes.size()));
     }
 
     dl.cols.clear();

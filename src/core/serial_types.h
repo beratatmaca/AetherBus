@@ -33,7 +33,7 @@ enum class Direction : std::uint8_t {
  * Stored as a bitmask in @ref CapturedChunk::frameFlags. Stream transports such
  * as the serial proxy leave the mask at zero and never set @c isFrame.
  */
-enum FrameFlag : std::uint16_t {
+enum FrameFlag : std::uint8_t {
     FrameExtendedId = 1U << 0,     ///< 29-bit identifier (CAN EFF).
     FrameRemote = 1U << 1,         ///< Remote-transmission-request frame (CAN RTR).
     FrameError = 1U << 2,          ///< Error frame (CAN ERR).

@@ -81,6 +81,8 @@ endif()
 # platforms the library still builds with the pure codec + value types.
 set(AETHER_CORE_SOURCES
     src/core/serial_types.h
+    src/core/can_types.h
+    src/core/i_bus_backend.h
     src/core/format_codec.cpp
     src/core/format_codec.h
     src/core/stats_calculator.cpp
@@ -92,6 +94,8 @@ set(AETHER_CORE_SOURCES
     src/core/pty_proxy.cpp
     src/core/pty_proxy.h
     src/core/pty_proxy_impl.h
+    src/core/can_backend.cpp
+    src/core/can_backend.h
 )
 if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
@@ -120,10 +124,15 @@ target_include_directories(aether_core PUBLIC
 add_library(aether_gui STATIC
     src/gui/mainwindow.cpp
     src/gui/mainwindow.h
+    src/gui/session_view.h
     src/gui/session_widget.cpp
     src/gui/session_widget.h
+    src/gui/can_session_widget.cpp
+    src/gui/can_session_widget.h
     src/gui/config_panel.cpp
     src/gui/config_panel.h
+    src/gui/can_config_panel.cpp
+    src/gui/can_config_panel.h
     src/gui/signal_panel.cpp
     src/gui/signal_panel.h
     src/gui/injection_panel.cpp
@@ -150,6 +159,11 @@ else()
     add_executable(aetherbus src/main.cpp)
 endif()
 target_link_libraries(aetherbus PRIVATE aether_gui)
+
+# On Windows, build as a GUI-subsystem app so launching spawns no console window.
+if(WIN32)
+    set_target_properties(aetherbus PROPERTIES WIN32_EXECUTABLE ON)
+endif()
 
 # Copy assets to build directory for local execution reference
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

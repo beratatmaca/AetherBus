@@ -19,10 +19,10 @@ namespace aether {
  * filters are OR-combined by the kernel. @c invert flips an individual rule.
  */
 struct CanFilter {
-    quint32 id = 0;          ///< Identifier to match (flag bits masked off).
-    quint32 mask = 0x7FF;    ///< Match mask; default matches a full 11-bit id.
-    bool extended = false;   ///< Interpret @c id as a 29-bit (EFF) identifier.
-    bool invert = false;     ///< Invert this rule (CAN_INV_FILTER).
+    quint32 id = 0;         ///< Identifier to match (flag bits masked off).
+    quint32 mask = 0x7FF;   ///< Match mask; default matches a full 11-bit id.
+    bool extended = false;  ///< Interpret @c id as a 29-bit (EFF) identifier.
+    bool invert = false;    ///< Invert this rule (CAN_INV_FILTER).
 };
 
 /**

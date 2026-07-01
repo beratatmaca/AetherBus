@@ -31,7 +31,7 @@
 
 namespace aether {
 
-SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new PtyProxy(this)) {
+SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new PtyProxy(this)) {
     buildUi();
     rescanDevices();
 

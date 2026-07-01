@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gui/session_view.h"
+
 #include <QMainWindow>
 
 class QTabWidget;
@@ -16,13 +18,15 @@ public:
     ~MainWindow() override;
 
 private slots:
-    void addNewSession();
+    void addNewSession();     ///< New serial session (Ctrl+N).
+    void addNewCanSession();  ///< New SocketCAN session.
     void closeSessionTab(int index);
     void closeCurrentSession();
     void showAboutQt();
 
 private:
     void buildUi();
+    void addSession(SessionType type);
 
     QTabWidget *m_tabWidget = nullptr;
     ThemeController *m_theme = nullptr;

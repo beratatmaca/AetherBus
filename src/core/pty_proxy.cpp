@@ -27,7 +27,7 @@ PtyProxy::PtyProxy(QObject *parent) : IBusBackend(parent) {
 }
 
 PtyProxy::~PtyProxy() {
-    close();
+    PtyProxy::close();  // qualified: non-virtual dispatch is intended in a dtor
 }
 
 bool PtyProxy::open(const SerialConfig &config) {

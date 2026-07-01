@@ -48,8 +48,13 @@ struct DisplayLine {
     // Columns are stored in the order: HEX, DEC, BIN, ASCII (only active
     // ones are populated).  Each element is a QStringList of width == bytes.size().
     QVector<QStringList> cols;  ///< cols[colIdx][byteIdx]
-    QString prefix;             ///< "[HH:mm:ss.zzz Rx/Tx]" or "[Rx/Tx]"
+    QString prefix;             ///< "[HH:mm:ss.zzz Rx/Tx]" or "[Rx/Tx]" (+ frame header)
     QString ascii;              ///< ASCII representation on the right
+
+    // Optional framing metadata mirrored from the source chunk (CAN etc.).
+    bool isFrame = false;
+    quint32 frameId = 0;
+    quint16 frameFlags = 0;
 };
 
 /// Lightweight text cursor pointing into the DisplayLine vector.
@@ -69,6 +74,7 @@ public:
         FixedCount,  ///< break every N bytes
         TLV,         ///< split on length encoded in a fixed-size header
         CrLf,        ///< break on \\r, \\n, or \\r\\n
+        Frame,       ///< one line per captured frame, rendered with its frame header (CAN)
     };
 
     /// How the Find query text is interpreted before matching. Order matches the
@@ -174,7 +180,10 @@ private:
     void renderOpenLine();  ///< re-render m_openLine.cols from m_openLine.bytes
     void finalizeLine();    ///< commit + log
 
-    DisplayLine buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes) const;
+    DisplayLine buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame = false, quint32 frameId = 0,
+                          quint16 frameFlags = 0) const;
+    /// Compose the per-frame header shown after the timestamp, e.g. "123 [4] R".
+    [[nodiscard]] static QString frameHeader(quint32 id, quint16 flags, int payloadLen);
     [[nodiscard]] QString lineToPlain(const DisplayLine &dl) const;
 
     /// Build a regex matching @p bytes against the active display columns.
