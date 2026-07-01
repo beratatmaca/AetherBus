@@ -1,8 +1,8 @@
 #pragma once
 
+#include "core/i_bus_backend.h"
 #include "core/serial_types.h"
 
-#include <QObject>
 #include <QString>
 #include <memory>
 
@@ -10,7 +10,7 @@ namespace aether {
 
 class PtyProxyImpl;
 
-class PtyProxy : public QObject {
+class PtyProxy : public IBusBackend {
     Q_OBJECT
 
 public:
@@ -21,9 +21,9 @@ public:
     PtyProxy &operator=(const PtyProxy &) = delete;
 
     bool open(const SerialConfig &config);
-    void close();
+    void close() override;
 
-    [[nodiscard]] bool isRunning() const;
+    [[nodiscard]] bool isRunning() const override;
     [[nodiscard]] QString slavePath() const;
 
     bool injectToDevice(const QByteArray &bytes);
@@ -56,11 +56,9 @@ public:
     [[nodiscard]] bool isCapturing() const;
 
 signals:
-    void chunkCaptured(const aether::CapturedChunk &chunk);
-    void errorOccurred(const QString &message);
-    void started(const QString &slavePath);
-    void stopped();
-    void disconnected();
+    // Common capture/lifecycle signals (chunkCaptured, started, stopped,
+    // errorOccurred, disconnected) are inherited from IBusBackend. Only the
+    // serial-specific extras are declared here.
     void lineReconfigured(int baud, int dataBits, aether::Parity parity, int stopBits);
     void writeStalled(aether::Direction dir, quint64 droppedTotal);
 

@@ -194,7 +194,7 @@ void MacroBar::rebuildButtons() {
 void MacroBar::openEditor(const Macro *prefill, int selectIndex) {
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("Edit macros"));
-    dialog.setWindowIcon(QIcon(QStringLiteral(":/aether/icon.ico")));
+    dialog.setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
     dialog.resize(720, 320);
     auto *vbox = new QVBoxLayout(&dialog);
     vbox->addWidget(

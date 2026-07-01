@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     QCoreApplication::setApplicationName(QStringLiteral("AetherBus"));
     QCoreApplication::setOrganizationName(QStringLiteral("AetherBus Project"));
     QCoreApplication::setApplicationVersion(QStringLiteral(AETHER_VERSION_STRING));
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/aether/icon.ico")));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
 
     aether::installSignalHandlers();
 

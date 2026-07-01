@@ -12,7 +12,7 @@
 
 namespace aether {
 
-PtyProxy::PtyProxy(QObject *parent) : QObject(parent) {
+PtyProxy::PtyProxy(QObject *parent) : IBusBackend(parent) {
     qRegisterMetaType<aether::CapturedChunk>("aether::CapturedChunk");
     qRegisterMetaType<aether::Direction>("aether::Direction");
     qRegisterMetaType<aether::Parity>("aether::Parity");

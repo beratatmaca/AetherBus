@@ -27,6 +27,21 @@ enum class Direction : std::uint8_t {
     Tx,  ///< Host -> peripheral (read from the PTY master).
 };
 
+/**
+ * @brief Per-frame attributes for framed transports (e.g. CAN).
+ *
+ * Stored as a bitmask in @ref CapturedChunk::frameFlags. Stream transports such
+ * as the serial proxy leave the mask at zero and never set @c isFrame.
+ */
+enum FrameFlag : std::uint16_t {
+    FrameExtendedId = 1U << 0,     ///< 29-bit identifier (CAN EFF).
+    FrameRemote = 1U << 1,         ///< Remote-transmission-request frame (CAN RTR).
+    FrameError = 1U << 2,          ///< Error frame (CAN ERR).
+    FrameFd = 1U << 3,             ///< CAN-FD frame (payload up to 64 bytes).
+    FrameBitRateSwitch = 1U << 4,  ///< CAN-FD bit-rate switch (BRS).
+    FrameErrorStateInd = 1U << 5,  ///< CAN-FD error-state indicator (ESI).
+};
+
 /** @brief Hardware/software flow control applied to the physical link. */
 enum class FlowControl : std::uint8_t {
     None,     ///< No handshake.
@@ -67,7 +82,13 @@ constexpr char parityCode(Parity parity) noexcept {
 struct CapturedChunk {
     qint64 timestampMs = 0;         ///< Wall-clock capture time (ms since epoch).
     Direction dir = Direction::Rx;  ///< Stream this chunk belongs to.
-    QByteArray data;                ///< Raw bytes, exactly as seen on the wire.
+    QByteArray data;                ///< Raw bytes / frame payload, exactly as seen on the wire.
+
+    // --- Optional framing metadata. Used by framed transports such as CAN;
+    //     stream transports (serial) leave these at their defaults. ---
+    bool isFrame = false;    ///< When true, @c frameId / @c frameFlags are meaningful.
+    quint32 frameId = 0;     ///< Frame identifier (e.g. CAN id, with flag bits masked off).
+    quint16 frameFlags = 0;  ///< Bitmask of @ref FrameFlag values.
 };
 
 /**
