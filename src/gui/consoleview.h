@@ -287,6 +287,9 @@ private:
 
     // Pixel scroll offset within a line (horizontal).
     int m_hScroll = 0;
+
+    static constexpr int kLeftPad = 4;
+    static constexpr int kFindBackward = 1;
 };
 
 }  // namespace aether

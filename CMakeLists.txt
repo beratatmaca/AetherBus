@@ -86,6 +86,8 @@ set(AETHER_CORE_SOURCES
     src/core/stats_calculator.h
     src/core/capture_replay.cpp
     src/core/capture_replay.h
+    src/core/signal_cleanup.cpp
+    src/core/signal_cleanup.h
 )
 if(UNIX)
     list(APPEND AETHER_CORE_SOURCES
@@ -113,6 +115,8 @@ add_library(aether_gui STATIC
     src/gui/injection_panel.h
     src/gui/consoleview.cpp
     src/gui/consoleview.h
+    src/gui/consoleview_paint.cpp
+    src/gui/consoleview_search.cpp
     src/gui/macrobar.cpp
     src/gui/macrobar.h
     src/gui/theme_controller.cpp
@@ -139,7 +143,12 @@ include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     enable_testing()
-    add_executable(bus_test tests/bus_test.cpp)
+    add_executable(bus_test
+        tests/bus_test.h
+        tests/bus_test.cpp
+        tests/bus_test_pty.cpp
+        tests/bus_test_gui.cpp
+    )
     target_link_libraries(bus_test PRIVATE aether_gui Qt6::Widgets Qt6::Core Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
 endif()

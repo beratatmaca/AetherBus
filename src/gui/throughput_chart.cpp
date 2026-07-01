@@ -7,7 +7,7 @@
 namespace aether {
 
 ThroughputChart::ThroughputChart(QWidget *parent) : QWidget(parent) {
-    setMinimumHeight(120);
+    setMinimumHeight(80);
 }
 
 void ThroughputChart::setHistory(const QVector<double> &rxHistory, const QVector<double> &txHistory) {
@@ -24,7 +24,7 @@ void ThroughputChart::setDarkMode(bool enabled) {
 static QString formatRate(double bytesPerSec) {
     if (bytesPerSec >= 1024.0 * 1024.0) {
         return QString::number(bytesPerSec / (1024.0 * 1024.0), 'f', 1) + " MB/s";
-    } else if (bytesPerSec >= 1024.0) {
+    } if (bytesPerSec >= 1024.0) {
         return QString::number(bytesPerSec / 1024.0, 'f', 1) + " KB/s";
     }
     return QString::number(bytesPerSec, 'f', 0) + " B/s";

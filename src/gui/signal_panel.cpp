@@ -10,6 +10,7 @@ namespace aether {
 SignalPanel::SignalPanel(QWidget *parent) : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
 
     auto *sigLabel = new QLabel(QStringLiteral("<b>Signal lines</b>"), this);
     layout->addWidget(sigLabel);
@@ -26,6 +27,7 @@ SignalPanel::SignalPanel(QWidget *parent) : QWidget(parent) {
     connect(breakBtn, &QPushButton::clicked, this, &SignalPanel::breakTriggered);
 
     auto *outRow = new QHBoxLayout();
+    outRow->setSpacing(6);
     outRow->addWidget(new QLabel(QStringLiteral("Output:"), this));
     outRow->addWidget(m_rtsCheck);
     outRow->addWidget(m_dtrCheck);
@@ -45,6 +47,7 @@ SignalPanel::SignalPanel(QWidget *parent) : QWidget(parent) {
     m_reconnectCheck->setToolTip(QStringLiteral("Automatically reopen the port if the device disconnects"));
 
     auto *inRow = new QHBoxLayout();
+    inRow->setSpacing(6);
     inRow->addWidget(new QLabel(QStringLiteral("Input:"), this));
     inRow->addWidget(m_ctsLed);
     inRow->addWidget(m_dsrLed);

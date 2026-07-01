@@ -13,6 +13,8 @@ namespace aether {
 
 ConfigPanel::ConfigPanel(QWidget *parent) : QGroupBox(QStringLiteral("Interception"), parent) {
     auto *form = new QFormLayout(this);
+    form->setContentsMargins(6, 6, 6, 6);
+    form->setSpacing(4);
 
     m_deviceBox = new QComboBox(this);
     m_deviceBox->setEditable(true);

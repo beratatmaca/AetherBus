@@ -101,14 +101,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
         // Logo + app name row
         auto *headerRow = new QHBoxLayout();
-        QLabel *logoLbl = new QLabel(dlg);
+        auto *logoLbl = new QLabel(dlg);
         logoLbl->setPixmap(QPixmap(QStringLiteral(":/aetherbus/icon.png")).scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLbl->setFixedSize(64, 64);
         headerRow->addWidget(logoLbl);
 
         auto *titleCol = new QVBoxLayout();
-        QLabel *nameLbl = new QLabel(QStringLiteral("<b style='font-size:18pt'>AetherBus</b>"), dlg);
-        QLabel *tagLbl = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
+        auto *nameLbl = new QLabel(QStringLiteral("<b style='font-size:18pt'>AetherBus</b>"), dlg);
+        auto *tagLbl = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
         titleCol->addWidget(nameLbl);
         titleCol->addWidget(tagLbl);
         titleCol->addStretch();

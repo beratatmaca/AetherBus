@@ -71,7 +71,7 @@ private:
     void doFind(bool backward);
 
     PtyProxy *m_proxy;
-    ConsoleView *m_console;
+    ConsoleView *m_console{nullptr};
 
     ConfigPanel *m_configPanel = nullptr;
     SignalPanel *m_signalPanel = nullptr;

@@ -207,6 +207,7 @@ private:
 
     QString m_slavePath;
     QString m_symlinkPath;  // created symlink, if any (unlinked on close)
+    int m_cleanupSlot = -1;  // signal-safe cleanup registry handle (see signal_cleanup.h)
 
     std::thread m_worker;
     std::mutex m_writeMutex;   // guards the out-queues and the stall timestamp

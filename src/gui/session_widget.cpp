@@ -31,7 +31,7 @@
 
 namespace aether {
 
-SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new PtyProxy(this)), m_console(nullptr) {
+SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new PtyProxy(this)) {
     buildUi();
     rescanDevices();
 
@@ -413,8 +413,10 @@ void SessionWidget::applyNewlineMode() {
     } else if (idx == 3) {
         mode = ConsoleView::NewlineMode::TLV;
         const QStringList parts = m_newlineParamEdit->text().split(QLatin1Char(','));
-        int hdrSize = 3, lenOff = 1, lenSz = 1;
-        if (parts.size() >= 1) {
+        int hdrSize = 3;
+        int lenOff = 1;
+        int lenSz = 1;
+        if (!parts.empty()) {
             bool ok;
             int v = parts[0].trimmed().toInt(&ok);
             if (ok && v > 0)

@@ -41,20 +41,20 @@ void StatsPanel::buildUi() {
 
     auto *content = new QWidget(scrollArea);
     auto *layout = new QVBoxLayout(content);
-    layout->setContentsMargins(6, 6, 6, 6);
-    layout->setSpacing(8);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
 
     // 1. Throughput rates group box
     auto *ratesGroup = new QGroupBox(tr("Throughput & Packet Rates"), content);
     auto *ratesLayout = new QGridLayout(ratesGroup);
-    ratesLayout->setSpacing(6);
-    ratesLayout->setContentsMargins(6, 8, 6, 8);
+    ratesLayout->setSpacing(4);
+    ratesLayout->setContentsMargins(4, 4, 4, 4);
 
     // Headers
-    QLabel *dirHeader = new QLabel(tr("Dir"), ratesGroup);
-    QLabel *rateHeader = new QLabel(tr("Speed"), ratesGroup);
-    QLabel *pktHeader = new QLabel(tr("Packets"), ratesGroup);
-    QLabel *utilHeader = new QLabel(tr("Baud Util"), ratesGroup);
+    auto *dirHeader = new QLabel(tr("Dir"), ratesGroup);
+    auto *rateHeader = new QLabel(tr("Speed"), ratesGroup);
+    auto *pktHeader = new QLabel(tr("Packets"), ratesGroup);
+    auto *utilHeader = new QLabel(tr("Baud Util"), ratesGroup);
 
     for (QLabel *lbl : {dirHeader, rateHeader, pktHeader, utilHeader}) {
         QFont f = lbl->font();
@@ -68,7 +68,7 @@ void StatsPanel::buildUi() {
     ratesLayout->addWidget(utilHeader, 0, 3);
 
     // Rx labels
-    QLabel *rxLabel = new QLabel(tr("Rx:"), ratesGroup);
+    auto *rxLabel = new QLabel(tr("Rx:"), ratesGroup);
     rxLabel->setStyleSheet("color: #00bcd4; font-weight: bold;");  // Cyan
     m_rxRateLbl = new QLabel("0 B/s", ratesGroup);
     m_rxPktLbl = new QLabel("0 p/s", ratesGroup);
@@ -80,7 +80,7 @@ void StatsPanel::buildUi() {
     ratesLayout->addWidget(m_rxUtilLbl, 1, 3);
 
     // Tx labels
-    QLabel *txLabel = new QLabel(tr("Tx:"), ratesGroup);
+    auto *txLabel = new QLabel(tr("Tx:"), ratesGroup);
     txLabel->setStyleSheet("color: #ff9800; font-weight: bold;");  // Orange
     m_txRateLbl = new QLabel("0 B/s", ratesGroup);
     m_txPktLbl = new QLabel("0 p/s", ratesGroup);
@@ -96,7 +96,7 @@ void StatsPanel::buildUi() {
     // 2. Chart group box
     auto *chartGroup = new QGroupBox(tr("Throughput History"), content);
     auto *chartLayout = new QVBoxLayout(chartGroup);
-    chartLayout->setContentsMargins(4, 6, 4, 6);
+    chartLayout->setContentsMargins(2, 2, 2, 2);
     m_chart = new ThroughputChart(chartGroup);
     chartLayout->addWidget(m_chart);
     layout->addWidget(chartGroup);
@@ -104,13 +104,13 @@ void StatsPanel::buildUi() {
     // 3. Gap analysis group box
     auto *gapGroup = new QGroupBox(tr("Inter-Packet Gap & Latency"), content);
     auto *gapLayout = new QGridLayout(gapGroup);
-    gapLayout->setSpacing(6);
-    gapLayout->setContentsMargins(6, 8, 6, 8);
+    gapLayout->setSpacing(4);
+    gapLayout->setContentsMargins(4, 4, 4, 4);
 
-    QLabel *gapHdrType = new QLabel(tr("Metric"), gapGroup);
-    QLabel *gapHdrMin = new QLabel(tr("Min"), gapGroup);
-    QLabel *gapHdrMax = new QLabel(tr("Max"), gapGroup);
-    QLabel *gapHdrAvg = new QLabel(tr("Avg"), gapGroup);
+    auto *gapHdrType = new QLabel(tr("Metric"), gapGroup);
+    auto *gapHdrMin = new QLabel(tr("Min"), gapGroup);
+    auto *gapHdrMax = new QLabel(tr("Max"), gapGroup);
+    auto *gapHdrAvg = new QLabel(tr("Avg"), gapGroup);
 
     for (QLabel *lbl : {gapHdrType, gapHdrMin, gapHdrMax, gapHdrAvg}) {
         QFont f = lbl->font();
@@ -208,7 +208,7 @@ QString StatsPanel::formatGap(qint64 ms) const {
 static QString formatRate(double bytesPerSec) {
     if (bytesPerSec >= 1024.0 * 1024.0) {
         return QString::number(bytesPerSec / (1024.0 * 1024.0), 'f', 1) + " MB/s";
-    } else if (bytesPerSec >= 1024.0) {
+    } if (bytesPerSec >= 1024.0) {
         return QString::number(bytesPerSec / 1024.0, 'f', 1) + " KB/s";
     }
     return QString::number(bytesPerSec, 'f', 0) + " B/s";

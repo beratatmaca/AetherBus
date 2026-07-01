@@ -1,6 +1,7 @@
 #include "core/pty_proxy.h"
 
 #include "core/linux_baud.h"
+#include "core/signal_cleanup.h"
 
 #include <QDateTime>
 #include <QFile>
@@ -210,6 +211,11 @@ bool PtyProxy::open(const SerialConfig &config) {
     m_wakeReadFd = pipeFds[0];
     m_wakeWriteFd = pipeFds[1];
     ::fcntl(m_wakeReadFd, F_SETFL, O_NONBLOCK);
+
+    // Register for signal-safe cleanup so a sudden exit still unlinks the symlink
+    // and releases the device (see signal_cleanup.h / installSignalHandlers()).
+    m_cleanupSlot = registerCleanup(m_symlinkPath.isEmpty() ? nullptr : m_symlinkPath.toLocal8Bit().constData(),
+                                    m_uartFd, m_masterFd);
 
     // 5. Launch the multiplexing loop.
     m_stopRequested.store(false);
@@ -577,6 +583,11 @@ void PtyProxy::close() {
 }
 
 void PtyProxy::teardownDescriptors() {
+    // Stop tracking before we release: the emergency handler must not act on
+    // descriptors/symlinks this normal path is about to reclaim.
+    releaseCleanup(m_cleanupSlot);
+    m_cleanupSlot = -1;
+
     if (!m_symlinkPath.isEmpty()) {
         ::unlink(m_symlinkPath.toLocal8Bit().constData());
         m_symlinkPath.clear();
