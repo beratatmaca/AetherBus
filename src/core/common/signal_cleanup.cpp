@@ -1,4 +1,4 @@
-#include "core/signal_cleanup.h"
+#include "core/common/signal_cleanup.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 

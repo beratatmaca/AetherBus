@@ -1,4 +1,4 @@
-#include "gui/signal_panel.h"
+#include "gui/signal_panel.hpp"
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QCheckBox>

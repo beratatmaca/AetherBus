@@ -1,5 +1,5 @@
-#include "gui/injection_panel.h"
-#include "core/format_codec.h"
+#include "gui/injection_panel.hpp"
+#include "core/common/format_codec.hpp"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QComboBox>

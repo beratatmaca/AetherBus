@@ -1,4 +1,4 @@
-#include "core/capture_replay.h"
+#include "core/common/capture_replay.hpp"
 
 #include <QFile>
 #include <QTimer>

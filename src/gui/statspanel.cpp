@@ -1,5 +1,5 @@
-#include "gui/statspanel.h"
-#include "gui/throughput_chart.h"
+#include "gui/statspanel.hpp"
+#include "gui/throughput_chart.hpp"
 #include <QVBoxLayout>
 #include <QGridLayout>
 #include <QFormLayout>

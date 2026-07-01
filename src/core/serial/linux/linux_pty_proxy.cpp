@@ -1,6 +1,6 @@
-#include "core/linux/linux_pty_proxy.h"
-#include "core/linux_baud.h"
-#include "core/signal_cleanup.h"
+#include "core/serial/linux/linux_pty_proxy.hpp"
+#include "core/serial/linux_baud.hpp"
+#include "core/common/signal_cleanup.hpp"
 
 #include <QDateTime>
 #include <QFile>

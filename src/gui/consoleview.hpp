@@ -19,7 +19,7 @@
 // highlightSearchText, toPlainText).
 #pragma once
 
-#include "core/serial_types.h"
+#include "core/serial/serial_types.hpp"
 
 #include <QAbstractScrollArea>
 #include <QElapsedTimer>

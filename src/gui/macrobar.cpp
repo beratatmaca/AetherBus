@@ -1,6 +1,6 @@
-#include "gui/macrobar.h"
+#include "gui/macrobar.hpp"
 
-#include "core/format_codec.h"
+#include "core/common/format_codec.hpp"
 
 #include <QAction>
 #include <QColor>

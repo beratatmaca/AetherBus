@@ -1,15 +1,15 @@
-#include "gui/session_widget.h"
+#include "gui/session_widget.hpp"
 
-#include "core/capture_replay.h"
-#include "core/format_codec.h"
-#include "core/pty_proxy.h"
-#include "gui/consoleview.h"
-#include "gui/console_panel.h"
-#include "gui/macrobar.h"
-#include "gui/statspanel.h"
-#include "gui/config_panel.h"
-#include "gui/signal_panel.h"
-#include "gui/injection_panel.h"
+#include "core/common/capture_replay.hpp"
+#include "core/common/format_codec.hpp"
+#include "core/serial/pty_proxy.hpp"
+#include "gui/consoleview.hpp"
+#include "gui/console_panel.hpp"
+#include "gui/macrobar.hpp"
+#include "gui/statspanel.hpp"
+#include "gui/config_panel.hpp"
+#include "gui/signal_panel.hpp"
+#include "gui/injection_panel.hpp"
 
 #include <QComboBox>
 #include <QDir>

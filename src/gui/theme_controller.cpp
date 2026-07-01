@@ -1,4 +1,4 @@
-#include "gui/theme_controller.h"
+#include "gui/theme_controller.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>

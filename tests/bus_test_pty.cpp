@@ -1,8 +1,8 @@
-#include "bus_test.h"
-#include "core/capture_replay.h"
-#include "core/pty_proxy.h"
-#include "core/serial_types.h"
-#include "core/signal_cleanup.h"
+#include "bus_test.hpp"
+#include "core/common/capture_replay.hpp"
+#include "core/serial/pty_proxy.hpp"
+#include "core/serial/serial_types.hpp"
+#include "core/common/signal_cleanup.hpp"
 
 #include <QElapsedTimer>
 #include <QFile>

@@ -1,4 +1,4 @@
-#include "gui/consoleview.h"
+#include "gui/consoleview.hpp"
 #include <QPainter>
 #include <QScrollBar>
 

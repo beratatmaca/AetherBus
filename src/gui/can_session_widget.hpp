@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/can_types.h"
-#include "core/serial_types.h"
-#include "core/stats_calculator.h"
-#include "gui/session_view.h"
+#include "core/can/can_types.hpp"
+#include "core/serial/serial_types.hpp"
+#include "core/common/stats_calculator.hpp"
+#include "gui/session_view.hpp"
 
 class QLineEdit;
 class QPushButton;

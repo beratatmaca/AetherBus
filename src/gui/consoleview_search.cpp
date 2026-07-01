@@ -1,6 +1,6 @@
-#include "gui/consoleview.h"
+#include "gui/consoleview.hpp"
 
-#include "core/format_codec.h"
+#include "core/common/format_codec.hpp"
 
 #include <QScrollBar>
 #include <QMenu>

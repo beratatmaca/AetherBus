@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/can_types.h"
+#include "core/can/can_types.hpp"
 #include <QGroupBox>
 
 class QComboBox;

@@ -1,8 +1,8 @@
-#include "bus_test.h"
-#include "gui/consoleview.h"
-#include "gui/macrobar.h"
-#include "gui/theme_controller.h"
-#include "gui/mainwindow.h"
+#include "bus_test.hpp"
+#include "gui/consoleview.hpp"
+#include "gui/macrobar.hpp"
+#include "gui/theme_controller.hpp"
+#include "gui/mainwindow.hpp"
 
 #include <QComboBox>
 #include <QTabWidget>

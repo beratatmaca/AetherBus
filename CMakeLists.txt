@@ -80,39 +80,39 @@ endif()
 # Core interception backend. The POSIX PTY proxy is UNIX-only; on other
 # platforms the library still builds with the pure codec + value types.
 set(AETHER_CORE_SOURCES
-    src/core/serial_types.h
-    src/core/can_types.h
-    src/core/i_bus_backend.h
-    src/core/format_codec.cpp
-    src/core/format_codec.h
-    src/core/stats_calculator.cpp
-    src/core/stats_calculator.h
-    src/core/capture_replay.cpp
-    src/core/capture_replay.h
-    src/core/signal_cleanup.cpp
-    src/core/signal_cleanup.h
-    src/core/pty_proxy.cpp
-    src/core/pty_proxy.h
-    src/core/pty_proxy_impl.h
-    src/core/can_backend.cpp
-    src/core/can_backend.h
+    src/core/serial/serial_types.hpp
+    src/core/can/can_types.hpp
+    src/core/common/i_bus_backend.hpp
+    src/core/common/format_codec.cpp
+    src/core/common/format_codec.hpp
+    src/core/common/stats_calculator.cpp
+    src/core/common/stats_calculator.hpp
+    src/core/common/capture_replay.cpp
+    src/core/common/capture_replay.hpp
+    src/core/common/signal_cleanup.cpp
+    src/core/common/signal_cleanup.hpp
+    src/core/serial/pty_proxy.cpp
+    src/core/serial/pty_proxy.hpp
+    src/core/serial/pty_proxy_impl.hpp
+    src/core/can/can_backend.cpp
+    src/core/can/can_backend.hpp
 )
 if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
-        src/core/win/win_pty_proxy.cpp
-        src/core/win/win_pty_proxy.h
+        src/core/serial/win/win_pty_proxy.cpp
+        src/core/serial/win/win_pty_proxy.hpp
     )
 elseif(APPLE)
     list(APPEND AETHER_CORE_SOURCES
-        src/core/mac/mac_pty_proxy.cpp
-        src/core/mac/mac_pty_proxy.h
+        src/core/serial/mac/mac_pty_proxy.cpp
+        src/core/serial/mac/mac_pty_proxy.hpp
     )
 else() # Default to Linux
     list(APPEND AETHER_CORE_SOURCES
-        src/core/linux/linux_pty_proxy.cpp
-        src/core/linux/linux_pty_proxy.h
-        src/core/linux_baud.cpp
-        src/core/linux_baud.h
+        src/core/serial/linux/linux_pty_proxy.cpp
+        src/core/serial/linux/linux_pty_proxy.hpp
+        src/core/serial/linux_baud.cpp
+        src/core/serial/linux_baud.hpp
     )
 endif()
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
@@ -123,34 +123,34 @@ target_include_directories(aether_core PUBLIC
 
 add_library(aether_gui STATIC
     src/gui/mainwindow.cpp
-    src/gui/mainwindow.h
-    src/gui/session_view.h
+    src/gui/mainwindow.hpp
+    src/gui/session_view.hpp
     src/gui/session_widget.cpp
-    src/gui/session_widget.h
+    src/gui/session_widget.hpp
     src/gui/can_session_widget.cpp
-    src/gui/can_session_widget.h
+    src/gui/can_session_widget.hpp
     src/gui/config_panel.cpp
-    src/gui/config_panel.h
+    src/gui/config_panel.hpp
     src/gui/can_config_panel.cpp
-    src/gui/can_config_panel.h
+    src/gui/can_config_panel.hpp
     src/gui/signal_panel.cpp
-    src/gui/signal_panel.h
+    src/gui/signal_panel.hpp
     src/gui/injection_panel.cpp
-    src/gui/injection_panel.h
+    src/gui/injection_panel.hpp
     src/gui/consoleview.cpp
-    src/gui/consoleview.h
+    src/gui/consoleview.hpp
     src/gui/console_panel.cpp
-    src/gui/console_panel.h
+    src/gui/console_panel.hpp
     src/gui/consoleview_paint.cpp
     src/gui/consoleview_search.cpp
     src/gui/macrobar.cpp
-    src/gui/macrobar.h
+    src/gui/macrobar.hpp
     src/gui/theme_controller.cpp
-    src/gui/theme_controller.h
+    src/gui/theme_controller.hpp
     src/gui/throughput_chart.cpp
-    src/gui/throughput_chart.h
+    src/gui/throughput_chart.hpp
     src/gui/statspanel.cpp
-    src/gui/statspanel.h
+    src/gui/statspanel.hpp
     src/gui/resources.qrc
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
@@ -175,7 +175,7 @@ if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     enable_testing()
     add_executable(bus_test
-        tests/bus_test.h
+        tests/bus_test.hpp
         tests/bus_test.cpp
         tests/bus_test_pty.cpp
         tests/bus_test_gui.cpp

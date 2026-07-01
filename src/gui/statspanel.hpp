@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QWidget>
-#include "core/stats_calculator.h"
+#include "core/common/stats_calculator.hpp"
 
 class QLabel;
 class QTimer;

@@ -1,11 +1,11 @@
-#include "gui/can_session_widget.h"
+#include "gui/can_session_widget.hpp"
 
-#include "core/can_backend.h"
-#include "core/format_codec.h"
-#include "gui/can_config_panel.h"
-#include "gui/consoleview.h"
-#include "gui/console_panel.h"
-#include "gui/statspanel.h"
+#include "core/can/can_backend.hpp"
+#include "core/common/format_codec.hpp"
+#include "gui/can_config_panel.hpp"
+#include "gui/consoleview.hpp"
+#include "gui/console_panel.hpp"
+#include "gui/statspanel.hpp"
 
 #include <QByteArray>
 #include <QCheckBox>

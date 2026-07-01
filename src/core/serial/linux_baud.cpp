@@ -1,4 +1,4 @@
-#include "core/linux_baud.h"
+#include "core/serial/linux_baud.hpp"
 
 // IMPORTANT: this translation unit must NOT include <termios.h>; <asm/termbits.h>
 // provides struct termios2 / BOTHER / TCSETS2 and conflicts with it.

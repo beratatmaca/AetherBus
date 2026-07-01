@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/i_bus_backend.h"
-#include "core/serial_types.h"
+#include "core/common/i_bus_backend.hpp"
+#include "core/serial/serial_types.hpp"
 
 #include <QString>
 #include <memory>

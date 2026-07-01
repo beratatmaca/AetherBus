@@ -13,8 +13,8 @@
  */
 #pragma once
 
-#include "core/can_types.h"
-#include "core/i_bus_backend.h"
+#include "core/can/can_types.hpp"
+#include "core/common/i_bus_backend.hpp"
 
 #include <QStringList>
 

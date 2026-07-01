@@ -1,4 +1,4 @@
-#include "gui/config_panel.h"
+#include "gui/config_panel.hpp"
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QShortcut>

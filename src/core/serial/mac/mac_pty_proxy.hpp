@@ -1,5 +1,5 @@
 #pragma once
-#include "core/pty_proxy_impl.h"
+#include "core/serial/pty_proxy_impl.hpp"
 
 namespace aether {
 

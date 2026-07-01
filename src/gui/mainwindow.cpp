@@ -1,8 +1,8 @@
-#include "gui/mainwindow.h"
+#include "gui/mainwindow.hpp"
 
-#include "gui/can_session_widget.h"
-#include "gui/session_widget.h"
-#include "gui/theme_controller.h"
+#include "gui/can_session_widget.hpp"
+#include "gui/session_widget.hpp"
+#include "gui/theme_controller.hpp"
 #include "aether/version.h"
 
 #include <QMenuBar>

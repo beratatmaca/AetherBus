@@ -1,13 +1,13 @@
-#include "core/pty_proxy.h"
-#include "core/pty_proxy_impl.h"
+#include "core/serial/pty_proxy.hpp"
+#include "core/serial/pty_proxy_impl.hpp"
 #include <QtGlobal>
 
 #if defined(Q_OS_WIN)
-#include "core/win/win_pty_proxy.h"
+#include "core/serial/win/win_pty_proxy.hpp"
 #elif defined(Q_OS_MAC)
-#include "core/mac/mac_pty_proxy.h"
+#include "core/serial/mac/mac_pty_proxy.hpp"
 #else
-#include "core/linux/linux_pty_proxy.h"
+#include "core/serial/linux/linux_pty_proxy.hpp"
 #endif
 
 namespace aether {

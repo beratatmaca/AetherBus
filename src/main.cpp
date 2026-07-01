@@ -1,5 +1,5 @@
-#include "core/signal_cleanup.h"
-#include "gui/mainwindow.h"
+#include "core/common/signal_cleanup.hpp"
+#include "gui/mainwindow.hpp"
 #include "aether/version.h"
 
 #include <QApplication>

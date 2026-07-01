@@ -1,7 +1,7 @@
-#include "bus_test.h"
-#include "core/format_codec.h"
-#include "core/stats_calculator.h"
-#include "core/serial_types.h"
+#include "bus_test.hpp"
+#include "core/common/format_codec.hpp"
+#include "core/common/stats_calculator.hpp"
+#include "core/serial/serial_types.hpp"
 
 using namespace aether;
 

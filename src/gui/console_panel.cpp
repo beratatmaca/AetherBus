@@ -1,4 +1,4 @@
-#include "gui/console_panel.h"
+#include "gui/console_panel.hpp"
 #include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>

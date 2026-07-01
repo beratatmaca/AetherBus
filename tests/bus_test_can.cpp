@@ -1,8 +1,8 @@
-#include "bus_test.h"
-#include "core/can_backend.h"
-#include "core/can_types.h"
-#include "core/serial_types.h"
-#include "core/stats_calculator.h"
+#include "bus_test.hpp"
+#include "core/can/can_backend.hpp"
+#include "core/can/can_types.hpp"
+#include "core/serial/serial_types.hpp"
+#include "core/common/stats_calculator.hpp"
 
 #include <QElapsedTimer>
 #include <QSignalSpy>

@@ -1,4 +1,4 @@
-#include "core/format_codec.h"
+#include "core/common/format_codec.hpp"
 
 #include <QRegularExpression>
 #include <QStringList>

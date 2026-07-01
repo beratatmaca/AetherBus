@@ -1,4 +1,4 @@
-#include "gui/consoleview.h"
+#include "gui/consoleview.hpp"
 
 #include <QDateTime>
 #include <QFile>
