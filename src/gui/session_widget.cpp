@@ -1,5 +1,6 @@
 #include "gui/session_widget.h"
 
+#include "core/capture_replay.h"
 #include "core/format_codec.h"
 #include "core/pty_proxy.h"
 #include "gui/consoleview.h"
@@ -46,8 +47,8 @@ SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new Pty
     connect(m_injectPanel, &InjectionPanel::injectData, this, [this](const QByteArray &data, bool toDevice) {
         const bool sent = toDevice ? m_proxy->injectToDevice(data) : m_proxy->injectToApp(data);
         if (!sent) {
-            m_configPanel->setStatus(
-                QStringLiteral("<span style='color:#e57373'>Send failed — check that interception is running.</span>"));
+            onError(m_proxy->isRunning() ? QStringLiteral("Send failed — send buffer full, bytes dropped.")
+                                         : QStringLiteral("Send failed — start interception first."));
             return;
         }
         if (m_macroBar) {
@@ -66,6 +67,11 @@ SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new Pty
     connect(m_proxy, &PtyProxy::disconnected, this, &SessionWidget::onDisconnected);
     connect(m_proxy, &PtyProxy::lineReconfigured, this, &SessionWidget::onLineReconfigured);
     connect(m_proxy, &PtyProxy::writeStalled, this, &SessionWidget::onWriteStalled);
+
+    // Offline replay feeds chunks through the same rendering path as live capture.
+    m_replayer = new CaptureReplayer(this);
+    connect(m_replayer, &CaptureReplayer::chunkReplayed, m_console, &ConsoleView::appendChunk);
+    connect(m_replayer, &CaptureReplayer::finished, this, &SessionWidget::onReplayFinished);
 
     m_modemTimer = new QTimer(this);
     m_modemTimer->setInterval(250);
@@ -106,7 +112,11 @@ SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new Pty
 }
 
 SessionWidget::~SessionWidget() {
-    blockSignals(true);
+    if (m_proxy) {
+        m_proxy->disconnect();
+        delete m_proxy;
+        m_proxy = nullptr;
+    }
 }
 
 bool SessionWidget::isRunning() const {
@@ -153,6 +163,11 @@ void SessionWidget::buildUi() {
 }
 
 void SessionWidget::startInterception(const SerialConfig &cfg) {
+    // A live session and an offline replay can't share the console; drop the replay.
+    if (m_replayer != nullptr && m_replayer->isReplaying()) {
+        m_replayer->stop();
+        m_replayBtn->setChecked(false);
+    }
     m_lastConfig = cfg;
     if (m_reconnectTimer) {
         m_reconnectTimer->stop();
@@ -254,10 +269,15 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     m_captureBtn->setCheckable(true);
     m_captureBtn->setToolTip(QStringLiteral("Record raw traffic to a pcap file (opens in Wireshark) straight from the backend"));
     connect(m_captureBtn, &QPushButton::clicked, this, &SessionWidget::toggleCapture);
+    m_replayBtn = new QPushButton(QStringLiteral("Replay…"), panel);
+    m_replayBtn->setCheckable(true);
+    m_replayBtn->setToolTip(QStringLiteral("Open a captured pcap file and replay it through the console with original timing"));
+    connect(m_replayBtn, &QPushButton::clicked, this, &SessionWidget::toggleReplay);
     row2->addWidget(clearBtn);
     row2->addWidget(saveBtn);
     row2->addWidget(m_logBtn);
     row2->addWidget(m_captureBtn);
+    row2->addWidget(m_replayBtn);
 
     row2->addSpacing(12);
     m_selLabel = new QLabel(QStringLiteral("Sel: 0"), panel);
@@ -292,10 +312,10 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     // --- Macros + send history ---------------------------------------------
     m_macroBar = new MacroBar(panel);
     connect(m_macroBar, &MacroBar::send, this, [this](const QByteArray &bytes, bool toDevice) {
-        if (toDevice) {
-            m_proxy->injectToDevice(bytes);
-        } else {
-            m_proxy->injectToApp(bytes);
+        const bool sent = toDevice ? m_proxy->injectToDevice(bytes) : m_proxy->injectToApp(bytes);
+        if (!sent) {
+            onError(m_proxy->isRunning() ? QStringLiteral("Macro send failed — send buffer full, bytes dropped.")
+                                         : QStringLiteral("Macro send failed — start interception first."));
         }
     });
     layout->addWidget(m_macroBar);
@@ -509,7 +529,8 @@ void SessionWidget::sendFile() {
     file.close();
     if (!bytes.isEmpty()) {
         if (!m_proxy->injectToDevice(bytes)) {
-            onError(QStringLiteral("Send file failed — check that interception is running."));
+            onError(m_proxy->isRunning() ? QStringLiteral("Send file failed — send buffer full, bytes dropped.")
+                                         : QStringLiteral("Send file failed — start interception first."));
             return;
         }
         m_configPanel->setStatus(QStringLiteral("Sent %1 bytes from %2").arg(bytes.size()).arg(path));
@@ -556,6 +577,42 @@ void SessionWidget::toggleCapture() {
     }
     m_captureBtn->setChecked(true);
     m_configPanel->setStatus(QStringLiteral("Capturing to %1").arg(path));
+}
+
+void SessionWidget::toggleReplay() {
+    if (m_replayer->isReplaying()) {
+        m_replayer->stop();
+        m_replayBtn->setChecked(false);
+        m_configPanel->setStatus(QStringLiteral("Replay stopped."));
+        return;
+    }
+    // Replay is offline analysis; refuse while a live session owns the console.
+    if (m_proxy->isRunning()) {
+        m_replayBtn->setChecked(false);
+        onError(QStringLiteral("Stop interception before replaying a capture file."));
+        return;
+    }
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Open capture file for replay"), QString(),
+                                                      QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    if (path.isEmpty()) {
+        m_replayBtn->setChecked(false);
+        return;
+    }
+    QString error;
+    if (!m_replayer->load(path, &error)) {
+        m_replayBtn->setChecked(false);
+        onError(QStringLiteral("Could not open capture: %1").arg(error));
+        return;
+    }
+    m_console->clearConsole();
+    m_replayBtn->setChecked(true);
+    m_configPanel->setStatus(QStringLiteral("Replaying %1 (%2 packets)…").arg(path).arg(m_replayer->chunkCount()));
+    m_replayer->start();
+}
+
+void SessionWidget::onReplayFinished() {
+    m_replayBtn->setChecked(false);
+    m_configPanel->setStatus(QStringLiteral("Replay complete (%1 packets).").arg(m_replayer->chunkCount()));
 }
 
 void SessionWidget::onLineReconfigured(int baud, int dataBits, aether::Parity parity, int stopBits) {

@@ -4,7 +4,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Version.cmake)
 
 project(AetherBus
     VERSION ${AETHER_VERSION}
-    DESCRIPTION "Cross-platform Message Bus GUI & CLI"
+    DESCRIPTION "Modern lightweight serial-port interceptor and protocol sniffer GUI"
     LANGUAGES CXX)
 
 configure_file(
@@ -149,6 +149,12 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DevTools.cmake)
 include(GNUInstallDirs)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/dist/aetherbus.service.in
+        ${CMAKE_CURRENT_BINARY_DIR}/aetherbus.service
+        @ONLY
+    )
+
     install(TARGETS aether_core aetherbus
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -157,6 +163,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     install(DIRECTORY src/core/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/aether/core
         FILES_MATCHING PATTERN "*.h"
+    )
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/aetherbus.service
+        DESTINATION /lib/systemd/system
     )
 elseif(WIN32)
     install(TARGETS aetherbus RUNTIME DESTINATION bin)
@@ -182,8 +191,8 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 set(CPACK_PACKAGE_VERSION "${AETHER_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modern lightweight Message Bus client and server")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modern lightweight serial-port interceptor and protocol sniffer")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
 
 # Debian packaging details
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "AetherBus Maintainers <beratatmaca@live.com>")
@@ -192,5 +201,6 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 # WiX Windows Installer details
 set(CPACK_WIX_UPGRADE_GUID "D9C5F2A8-A29F-4D2A-B9C0-8B94F3C8F3B3")
+set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico")
 
 include(CPack)

@@ -20,6 +20,7 @@ Checks: >
   -bugprone-narrowing-conversions,
   -readability-redundant-access-specifiers,
   -readability-suspicious-call-argument,
+  -readability-convert-member-functions-to-static,
   -clang-analyzer-cplusplus.NewDeleteLeaks,
   -clang-analyzer-cplusplus.NewDelete
 

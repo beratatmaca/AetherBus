@@ -92,6 +92,9 @@ private:
     QLabel *m_selLabel = nullptr;
     QPushButton *m_logBtn = nullptr;
     QPushButton *m_captureBtn = nullptr;
+    QPushButton *m_replayBtn = nullptr;  ///< offline capture-file replay toggle
+
+    CaptureReplayer *m_replayer = nullptr;
 
     MacroBar *m_macroBar = nullptr;
     QTimer *m_modemTimer = nullptr;

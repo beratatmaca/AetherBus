@@ -36,8 +36,8 @@ apps:
     environment:
       QT_QPA_PLATFORM: "wayland;xcb"
     plugs:
-      - network
-      - network-bind
+      # No network interfaces are requested: AetherBus is a local serial tool.
+      # Re-add `network` / `network-bind` only when a network backend ships.
       - serial-port
       - raw-usb
 

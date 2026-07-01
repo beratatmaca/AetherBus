@@ -3,6 +3,7 @@
 //  - codec: pure byte<->text conversions and injection-field parsing.
 //  - PtyProxy: direction tagging on injection, and real byte forwarding
 //    through the poll() multiplexing loop using a PTY-backed fake device.
+#include "core/capture_replay.h"
 #include "core/format_codec.h"
 #include "core/pty_proxy.h"
 #include "core/serial_types.h"
@@ -96,6 +97,7 @@ private slots:
     void statsCountForwardedBytes();
     void mirrorsSlaveBaudToDevice();
     void pcapCaptureWritesRecords();
+    void captureReplayRoundTrip();
     void writeQueueDropsWhenPeerStalls();
     void statsCalculatorBasics();
     void guiConsoleView();
@@ -391,6 +393,54 @@ void BusTest::pcapCaptureWritesRecords() {
     ::close(physMaster);
 }
 
+void BusTest::captureReplayRoundTrip() {
+    int physMaster = -1;
+    QString physSlave;
+    QVERIFY(makeRawPty(physMaster, physSlave));
+
+    PtyProxy proxy;
+    SerialConfig cfg;
+    cfg.device = physSlave;
+    QVERIFY(proxy.open(cfg));
+
+    QString path;
+    {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        path = tmp.fileName();  // keep the name; file is recreated by startCapture
+    }
+    QVERIFY(proxy.startCapture(path));
+
+    // Injection writes a capture record synchronously and tags direction, so the
+    // resulting pcap has one Tx record then one Rx record, in order.
+    const QByteArray txBytes = QByteArray::fromHex("41420D0A");
+    const QByteArray rxBytes = QByteArray::fromHex("0663");
+    QVERIFY(proxy.injectToDevice(txBytes));  // host -> device (Tx)
+    QVERIFY(proxy.injectToApp(rxBytes));     // device -> host (Rx)
+
+    proxy.stopCapture();
+    proxy.close();
+    ::close(physMaster);
+
+    // Read the capture back and verify direction, payload and timestamps survive.
+    QString error;
+    const auto chunks = readRtacPcap(path, &error);
+    QVERIFY2(chunks.has_value(), qPrintable(error));
+    const auto &chunkList = chunks.value();
+    QCOMPARE(chunkList.size(), 2);
+    QCOMPARE(chunkList.at(0).dir, Direction::Tx);
+    QCOMPARE(chunkList.at(0).data, txBytes);
+    QCOMPARE(chunkList.at(1).dir, Direction::Rx);
+    QCOMPARE(chunkList.at(1).data, rxBytes);
+    QVERIFY(chunkList.at(0).timestampMs > 0);
+    QVERIFY(chunkList.at(1).timestampMs >= chunkList.at(0).timestampMs);
+
+    // A missing/garbage file is rejected with a reason rather than crashing.
+    QString err2;
+    QVERIFY(!readRtacPcap(QStringLiteral("/nonexistent/aetherbus_missing.pcap"), &err2).has_value());
+    QVERIFY(!err2.isEmpty());
+}
+
 void BusTest::writeQueueDropsWhenPeerStalls() {
     int physMaster = -1;
     QString physSlave;
@@ -493,7 +543,7 @@ void BusTest::statsCalculatorBasics() {
 void BusTest::guiConsoleView() {
     ConsoleView view;
     view.setNewlineMode(ConsoleView::NewlineMode::PerChunk, 0);
-    view.setFormats(true, false, false, true); // Hex + ASCII
+    view.setFormats(true, false, false, true);  // Hex + ASCII
 
     CapturedChunk chunk1;
     chunk1.dir = Direction::Rx;
@@ -504,15 +554,13 @@ void BusTest::guiConsoleView() {
     // Force synchronous flush to avoid relying on timer loops in tests
     QMetaObject::invokeMethod(&view, "flush");
 
-    // Text should contain plaintext representation: "41 42 43" and "ABC"
+    // Text should contain plaintext representation: "41/A 42/B 43/C"
     QString plainText = view.toPlainText();
-    qDebug() << "DEBUG plaintext:" << plainText;
-    QVERIFY(plainText.contains("41 42 43"));
-    QVERIFY(plainText.contains("ABC"));
+    QVERIFY(plainText.contains("41/A 42/B 43/C"));
 
     // Test search query (findQuery)
     view.moveCursorToStart();
-    QVERIFY(view.findQuery("42", 0)); // Match middle hex token "42"
+    QVERIFY(view.findQuery("42", 0));  // Match middle hex token "42"
 
     // Test pause behavior
     view.setPaused(true);
@@ -521,17 +569,18 @@ void BusTest::guiConsoleView() {
     chunk2.timestampMs = 2000;
     chunk2.data = "XYZ";
     view.appendChunk(chunk2);
-    
+
     QMetaObject::invokeMethod(&view, "flush");
-    // Should NOT contain "XYZ" or "58 59 5A" in rendering while paused
+    // Should NOT contain "XYZ" or "58/X" in rendering while paused
     QVERIFY(!view.toPlainText().contains("XYZ"));
+    QVERIFY(!view.toPlainText().contains("58/X"));
     // But totals should be updated: m_tx count was 0, now it should be 3 bytes
     QCOMPARE(view.txCount(), static_cast<qint64>(3));
 
     // Resume and flush, "XYZ" should now be rendered
     view.setPaused(false);
     QMetaObject::invokeMethod(&view, "flush");
-    QVERIFY(view.toPlainText().contains("XYZ"));
+    QVERIFY(view.toPlainText().contains("58/X 59/Y 5A/Z"));
 }
 
 void BusTest::guiMacroBar() {
@@ -543,10 +592,10 @@ void BusTest::guiMacroBar() {
     const QByteArray bytes = "macro_payload";
     bar.pushHistory(bytes, true);
 
-    auto *historyBox = bar.findChild<QComboBox*>();
+    auto *historyBox = bar.findChild<QComboBox *>();
     QVERIFY(historyBox != nullptr);
     QCOMPARE(historyBox->count(), 1);
-    
+
     // Trigger action
     historyBox->setCurrentIndex(0);
     QMetaObject::invokeMethod(&bar, "resendSelected");
@@ -569,7 +618,7 @@ void BusTest::guiMainWindow() {
     MainWindow mainWin;
 
     // Verify it contains a QTabWidget
-    auto *tabWidget = mainWin.findChild<QTabWidget*>();
+    auto *tabWidget = mainWin.findChild<QTabWidget *>();
     QVERIFY(tabWidget != nullptr);
 
     // Should have 1 tab by default (initial session tab)
