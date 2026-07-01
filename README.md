@@ -9,7 +9,7 @@
 
 AetherBus is a modern, lightweight, open-source serial-port interceptor and protocol sniffer for Linux.
 
-Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a kernel pseudo-terminal — letting an unmodified target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
+Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a kernel pseudo-terminal — letting an unmodified target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
 ## How It Works
 
@@ -34,6 +34,18 @@ AetherBus sits transparently between your application and the hardware. It opens
                                   │   + byte injection panel │
                                   └──────────────────────────┘
 ```
+
+## Features
+
+* **Transparent interception** — proxies a real UART through a kernel PTY; the target app connects to a virtual port and never knows it is being watched.
+* **Live line-setting mirroring** — when the target app reconfigures baud/parity/framing on the virtual port, AetherBus catches the change and applies it to the physical device automatically.
+* **HTerm-style console** — simultaneous HEX / ASCII / BINARY / DECIMAL columns, colour-coded by direction, batch-rendered at 60 Hz with a rolling history so high-baud streams stay responsive.
+* **Byte injection** — send crafted HEX / ASCII / DEC / BIN sequences (optional CR/LF endings, one-shot or repeating) to either the device or the application side, plus reusable macros and send history.
+* **pcap capture & replay** — record traffic to a `LINKTYPE_RTAC_SERIAL` pcap that opens directly in Wireshark, and replay a capture back through the console offline with the original inter-packet timing.
+* **Live statistics** — per-direction byte counts, throughput rates and chart, line utilisation, and inter-packet gap timing, plus dropped-byte accounting when a peer stops draining.
+* **Signal control** — drive RTS/DTR, send a serial BREAK, and watch the CTS/DSR/DCD/RI modem lines update live.
+* **Multi-session tabs** — intercept several links at once, each in its own tab.
+* **Robust backend** — non-blocking per-direction write queues (a stalled peer can't wedge the other direction), RAII-clean teardown, and no silent write loss.
 
 ## Installation
 
@@ -68,15 +80,24 @@ Captured traffic streams into a colour-coded, monospaced viewport, rendered side
 [14:23:01.012 Rx]  06 3F 21          |  .?!
 ```
 
-Toggle the display between **HEX**, **ASCII**, **BINARY**, and **DECIMAL** at any time. The view is batch-rendered at 60 Hz and capped to a rolling history so even 921600-baud streams stay responsive. A premium dark theme ships in [`assets/theme.qss`](assets/theme.qss) and is loaded at startup.
+Toggle the display between **HEX**, **ASCII**, **BINARY**, and **DECIMAL** at any time — the columns render side by side and can be combined. The view is batch-rendered at 60 Hz and capped to a rolling history so even 921600-baud streams stay responsive, with autoscroll, pause, timestamp toggle, and in-buffer search. Alongside the console, a stats panel shows live throughput, utilisation, and gap timing, and you can arm a **Capture…** to a pcap file or **Replay…** a previous capture back through the same view. A premium dark theme ships in [`assets/theme.qss`](assets/theme.qss) and is loaded at startup.
 
 ## Technical Architecture
 
-The architecture separates the interception engine from the presentation layer, so the backend compiles as a static library with zero graphical dependencies.
+The architecture separates the interception engine from the presentation layer: the backend (`aether_core`) compiles as a static library with **zero graphical dependencies** and is unit-tested in isolation.
 
-* **`format_codec`**: A pure, side-effect-free conversion layer (bytes ⇄ HEX / ASCII / BINARY / DECIMAL) and the injection-field hex parser. Fully unit-tested in isolation.
-* **`PtyProxy`**: Opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop. Bytes from the UART are tagged **Rx** and forwarded to the PTY master; bytes from the target application are tagged **Tx** and forwarded to the UART. Every chunk is emitted to the GUI over a thread-safe queued signal. Teardown is RAII-clean via a self-pipe wake and symlink unlink.
-* **`ConsoleView` / `MainWindow`**: The Qt 6 Widgets front end — line configuration, the HTerm-style console, and a dual-target byte-injection panel — which only ever consumes `CapturedChunk` signals and never touches a raw descriptor.
+**Core (`src/core/`)**
+
+* **`format_codec`**: A pure, side-effect-free conversion layer (bytes ⇄ HEX / ASCII / BINARY / DECIMAL) and the injection-field parsers.
+* **`PtyProxy`**: Opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop. UART bytes are tagged **Rx** and forwarded to the PTY master; target-app bytes are tagged **Tx** and forwarded to the UART — over non-blocking, per-direction write queues so one stalled side can't wedge the other. It mirrors slave-side line-setting changes onto the device, tracks byte/drop counters, and can capture to pcap, emitting every chunk to the GUI over thread-safe queued signals. Teardown is RAII-clean via a self-pipe wake and symlink unlink.
+* **`linux_baud`**: Arbitrary (non-standard) baud rates via the Linux `termios2` path, isolated from `<termios.h>`.
+* **`stats_calculator`**: Throughput rates, line utilisation, and inter-packet gap statistics from the captured chunk stream.
+* **`capture_replay`**: Parses the `LINKTYPE_RTAC_SERIAL` pcap files `PtyProxy` writes and replays them as `CapturedChunk`s with the original timing.
+* **`signal_cleanup`**: Releases descriptors and symlinks on fatal signals so a crash can't leave `/dev/ttyUSB0` locked.
+
+**GUI (`src/gui/`)** — Qt 6 Widgets front end that only ever consumes `CapturedChunk` signals and never touches a raw descriptor:
+
+* **`MainWindow`** hosts multiple **`SessionWidget`** tabs. Each session owns one `PtyProxy` and composes dedicated panels — **`ConfigPanel`** (device & line settings), **`SignalPanel`** (RTS/DTR/BREAK + modem-line LEDs), **`InjectionPanel`** (byte injection), **`StatsPanel`** + **`ThroughputChart`** (live metrics), **`MacroBar`** (macros & history) — around the **`ConsoleView`** (rendering + search), themed by **`ThemeController`**.
 
 ---
 
@@ -87,7 +108,7 @@ The architecture separates the interception engine from the presentation layer, 
 To build AetherBus, you will need:
 
 * **CMake** (v3.16 or higher)
-* **Qt6 SDK** (specifically the `Core`, `Widgets`, and `Test` modules)
+* **Qt6 SDK** (the `Core`, `Widgets`, and `Network` modules; `Test` is also needed to build the test suite)
 * **C++17 compliant compiler** (GCC 10+, Clang 12+, or MSVC 2019+)
 
 ### Build Instructions
@@ -129,7 +150,7 @@ cmake --build build --target docs          # generate Doxygen HTML
 
 AetherBus uses an **auto-incrementing version** of the form `MAJOR.MINOR.PATCH.BUILD`:
 
-* **`MAJOR.MINOR.PATCH`** — the semantic base, kept in the top-level [`VERSION`](VERSION) file. Bump it by hand for meaningful releases.
+* **`MAJOR.MINOR.PATCH`** — the semantic base, kept in the top-level [`VERSION`](VERSION) file. Bump it by hand for meaningful releases. Notable changes per version are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 * **`BUILD`** — the git commit count (`git rev-list --count HEAD`), which increases automatically with every commit/merge to `main`, so each build gets a unique, monotonically increasing version with no manual edits.
 
 The version is the single source of truth across the whole project:
@@ -169,7 +190,8 @@ Launch AetherBus and intercept a live serial link in four steps:
 1. **Select the device.** Pick the physical port (e.g. `/dev/ttyUSB0`) from the scanned list and set the line parameters — baud rate, data bits, parity, and stop bits — to match the hardware.
 2. **Start interception.** Click **Start Interception**. AetherBus opens the UART, spins up the proxy loop, and reports the kernel-assigned virtual port (e.g. `/dev/pts/5`) in the status bar. Optionally provide a stable symlink (e.g. `./ttyUSB0_sniffed`) so the target app always finds the same path.
 3. **Point your application at the virtual port.** Connect your existing tool — `minicom`, a firmware flasher, or your own software — to the reported slave path instead of the real device. All traffic now flows through AetherBus and appears live in the console, colour-coded by direction.
-4. **Decode and inject.** Switch the console format on the fly, and use the injection panel to send crafted space-separated hex bytes (`41 42 0D 0A`) directly to either the **device** or the **application** side of the link.
+4. **Decode and inject.** Switch the console format on the fly, and use the injection panel to send crafted bytes — as space-separated HEX (`41 42 0D 0A`), ASCII, decimal, or binary, with an optional CR/LF ending and one-shot or repeating delivery — directly to either the **device** or the **application** side of the link. Save frequently-used payloads as macros.
+5. **Capture and replay.** Arm **Capture…** to record everything to a `LINKTYPE_RTAC_SERIAL` pcap (open it in Wireshark), or **Replay…** a previous capture back through the console for offline analysis with the original timing preserved.
 
 #### Example: sniffing a modem session with `minicom`
 

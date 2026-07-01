@@ -135,29 +135,29 @@ void SessionWidget::buildUi() {
 
     auto *mainSplitter = new QSplitter(Qt::Horizontal, this);
 
-    auto *leftSplitter = new QSplitter(Qt::Vertical, mainSplitter);
+    // Left column: config, signal lines and stats stacked tightly in a plain
+    // layout (no inner splitter), so the panels stay compact at the top rather
+    // than floating apart. Stats takes the remaining vertical space.
+    auto *leftColumn = new QWidget(mainSplitter);
+    auto *leftLayout = new QVBoxLayout(leftColumn);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(6);
 
-    m_configPanel = new ConfigPanel(this);
-    leftSplitter->addWidget(m_configPanel);
+    m_configPanel = new ConfigPanel(leftColumn);
+    leftLayout->addWidget(m_configPanel);
 
-    m_signalPanel = new SignalPanel(this);
-    leftSplitter->addWidget(m_signalPanel);
+    m_signalPanel = new SignalPanel(leftColumn);
+    leftLayout->addWidget(m_signalPanel);
 
-    m_statsPanel = new StatsPanel(this);
+    m_statsPanel = new StatsPanel(leftColumn);
     m_statsPanel->setActiveCalculator(&m_stats);
-    leftSplitter->addWidget(m_statsPanel);
+    leftLayout->addWidget(m_statsPanel, 1);
 
-    leftSplitter->setStretchFactor(0, 1);
-    leftSplitter->setStretchFactor(1, 0);
-    leftSplitter->setStretchFactor(2, 1);
-
-    mainSplitter->addWidget(leftSplitter);
+    mainSplitter->addWidget(leftColumn);
     mainSplitter->addWidget(buildConsolePanel(this));
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
-
     mainSplitter->setSizes({300, 700});
-    leftSplitter->setSizes({300, 150, 250});
 
     outer->addWidget(mainSplitter);
 }

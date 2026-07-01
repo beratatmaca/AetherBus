@@ -88,13 +88,27 @@ set(AETHER_CORE_SOURCES
     src/core/capture_replay.h
     src/core/signal_cleanup.cpp
     src/core/signal_cleanup.h
+    src/core/pty_proxy.cpp
+    src/core/pty_proxy.h
+    src/core/pty_proxy_impl.h
 )
-if(UNIX)
+if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
-        src/core/pty_proxy.cpp
-        src/core/pty_proxy.h
+        src/core/win/win_pty_proxy.cpp
+        src/core/win/win_pty_proxy.h
+    )
+elseif(APPLE)
+    list(APPEND AETHER_CORE_SOURCES
+        src/core/mac/mac_pty_proxy.cpp
+        src/core/mac/mac_pty_proxy.h
+    )
+else() # Default to Linux
+    list(APPEND AETHER_CORE_SOURCES
+        src/core/linux/linux_pty_proxy.cpp
+        src/core/linux/linux_pty_proxy.h
         src/core/linux_baud.cpp
-        src/core/linux_baud.h)
+        src/core/linux_baud.h
+    )
 endif()
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
 target_link_libraries(aether_core PUBLIC Qt6::Core)

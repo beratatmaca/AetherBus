@@ -7,13 +7,10 @@
 
 namespace aether {
 
-SignalPanel::SignalPanel(QWidget *parent) : QWidget(parent) {
+SignalPanel::SignalPanel(QWidget *parent) : QGroupBox(QStringLiteral("Signal lines"), parent) {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(4);
-
-    auto *sigLabel = new QLabel(QStringLiteral("<b>Signal lines</b>"), this);
-    layout->addWidget(sigLabel);
 
     m_rtsCheck = new QCheckBox(QStringLiteral("RTS"), this);
     m_dtrCheck = new QCheckBox(QStringLiteral("DTR"), this);

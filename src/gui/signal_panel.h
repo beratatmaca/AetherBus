@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QWidget>
+#include <QGroupBox>
 
 class QCheckBox;
 class QLabel;
@@ -8,7 +8,7 @@ class QPushButton;
 
 namespace aether {
 
-class SignalPanel : public QWidget {
+class SignalPanel : public QGroupBox {
     Q_OBJECT
 
 public:
@@ -16,7 +16,7 @@ public:
     ~SignalPanel() override;
 
     void updateModemStatus(bool cts, bool dsr, bool dcd, bool ri);
-    bool isAutoReconnectEnabled() const;
+    [[nodiscard]] bool isAutoReconnectEnabled() const;
 
 signals:
     void rtsToggled(bool on);
