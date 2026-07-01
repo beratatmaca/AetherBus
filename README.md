@@ -13,7 +13,7 @@ Written in C++17 and powered by the Qt 6 framework, it transparently proxies a p
 
 ## Screenshot
 
-![AetherBus connected to the simulator, showing live Rx and Tx serial traffic](docs/screenshots/aetherbus-main-window.png)
+![AetherBus connected to the simulator, showing live Rx and Tx serial traffic](assets/aetherbus-main-window.png)
 
 ## How It Works
 
@@ -159,13 +159,13 @@ AetherBus uses an **auto-incrementing version** of the form `MAJOR.MINOR.PATCH.B
 
 The version is the single source of truth across the whole project:
 
-| Surface                             | How it gets the version                                   |
-| ----------------------------------- | --------------------------------------------------------- |
-| CMake (`PROJECT_VERSION`)           | `cmake/Version.cmake` resolves it before `project()`      |
-| The binary (`aether/version.h`)     | generated header (e.g. `AETHER_VERSION_STRING`)           |
-| Packages (`.deb` / `.msi` / `.dmg`) | CPack uses the same full version in filenames             |
-| Snap                                | `snapcraft.yaml` derives it in `override-pull`            |
-| GitHub release page                 | the `version` job in `release.yml`                        |
+| Surface                             | How it gets the version                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| CMake (`PROJECT_VERSION`)           | `cmake/Version.cmake` resolves it before `project()` |
+| The binary (`aether/version.h`)     | generated header (e.g. `AETHER_VERSION_STRING`)      |
+| Packages (`.deb` / `.msi` / `.dmg`) | CPack uses the same full version in filenames        |
+| Snap                                | `snapcraft.yaml` derives it in `override-pull`       |
+| GitHub release page                 | the `version` job in `release.yml`                   |
 
 CMake derives the build number from git automatically. CI passes the exact
 values in so every matrix runner agrees:
