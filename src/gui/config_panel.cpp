@@ -8,6 +8,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QStyle>
+#include <QApplication>
 
 namespace aether {
 
@@ -20,8 +22,9 @@ ConfigPanel::ConfigPanel(QWidget *parent) : QGroupBox(QStringLiteral("Intercepti
     m_deviceBox->setEditable(true);
     m_deviceBox->setToolTip(QStringLiteral("Select or type the serial device path (e.g. /dev/ttyUSB0)"));
 
-    auto *rescanBtn = new QPushButton(QStringLiteral("↺"), this);
-    rescanBtn->setFixedWidth(28);
+    auto *rescanBtn = new QPushButton(this);
+    rescanBtn->setIcon(qApp->style()->standardIcon(QStyle::SP_BrowserReload));
+    rescanBtn->setFixedWidth(32);
     rescanBtn->setToolTip(QStringLiteral("Rescan /dev for serial devices (F5)"));
     connect(rescanBtn, &QPushButton::clicked, this, &ConfigPanel::rescanRequested);
     auto *rescanShortcut = new QShortcut(QKeySequence(Qt::Key_F5), this);
