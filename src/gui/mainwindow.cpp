@@ -1,10 +1,6 @@
 #include "gui/mainwindow.h"
 
-#include "core/format_codec.h"
-#include "core/pty_proxy.h"
-#include "core/serial_types.h"
-#include "gui/consoleview.h"
-#include "gui/macrobar.h"
+#include "gui/session_widget.h"
 #include "gui/theme_controller.h"
 #include "aether/version.h"
 
@@ -16,39 +12,41 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QSettings>
+#include <QShortcut>
 #include <QApplication>
-
-#include <QCheckBox>
-#include <QComboBox>
-#include <QIcon>
-#include <QDir>
-#include <QFileDialog>
-#include <QFile>
-#include <QFormLayout>
-#include <QGroupBox>
+#include <QTabWidget>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QSplitter>
 #include <QTextBrowser>
-#include <QTextDocument>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
 
 namespace aether {
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyProxy(this)), m_console(nullptr) {
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     m_theme = new ThemeController(qApp, this);
     QSettings settings;
     m_theme->setMode(ThemeController::modeFromString(settings.value(QStringLiteral("ui/theme")).toString()));
 
     buildUi();
-    populateDevices();
 
     // Setup Menu Bar
     QMenuBar *menu = menuBar();
+
+    QMenu *fileMenu = menu->addMenu(tr("&File"));
+
+    QAction *newSessionAct = fileMenu->addAction(tr("&New Session"));
+    newSessionAct->setShortcut(QKeySequence::New);
+    connect(newSessionAct, &QAction::triggered, this, &MainWindow::addNewSession);
+
+    QAction *closeSessionAct = fileMenu->addAction(tr("&Close Session"));
+    closeSessionAct->setShortcut(QKeySequence::Close);
+    connect(closeSessionAct, &QAction::triggered, this, &MainWindow::closeCurrentSession);
+
+    fileMenu->addSeparator();
+    QAction *exitAct = fileMenu->addAction(tr("E&xit"));
+    exitAct->setShortcut(QKeySequence::Quit);
+    connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
     QMenu *viewMenu = menu->addMenu(tr("&View"));
     QMenu *themeMenu = viewMenu->addMenu(tr("&Theme"));
@@ -110,7 +108,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
 
         auto *titleCol = new QVBoxLayout();
         QLabel *nameLbl = new QLabel(QStringLiteral("<b style='font-size:18pt'>AetherBus</b>"), dlg);
-        QLabel *tagLbl  = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
+        QLabel *tagLbl = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
         titleCol->addWidget(nameLbl);
         titleCol->addWidget(tagLbl);
         titleCol->addStretch();
@@ -130,20 +128,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
         body->setOpenExternalLinks(true);
         body->setFrameStyle(QFrame::NoFrame);
         body->setReadOnly(true);
-        body->setHtml(QStringLiteral(
-            "<table cellspacing='4' style='font-size:10pt'>" \
-            "<tr><td><b>Version</b></td><td>&nbsp;</td><td>%1</td></tr>" \
-            "<tr><td><b>Commit</b></td><td>&nbsp;</td><td><code>%2</code></td></tr>" \
-            "<tr><td><b>Qt</b></td><td>&nbsp;</td><td>%3</td></tr>" \
-            "<tr><td><b>License</b></td><td>&nbsp;</td><td>MIT</td></tr>" \
-            "<tr><td><b>Copyright</b></td><td>&nbsp;</td><td>&copy; 2026 AetherBus Project</td></tr>" \
-            "</table>" \
-            "<p style='margin-top:8px; font-size:9pt; color:#888'>" \
-            "A modern, lightweight serial sniffer &amp; bus monitor." \
-            "</p>")
-            .arg(QString::fromLatin1(AETHER_VERSION_STRING),
-                 QString::fromLatin1(AETHER_GIT_SHA),
-                 QString::fromLatin1(qVersion())));
+        body->setHtml(
+            QStringLiteral("<table cellspacing='4' style='font-size:10pt'>"
+                           "<tr><td><b>Version</b></td><td>&nbsp;</td><td>%1</td></tr>"
+                           "<tr><td><b>Commit</b></td><td>&nbsp;</td><td><code>%2</code></td></tr>"
+                           "<tr><td><b>Qt</b></td><td>&nbsp;</td><td>%3</td></tr>"
+                           "<tr><td><b>License</b></td><td>&nbsp;</td><td>MIT</td></tr>"
+                           "<tr><td><b>Copyright</b></td><td>&nbsp;</td><td>&copy; 2026 AetherBus Project</td></tr>"
+                           "</table>"
+                           "<p style='margin-top:8px; font-size:9pt; color:#888'>"
+                           "A modern, lightweight serial sniffer &amp; bus monitor."
+                           "</p>")
+                .arg(QString::fromLatin1(AETHER_VERSION_STRING), QString::fromLatin1(AETHER_GIT_SHA), QString::fromLatin1(qVersion())));
         body->setMaximumHeight(160);
         root->addWidget(body);
 
@@ -156,728 +152,81 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_proxy(new PtyPr
         dlg->deleteLater();
     });
 
-    // Load config persistence
-    {
-        QSettings settings;
-        const QString dev = settings.value(QStringLiteral("connection/device")).toString();
-        if (!dev.isEmpty()) {
-            m_deviceBox->setCurrentText(dev);
-        }
-        const int baudVal = settings.value(QStringLiteral("connection/baud"), 115200).toInt();
-        m_baudBox->setCurrentText(QString::number(baudVal));
-
-        const int dataBitsVal = settings.value(QStringLiteral("connection/dataBits"), 8).toInt();
-        m_dataBitsBox->setCurrentText(QString::number(dataBitsVal));
-
-        const QString parityVal = settings.value(QStringLiteral("connection/parity"), QStringLiteral("None")).toString();
-        m_parityBox->setCurrentText(parityVal);
-
-        const int stopBitsVal = settings.value(QStringLiteral("connection/stopBits"), 1).toInt();
-        m_stopBitsBox->setCurrentText(QString::number(stopBitsVal));
-
-        const QString flowVal = settings.value(QStringLiteral("connection/flow"), QStringLiteral("None")).toString();
-        m_flowBox->setCurrentText(flowVal);
-
-        m_symlinkEdit->setText(settings.value(QStringLiteral("connection/symlink")).toString());
-        m_directCheck->setChecked(settings.value(QStringLiteral("connection/directMode"), false).toBool());
-
-        m_hexCheck->setChecked(settings.value(QStringLiteral("connection/showHex"), true).toBool());
-        m_decCheck->setChecked(settings.value(QStringLiteral("connection/showDec"), false).toBool());
-        m_binCheck->setChecked(settings.value(QStringLiteral("connection/showBin"), false).toBool());
-        m_asciiCheck->setChecked(settings.value(QStringLiteral("connection/showAscii"), true).toBool());
-    }
-
-    connect(m_proxy, &PtyProxy::chunkCaptured, m_console, &ConsoleView::appendChunk);
-    connect(m_proxy, &PtyProxy::started, this, &MainWindow::onStarted);
-    connect(m_proxy, &PtyProxy::stopped, this, &MainWindow::onStopped);
-    connect(m_proxy, &PtyProxy::errorOccurred, this, &MainWindow::onError);
-    connect(m_proxy, &PtyProxy::disconnected, this, &MainWindow::onDisconnected);
-
     setWindowTitle(QStringLiteral("AetherBus — Serial Interceptor"));
-
-    // Icon is compiled into the binary via resources.qrc — no runtime path needed.
     setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
     qApp->setWindowIcon(windowIcon());  // propagate to taskbar / dock
 
     resize(1000, 720);
+
+    // Add initial session tab
+    addNewSession();
 }
 
 MainWindow::~MainWindow() = default;
 
 void MainWindow::buildUi() {
-    auto *central = new QWidget(this);
-    auto *outer = new QVBoxLayout(central);
-    outer->setContentsMargins(4, 4, 4, 4);
+    m_tabWidget = new QTabWidget(this);
+    m_tabWidget->setTabsClosable(true);
+    m_tabWidget->setMovable(true);
+    connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, &MainWindow::closeSessionTab);
 
-    auto *mainSplitter = new QSplitter(Qt::Horizontal, central);
+    // An add button in the corner of the tab bar
+    auto *addTabButton = new QPushButton(QStringLiteral("+"), this);
+    addTabButton->setToolTip(tr("Open new session"));
+    addTabButton->setFlat(true);
+    addTabButton->setFixedWidth(30);
+    connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewSession);
+    m_tabWidget->setCornerWidget(addTabButton, Qt::TopRightCorner);
 
-    auto *leftSplitter = new QSplitter(Qt::Vertical, mainSplitter);
-    leftSplitter->addWidget(buildConfigPanel(central));
-    leftSplitter->setStretchFactor(0, 1);
-
-    mainSplitter->addWidget(leftSplitter);
-    mainSplitter->addWidget(buildConsolePanel(central));
-    mainSplitter->setStretchFactor(0, 0);
-    mainSplitter->setStretchFactor(1, 1);
-
-    // Initial width distribution: sidebar gets 300px, console gets 700px
-    mainSplitter->setSizes({300, 700});
-
-    outer->addWidget(mainSplitter);
-    setCentralWidget(central);
+    setCentralWidget(m_tabWidget);
 }
 
-QWidget *MainWindow::buildConfigPanel(QWidget *parent) {
-    auto *configGroup = new QGroupBox(QStringLiteral("Interception"), parent);
-    auto *form = new QFormLayout(configGroup);
+void MainWindow::addNewSession() {
+    auto *session = new SessionWidget(this);
 
-    m_deviceBox = new QComboBox(configGroup);
-    m_deviceBox->setEditable(true);
-    m_deviceBox->setToolTip(QStringLiteral("Select or type the serial device path (e.g. /dev/ttyUSB0)"));
-    form->addRow(QStringLiteral("Physical device"), m_deviceBox);
+    // Default name
+    int count = m_tabWidget->count() + 1;
+    QString title = QStringLiteral("Session %1").arg(count);
 
-    m_baudBox = new QComboBox(configGroup);
-    m_baudBox->setEditable(true);  // allow arbitrary/custom rates
-    for (const int baud : {9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600}) {
-        m_baudBox->addItem(QString::number(baud), baud);
-    }
-    m_baudBox->setCurrentText(QStringLiteral("115200"));
-    m_baudBox->setToolTip(QStringLiteral("Set connection baud rate (bps)"));
-    form->addRow(QStringLiteral("Baud rate"), m_baudBox);
+    int index = m_tabWidget->addTab(session, title);
 
-    m_dataBitsBox = new QComboBox(configGroup);
-    for (const int bits : {5, 6, 7, 8}) {
-        m_dataBitsBox->addItem(QString::number(bits), bits);
-    }
-    m_dataBitsBox->setCurrentText(QStringLiteral("8"));
-    m_dataBitsBox->setToolTip(QStringLiteral("Select number of data bits (typically 8)"));
-    form->addRow(QStringLiteral("Data bits"), m_dataBitsBox);
-
-    m_parityBox = new QComboBox(configGroup);
-    m_parityBox->addItem(QStringLiteral("None"), QChar('N'));
-    m_parityBox->addItem(QStringLiteral("Even"), QChar('E'));
-    m_parityBox->addItem(QStringLiteral("Odd"), QChar('O'));
-    m_parityBox->setToolTip(QStringLiteral("Parity checking bit (None, Even, Odd)"));
-    form->addRow(QStringLiteral("Parity"), m_parityBox);
-
-    m_stopBitsBox = new QComboBox(configGroup);
-    m_stopBitsBox->addItem(QStringLiteral("1"), 1);
-    m_stopBitsBox->addItem(QStringLiteral("2"), 2);
-    m_stopBitsBox->setToolTip(QStringLiteral("Number of stop bits per frame (typically 1)"));
-    form->addRow(QStringLiteral("Stop bits"), m_stopBitsBox);
-
-    m_flowBox = new QComboBox(configGroup);
-    m_flowBox->addItem(QStringLiteral("None"), static_cast<int>(FlowControl::None));
-    m_flowBox->addItem(QStringLiteral("RTS/CTS"), static_cast<int>(FlowControl::RtsCts));
-    m_flowBox->addItem(QStringLiteral("XON/XOFF"), static_cast<int>(FlowControl::XonXoff));
-    m_flowBox->setToolTip(QStringLiteral("Hardware or software flow control mode"));
-    form->addRow(QStringLiteral("Flow control"), m_flowBox);
-
-    m_symlinkEdit = new QLineEdit(configGroup);
-    m_symlinkEdit->setPlaceholderText(QStringLiteral("optional, e.g. ./ttyUSB0_sniffed"));
-    m_symlinkEdit->setToolTip(QStringLiteral("Create a custom symlink to point the user application at the PTY slave"));
-    form->addRow(QStringLiteral("Slave symlink"), m_symlinkEdit);
-
-    m_directCheck = new QCheckBox(QStringLiteral("Direct Connection (Bypass Proxy)"), configGroup);
-    m_directCheck->setToolTip(QStringLiteral("Bypass PTY interceptor and connect directly to serial hardware"));
-    form->addRow(m_directCheck);
-
-    m_startButton = new QPushButton(QStringLiteral("Start Interception"), configGroup);
-    m_startButton->setToolTip(QStringLiteral("Initialize PTY proxy or connect directly"));
-    connect(m_startButton, &QPushButton::clicked, this, &MainWindow::toggleProxy);
-    form->addRow(m_startButton);
-
-    // Toggle fields based on direct check
-    connect(m_directCheck, &QCheckBox::toggled, this, [this](bool checked) {
-        m_symlinkEdit->setEnabled(!checked);
-        if (checked) {
-            m_symlinkEdit->clear();
-            m_startButton->setText(QStringLiteral("Connect Direct"));
-        } else {
-            m_startButton->setText(QStringLiteral("Start Interception"));
+    connect(session, &SessionWidget::sessionTitleChanged, this, [this, session](const QString &newTitle) {
+        int idx = m_tabWidget->indexOf(session);
+        if (idx != -1) {
+            m_tabWidget->setTabText(idx, newTitle);
         }
     });
 
-    m_statusLabel = new QLabel(QStringLiteral("Idle."), configGroup);
-    m_statusLabel->setWordWrap(true);
-    form->addRow(QStringLiteral("Status"), m_statusLabel);
-
-    // ── Signal lines ──────────────────────────────────────────────────────────
-    auto *sigLabel = new QLabel(QStringLiteral("<b>Signal lines</b>"), configGroup);
-    form->addRow(sigLabel);
-
-    m_rtsCheck = new QCheckBox(QStringLiteral("RTS"), configGroup);
-    m_dtrCheck = new QCheckBox(QStringLiteral("DTR"), configGroup);
-    m_rtsCheck->setToolTip(QStringLiteral("Assert/deassert the RTS output line"));
-    m_dtrCheck->setToolTip(QStringLiteral("Assert/deassert the DTR output line"));
-    connect(m_rtsCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setRts(on); });
-    connect(m_dtrCheck, &QCheckBox::toggled, this, [this](bool on) { (void)m_proxy->setDtr(on); });
-
-    auto *breakBtn = new QPushButton(QStringLiteral("Break"), configGroup);
-    breakBtn->setToolTip(QStringLiteral("Send a serial BREAK signal"));
-    connect(breakBtn, &QPushButton::clicked, this, [this] { (void)m_proxy->sendBreak(); });
-
-    auto *outRow = new QHBoxLayout();
-    outRow->addWidget(new QLabel(QStringLiteral("Output:"), configGroup));
-    outRow->addWidget(m_rtsCheck);
-    outRow->addWidget(m_dtrCheck);
-    outRow->addWidget(breakBtn);
-    outRow->addStretch(1);
-    form->addRow(outRow);
-
-    m_ctsLed = new QLabel(QStringLiteral("CTS"), configGroup);
-    m_dsrLed = new QLabel(QStringLiteral("DSR"), configGroup);
-    m_dcdLed = new QLabel(QStringLiteral("DCD"), configGroup);
-    m_riLed  = new QLabel(QStringLiteral("RI"),  configGroup);
-    for (QLabel *led : {m_ctsLed, m_dsrLed, m_dcdLed, m_riLed}) {
-        led->setStyleSheet(QStringLiteral("color:#555"));
-    }
-    m_reconnectCheck = new QCheckBox(QStringLiteral("Auto-reconnect"), configGroup);
-    m_reconnectCheck->setToolTip(QStringLiteral("Automatically reopen the port if the device disconnects"));
-
-    auto *inRow = new QHBoxLayout();
-    inRow->addWidget(new QLabel(QStringLiteral("Input:"), configGroup));
-    inRow->addWidget(m_ctsLed);
-    inRow->addWidget(m_dsrLed);
-    inRow->addWidget(m_dcdLed);
-    inRow->addWidget(m_riLed);
-    inRow->addStretch(1);
-    inRow->addWidget(m_reconnectCheck);
-    form->addRow(inRow);
-
-    // Poll modem status lines while connected.
-    m_modemTimer = new QTimer(this);
-    m_modemTimer->setInterval(250);
-    connect(m_modemTimer, &QTimer::timeout, this, &MainWindow::pollModemLines);
-
-    // Retry opening the device while auto-reconnect is armed.
-    m_reconnectTimer = new QTimer(this);
-    m_reconnectTimer->setInterval(1000);
-    connect(m_reconnectTimer, &QTimer::timeout, this, [this] {
-        if (m_proxy->isRunning()) { m_reconnectTimer->stop(); return; }
-        if (m_proxy->open(m_lastConfig)) { m_reconnectTimer->stop(); }
-    });
-
-    return configGroup;
+    m_tabWidget->setCurrentIndex(index);
 }
 
-QWidget *MainWindow::buildConsolePanel(QWidget *parent) {
-    auto *panel = new QWidget(parent);
-    auto *layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    m_console = new ConsoleView(panel);
-
-    // --- Toolbar row 1: formats + newline rule + control chars --------------
-    auto *row1 = new QHBoxLayout();
-    m_hexCheck = new QCheckBox(QStringLiteral("HEX"), panel);
-    m_decCheck = new QCheckBox(QStringLiteral("DEC"), panel);
-    m_binCheck = new QCheckBox(QStringLiteral("BIN"), panel);
-    m_asciiCheck = new QCheckBox(QStringLiteral("ASCII"), panel);
-    m_hexCheck->setChecked(true);
-    m_asciiCheck->setChecked(true);
-    for (QCheckBox *c : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
-        c->setToolTip(QStringLiteral("Toggle this format layered display inside each byte cell"));
-        connect(c, &QCheckBox::toggled, this, &MainWindow::applyFormats);
-        row1->addWidget(c);
+void MainWindow::closeSessionTab(int index) {
+    if (index < 0 || index >= m_tabWidget->count()) {
+        return;
     }
 
-    row1->addSpacing(12);
-    row1->addWidget(new QLabel(QStringLiteral("Newline:"), panel));
-    m_newlineModeBox = new QComboBox(panel);
-    m_newlineModeBox->addItem(QStringLiteral("Per chunk"));
-    m_newlineModeBox->addItem(QStringLiteral("On delimiter (hex)"));
-    m_newlineModeBox->addItem(QStringLiteral("Every N bytes"));
-    m_newlineModeBox->addItem(QStringLiteral("TLV header"));
-    m_newlineModeBox->setCurrentIndex(1);
-    m_newlineModeBox->setToolTip(QStringLiteral("Select how incoming streams are split into lines.\nTLV: enter header params as hdrSize,lenOffset,lenSize (e.g. 3,1,1)"));
-    m_newlineParamEdit = new QLineEdit(QStringLiteral("0A"), panel);
-    m_newlineParamEdit->setFixedWidth(80);
-    m_newlineParamEdit->setToolTip(QStringLiteral("Delimiter byte (hex), N bytes, or TLV params (hdrSize,lenOffset,lenSize)"));
-    connect(m_newlineModeBox, &QComboBox::currentIndexChanged, this, &MainWindow::applyNewlineMode);
-    connect(m_newlineParamEdit, &QLineEdit::editingFinished, this, &MainWindow::applyNewlineMode);
-    row1->addWidget(m_newlineModeBox);
-    row1->addWidget(m_newlineParamEdit);
+    auto *session = qobject_cast<SessionWidget *>(m_tabWidget->widget(index));
+    if (!session) {
+        return;
+    }
 
-    row1->addStretch(1);
-    layout->addLayout(row1);
+    if (session->isRunning()) {
+        auto response = QMessageBox::warning(this, tr("Session Running"),
+                                             tr("This session is active. Do you want to stop the connection and close the tab?"),
+                                             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
-    // --- Toolbar row 2: scroll/pause + counters + actions + find ------------
-    auto *row2 = new QHBoxLayout();
-    m_autoScrollCheck = new QCheckBox(QStringLiteral("Autoscroll"), panel);
-    m_autoScrollCheck->setChecked(true);
-    m_autoScrollCheck->setToolTip(QStringLiteral("Automatically scroll to the end of the log"));
-    connect(m_autoScrollCheck, &QCheckBox::toggled, m_console, &ConsoleView::setAutoScroll);
-    m_pauseCheck = new QCheckBox(QStringLiteral("Pause"), panel);
-    m_pauseCheck->setToolTip(QStringLiteral("Suspend UI viewport updates"));
-    connect(m_pauseCheck, &QCheckBox::toggled, m_console, &ConsoleView::setPaused);
-    row2->addWidget(m_autoScrollCheck);
-    row2->addWidget(m_pauseCheck);
-
-    row2->addSpacing(12);
-    m_countsLabel = new QLabel(QStringLiteral("Rx: 0   Tx: 0"), panel);
-    row2->addWidget(m_countsLabel);
-    auto *resetBtn = new QPushButton(QStringLiteral("Reset"), panel);
-    resetBtn->setToolTip(QStringLiteral("Clear Tx/Rx byte counters"));
-    connect(resetBtn, &QPushButton::clicked, m_console, &ConsoleView::resetCounts);
-    row2->addWidget(resetBtn);
-
-    row2->addSpacing(12);
-    auto *clearBtn = new QPushButton(QStringLiteral("Clear"), panel);
-    clearBtn->setToolTip(QStringLiteral("Clear all text from viewport and raw history cache"));
-    connect(clearBtn, &QPushButton::clicked, m_console, &ConsoleView::clearConsole);
-    auto *saveBtn = new QPushButton(QStringLiteral("Save…"), panel);
-    saveBtn->setToolTip(QStringLiteral("Export all currently captured plain text to a file"));
-    connect(saveBtn, &QPushButton::clicked, this, &MainWindow::saveReceived);
-    m_logBtn = new QPushButton(QStringLiteral("Log…"), panel);
-    m_logBtn->setCheckable(true);
-    m_logBtn->setToolTip(QStringLiteral("Continuously append every line to a file"));
-    connect(m_logBtn, &QPushButton::clicked, this, &MainWindow::toggleLogging);
-    row2->addWidget(clearBtn);
-    row2->addWidget(saveBtn);
-    row2->addWidget(m_logBtn);
-
-    row2->addSpacing(12);
-    m_selLabel = new QLabel(QStringLiteral("Sel: 0"), panel);
-    row2->addWidget(m_selLabel);
-
-    row2->addStretch(1);
-    row2->addWidget(new QLabel(QStringLiteral("Find:"), panel));
-    m_findEdit = new QLineEdit(panel);
-    m_findEdit->setPlaceholderText(QStringLiteral("text…"));
-    m_findEdit->setFixedWidth(160);
-    m_findEdit->setToolTip(QStringLiteral("Search string or bytes in the console history"));
-    connect(m_findEdit, &QLineEdit::returnPressed, this, [this] { doFind(false); });
-    connect(m_findEdit, &QLineEdit::textChanged, m_console, &ConsoleView::highlightSearchText);
-    auto *findPrevBtn = new QPushButton(QStringLiteral("◀"), panel);
-    auto *findNextBtn = new QPushButton(QStringLiteral("▶"), panel);
-    findPrevBtn->setFixedWidth(32);
-    findNextBtn->setFixedWidth(32);
-    findPrevBtn->setToolTip(QStringLiteral("Find previous occurrence"));
-    findNextBtn->setToolTip(QStringLiteral("Find next occurrence"));
-    connect(findPrevBtn, &QPushButton::clicked, this, [this] { doFind(true); });
-    connect(findNextBtn, &QPushButton::clicked, this, [this] { doFind(false); });
-    row2->addWidget(m_findEdit);
-    row2->addWidget(findPrevBtn);
-    row2->addWidget(findNextBtn);
-    layout->addLayout(row2);
-
-    layout->addWidget(m_console, 1);
-
-    // --- Injection panel ----------------------------------------------------
-    auto *injectRow = new QHBoxLayout();
-    m_injectFormatBox = new QComboBox(panel);
-    m_injectFormatBox->addItem(QStringLiteral("HEX"));
-    m_injectFormatBox->addItem(QStringLiteral("ASCII"));
-    m_injectFormatBox->addItem(QStringLiteral("DEC"));
-    m_injectFormatBox->addItem(QStringLiteral("BIN"));
-    m_injectFormatBox->setToolTip(QStringLiteral("Interpretation format of injection input text"));
-    m_injectEdit = new QLineEdit(panel);
-    m_injectEdit->setPlaceholderText(QStringLiteral("bytes to inject (e.g. 41 42 0D 0A, or text)"));
-    m_injectEdit->setToolTip(QStringLiteral("Enter payload command data to send"));
-    m_injectEndingBox = new QComboBox(panel);
-    m_injectEndingBox->addItem(QStringLiteral("No ending"));
-    m_injectEndingBox->addItem(QStringLiteral("CR"));
-    m_injectEndingBox->addItem(QStringLiteral("LF"));
-    m_injectEndingBox->addItem(QStringLiteral("CR+LF"));
-    m_injectEndingBox->setToolTip(QStringLiteral("Suffix character automatically appended to input"));
-    auto *toDeviceBtn = new QPushButton(QStringLiteral("Send → Device"), panel);
-    toDeviceBtn->setToolTip(QStringLiteral("Inject data directly to physical serial port (Tx)"));
-    m_toAppBtn = new QPushButton(QStringLiteral("Send → App"), panel);
-    m_toAppBtn->setToolTip(QStringLiteral("Inject data to target virtual PTY interface (Rx)"));
-    auto *fileBtn = new QPushButton(QStringLiteral("File…"), panel);
-    fileBtn->setToolTip(QStringLiteral("Send the raw contents of a file to the device"));
-    connect(toDeviceBtn, &QPushButton::clicked, this, [this] { sendInjection(true); });
-    connect(m_toAppBtn, &QPushButton::clicked, this, [this] { sendInjection(false); });
-    connect(fileBtn, &QPushButton::clicked, this, &MainWindow::sendFile);
-    connect(m_injectEdit, &QLineEdit::returnPressed, this, [this] { sendInjection(true); });
-    injectRow->addWidget(m_injectFormatBox);
-    injectRow->addWidget(m_injectEdit, 1);
-    injectRow->addWidget(m_injectEndingBox);
-    injectRow->addWidget(toDeviceBtn);
-    injectRow->addWidget(m_toAppBtn);
-    injectRow->addWidget(fileBtn);
-    layout->addLayout(injectRow);
-
-    // --- Repeat / periodic send row ----------------------------------------
-    auto *repeatRow = new QHBoxLayout();
-    m_repeatCheck = new QCheckBox(QStringLiteral("Repeat send every"), panel);
-    m_repeatCheck->setToolTip(QStringLiteral("Check to enable auto-injection repeat timer"));
-    m_repeatIntervalEdit = new QLineEdit(QStringLiteral("1000"), panel);
-    m_repeatIntervalEdit->setFixedWidth(72);
-    m_repeatIntervalEdit->setToolTip(QStringLiteral("Transmission repeat period (ms)"));
-    m_repeatTimer = new QTimer(this);
-    connect(m_repeatTimer, &QTimer::timeout, this, [this] { sendInjection(m_repeatToDevice); });
-    connect(m_repeatCheck, &QCheckBox::toggled, this, [this](bool on) {
-        if (on) {
-            const int ms = qMax(10, m_repeatIntervalEdit->text().toInt());
-            m_repeatTimer->start(ms);
-        } else {
-            m_repeatTimer->stop();
+        if (response == QMessageBox::No) {
+            return;
         }
-    });
-    repeatRow->addWidget(m_repeatCheck);
-    repeatRow->addWidget(m_repeatIntervalEdit);
-    repeatRow->addWidget(new QLabel(QStringLiteral("ms (repeats the last Send direction)"), panel));
-    repeatRow->addStretch(1);
-    layout->addLayout(repeatRow);
+        session->stopSession();
+    }
 
-    // --- Macros + send history ---------------------------------------------
-    m_macroBar = new MacroBar(panel);
-    connect(m_macroBar, &MacroBar::send, this, [this](const QByteArray &bytes, bool toDevice) {
-        if (toDevice) {
-            m_proxy->injectToDevice(bytes);
-        } else {
-            m_proxy->injectToApp(bytes);
-        }
-    });
-    layout->addWidget(m_macroBar);
-
-    connect(m_console, &ConsoleView::countsChanged, this, &MainWindow::updateCounts);
-    connect(m_console, &ConsoleView::selectionChars, this,
-            [this](int chars) { m_selLabel->setText(QStringLiteral("Sel: %1").arg(chars)); });
-
-    // Push initial display options into the console.
-    applyFormats();
-    applyNewlineMode();
-
-    return panel;
+    m_tabWidget->removeTab(index);
+    session->deleteLater();
 }
 
-void MainWindow::populateDevices() {
-    const QString previous = m_deviceBox->currentText();
-    m_deviceBox->clear();
-
-    // Character-device tty nodes are "system" entries; include AllEntries so the
-    // name filters match them reliably across Qt versions. Natural sort keeps
-    // ttyS2 before ttyS10.
-    const QDir dev(QStringLiteral("/dev"));
-    const QStringList filters{QStringLiteral("ttyUSB*"), QStringLiteral("ttyACM*"), QStringLiteral("ttyS*"), QStringLiteral("ttyAMA*")};
-    const auto flags = QDir::System | QDir::AllEntries | QDir::NoDotAndDotDot;
-    const QStringList found = dev.entryList(filters, flags, QDir::Name | QDir::LocaleAware);
-    for (const QString &name : found) {
-        m_deviceBox->addItem(QStringLiteral("/dev/") + name);
-    }
-
-    // Stable by-id symlinks for USB adapters, when present.
-    const QDir byId(QStringLiteral("/dev/serial/by-id"));
-    if (byId.exists()) {
-        for (const QString &name : byId.entryList(QDir::System | QDir::NoDotAndDotDot)) {
-            m_deviceBox->addItem(byId.filePath(name));
-        }
-    }
-
-    if (m_deviceBox->count() == 0) {
-        m_deviceBox->addItem(QStringLiteral("/dev/ttyUSB0"));
-    }
-    if (!previous.isEmpty()) {
-        m_deviceBox->setCurrentText(previous);
-    }
-}
-
-void MainWindow::toggleProxy() {
-    if (m_proxy->isRunning()) {
-        m_proxy->close();
-        return;
-    }
-
-    const int baud = m_baudBox->currentText().toInt();
-    if (baud <= 0) {
-        onError(QStringLiteral("Invalid baud rate: %1").arg(m_baudBox->currentText()));
-        return;
-    }
-
-    SerialConfig cfg;
-    cfg.device = m_deviceBox->currentText();
-    cfg.baud = baud;
-    cfg.dataBits = m_dataBitsBox->currentData().toInt();
-    cfg.parity = m_parityBox->currentData().toChar().toLatin1();
-    cfg.stopBits = m_stopBitsBox->currentData().toInt();
-    cfg.flow = static_cast<FlowControl>(m_flowBox->currentData().toInt());
-    cfg.symlinkPath = m_symlinkEdit->text().trimmed();
-    cfg.directMode = m_directCheck->isChecked();
-
-    m_lastConfig = cfg;  // remembered for auto-reconnect
-    if (m_reconnectTimer != nullptr) {
-        m_reconnectTimer->stop();
-    }
-
-    // Save configuration settings
-    {
-        QSettings settings;
-        settings.setValue(QStringLiteral("connection/device"), cfg.device);
-        settings.setValue(QStringLiteral("connection/baud"), cfg.baud);
-        settings.setValue(QStringLiteral("connection/dataBits"), cfg.dataBits);
-        settings.setValue(QStringLiteral("connection/parity"), m_parityBox->currentText());
-        settings.setValue(QStringLiteral("connection/stopBits"), cfg.stopBits);
-        settings.setValue(QStringLiteral("connection/flow"), m_flowBox->currentText());
-        settings.setValue(QStringLiteral("connection/symlink"), cfg.symlinkPath);
-        settings.setValue(QStringLiteral("connection/directMode"), cfg.directMode);
-    }
-
-    m_proxy->open(cfg);
-}
-
-void MainWindow::onStarted(const QString &slavePath) {
-    setRunningState(true);
-    if (m_directCheck->isChecked()) {
-        m_statusLabel->setText(QStringLiteral("Connected directly to: <b>%1</b>").arg(m_deviceBox->currentText()));
-    } else {
-        m_statusLabel->setText(QStringLiteral("Intercepting. Point the target app at: <b>%1</b>").arg(slavePath));
-    }
-    if (m_modemTimer != nullptr) {
-        m_modemTimer->start();
-        pollModemLines();
-    }
-}
-
-void MainWindow::onStopped() {
-    setRunningState(false);
-    m_statusLabel->setText(QStringLiteral("Stopped."));
-    if (m_modemTimer != nullptr) {
-        m_modemTimer->stop();
-    }
-}
-
-void MainWindow::onError(const QString &message) {
-    m_statusLabel->setText(QStringLiteral("<span style='color:#e57373'>%1</span>").arg(message));
-}
-
-void MainWindow::setRunningState(bool running) {
-    if (m_directCheck->isChecked()) {
-        m_startButton->setText(running ? QStringLiteral("Disconnect Direct") : QStringLiteral("Connect Direct"));
-    } else {
-        m_startButton->setText(running ? QStringLiteral("Stop Interception") : QStringLiteral("Start Interception"));
-    }
-    const std::initializer_list<QWidget *> controls = {m_deviceBox,   m_baudBox, m_dataBitsBox, m_parityBox,
-                                                       m_stopBitsBox, m_flowBox, m_symlinkEdit, m_directCheck};
-    for (QWidget *w : controls) {
-        if (w) {
-            w->setEnabled(!running);
-        }
-    }
-    if (running) {
-        m_toAppBtn->setEnabled(!m_directCheck->isChecked());
-    } else {
-        m_toAppBtn->setEnabled(true);
-    }
-}
-
-void MainWindow::applyFormats() {
-    m_console->setFormats(m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked());
-    QSettings settings;
-    settings.setValue(QStringLiteral("connection/showHex"), m_hexCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showDec"), m_decCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showBin"), m_binCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showAscii"), m_asciiCheck->isChecked());
-}
-
-void MainWindow::applyNewlineMode() {
-    const int idx = m_newlineModeBox->currentIndex();
-    const bool needsParam = idx != 0;
-    m_newlineParamEdit->setEnabled(needsParam);
-
-    auto mode = ConsoleView::NewlineMode::PerChunk;
-    int param = 0;
-    if (idx == 1) {
-        mode = ConsoleView::NewlineMode::Delimiter;
-        bool ok = false;
-        param = m_newlineParamEdit->text().toInt(&ok, 16);
-        if (!ok) {
-            param = 0x0A;
-        }
-    } else if (idx == 2) {
-        mode = ConsoleView::NewlineMode::FixedCount;
-        bool ok = false;
-        param = m_newlineParamEdit->text().toInt(&ok, 10);
-        if (!ok || param <= 0) {
-            param = 16;
-        }
-    } else if (idx == 3) {
-        mode = ConsoleView::NewlineMode::TLV;
-        // Parse TLV params: "hdrSize,lenOffset,lenSize"  e.g. "3,1,1"
-        const QStringList parts = m_newlineParamEdit->text().split(QLatin1Char(','));
-        int hdrSize = 3, lenOff = 1, lenSz = 1;
-        if (parts.size() >= 1) { bool ok; int v = parts[0].trimmed().toInt(&ok); if (ok && v > 0) hdrSize = v; }
-        if (parts.size() >= 2) { bool ok; int v = parts[1].trimmed().toInt(&ok); if (ok && v >= 0) lenOff  = v; }
-        if (parts.size() >= 3) { bool ok; int v = parts[2].trimmed().toInt(&ok); if (ok && v > 0) lenSz   = v; }
-        m_console->setTlvParams(hdrSize, lenOff, lenSz);
-    }
-    m_console->setNewlineMode(mode, param);
-}
-
-void MainWindow::updateCounts(qint64 rx, qint64 tx) {
-    m_countsLabel->setText(QStringLiteral("Rx: %1   Tx: %2").arg(rx).arg(tx));
-}
-
-QByteArray MainWindow::encodeInjection(bool &ok) {
-    ok = true;
-    QByteArray bytes;
-    const QString text = m_injectEdit->text();
-    int errPos = -1;
-    switch (m_injectFormatBox->currentIndex()) {
-        case 1:  // ASCII
-            bytes = text.toUtf8();
-            break;
-        case 2:  // DEC
-            if (!codec::parseDecString(text, bytes, &errPos)) {
-                onError(QStringLiteral("Invalid decimal token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-        case 3:  // BIN
-            if (!codec::parseBinString(text, bytes, &errPos)) {
-                onError(QStringLiteral("Invalid binary token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-        default:  // HEX
-            if (!codec::parseHexString(text, bytes, &errPos)) {
-                onError(QStringLiteral("Invalid hex token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-    }
-    switch (m_injectEndingBox->currentIndex()) {
-        case 1:
-            bytes.append('\r');
-            break;
-        case 2:
-            bytes.append('\n');
-            break;
-        case 3:
-            bytes.append('\r');
-            bytes.append('\n');
-            break;
-        default:
-            break;
-    }
-    return bytes;
-}
-
-void MainWindow::sendInjection(bool toDevice) {
-    m_repeatToDevice = toDevice;  // remembered so the repeat timer reuses it
-    bool ok = false;
-    const QByteArray bytes = encodeInjection(ok);
-    if (!ok || bytes.isEmpty()) {
-        return;
-    }
-    if (toDevice) {
-        m_proxy->injectToDevice(bytes);
-    } else {
-        m_proxy->injectToApp(bytes);
-    }
-    if (m_macroBar != nullptr) {
-        m_macroBar->pushHistory(bytes, toDevice);
-    }
-}
-
-void MainWindow::doFind(bool backward) {
-    const QString query = m_findEdit->text();
-    if (query.isEmpty()) {
-        return;
-    }
-    QTextDocument::FindFlags flags;
-    if (backward) {
-        flags |= QTextDocument::FindBackward;
-    }
-    if (!m_console->findQuery(query, flags)) {
-        // Wrap around to the other end and retry once.
-        QTextCursor cursor = m_console->textCursor();
-        cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
-        m_console->setTextCursor(cursor);
-        m_console->findQuery(query, flags);
-    }
-}
-
-void MainWindow::saveReceived() {
-    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save captured data"), QStringLiteral("aetherbus_capture.txt"),
-                                                      QStringLiteral("Text files (*.txt);;All files (*)"));
-    if (path.isEmpty()) {
-        return;
-    }
-    QFile file(path);
-    if (!file.open(QFile::WriteOnly | QFile::Text)) {
-        onError(QStringLiteral("Could not write %1: %2").arg(path, file.errorString()));
-        return;
-    }
-    file.write(m_console->toPlainText().toUtf8());
-    file.close();
-    m_statusLabel->setText(QStringLiteral("Saved capture to %1").arg(path));
-}
-
-void MainWindow::toggleLogging() {
-    if (m_console->isLogging()) {
-        m_console->stopLogging();
-        m_logBtn->setChecked(false);
-        m_statusLabel->setText(QStringLiteral("Logging stopped."));
-        return;
-    }
-    const QString path =
-        QFileDialog::getSaveFileName(this, QStringLiteral("Log captured data to file"), QStringLiteral("aetherbus_session.log"),
-                                     QStringLiteral("Log files (*.log *.txt);;All files (*)"));
-    if (path.isEmpty()) {
-        m_logBtn->setChecked(false);
-        return;
-    }
-    if (!m_console->startLogging(path)) {
-        m_logBtn->setChecked(false);
-        onError(QStringLiteral("Could not open log file: %1").arg(path));
-        return;
-    }
-    m_logBtn->setChecked(true);
-    m_statusLabel->setText(QStringLiteral("Logging to %1").arg(path));
-}
-
-void MainWindow::sendFile() {
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Send file to device"));
-    if (path.isEmpty()) {
-        return;
-    }
-    QFile file(path);
-    if (!file.open(QFile::ReadOnly)) {
-        onError(QStringLiteral("Could not read %1: %2").arg(path, file.errorString()));
-        return;
-    }
-    const QByteArray bytes = file.readAll();
-    file.close();
-    if (!bytes.isEmpty()) {
-        m_proxy->injectToDevice(bytes);
-        m_statusLabel->setText(QStringLiteral("Sent %1 bytes from %2").arg(bytes.size()).arg(path));
-    }
-}
-
-void MainWindow::pollModemLines() {
-    const PtyProxy::ModemLines lines = m_proxy->modemLines();
-    const auto paint = [](QLabel *led, bool on) {
-        led->setStyleSheet(on ? QStringLiteral("color:#66bb6a;font-weight:bold") : QStringLiteral("color:#555"));
-    };
-    paint(m_ctsLed, lines.cts);
-    paint(m_dsrLed, lines.dsr);
-    paint(m_dcdLed, lines.dcd);
-    paint(m_riLed, lines.ri);
-}
-
-void MainWindow::onDisconnected() {
-    setRunningState(false);
-    if (m_modemTimer != nullptr) {
-        m_modemTimer->stop();
-    }
-    if (m_reconnectCheck != nullptr && m_reconnectCheck->isChecked()) {
-        m_statusLabel->setText(QStringLiteral("<span style='color:#e57373'>Device lost — reconnecting…</span>"));
-        m_reconnectTimer->start(1000);
-    } else {
-        m_statusLabel->setText(QStringLiteral("<span style='color:#e57373'>Device disconnected.</span>"));
-    }
-}
-
-QWidget *MainWindow::buildSignalPanel(QWidget *parent) {
-    // Signal lines have been merged into buildConfigPanel.
-    // Return an empty placeholder widget so legacy call-sites compile.
-    return new QWidget(parent);
+void MainWindow::closeCurrentSession() {
+    closeSessionTab(m_tabWidget->currentIndex());
 }
 
 }  // namespace aether

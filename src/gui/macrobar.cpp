@@ -16,7 +16,7 @@ namespace aether {
 
 namespace {
 constexpr int kMaxHistory = 25;
-} // namespace
+}  // namespace
 
 MacroBar::MacroBar(QWidget *parent) : QWidget(parent) {
     auto *layout = new QHBoxLayout(this);
@@ -92,9 +92,7 @@ void MacroBar::editMacros() {
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("Edit macros"));
     auto *vbox = new QVBoxLayout(&dialog);
-    vbox->addWidget(new QLabel(
-        QStringLiteral("One macro per line, as <b>Name = hex bytes</b> (e.g. <tt>Reset = 1B 40</tt>)."),
-        &dialog));
+    vbox->addWidget(new QLabel(QStringLiteral("One macro per line, as <b>Name = hex bytes</b> (e.g. <tt>Reset = 1B 40</tt>)."), &dialog));
 
     auto *editor = new QPlainTextEdit(&dialog);
     QString text;
@@ -123,7 +121,7 @@ void MacroBar::editMacros() {
         const QString name = line.left(eq).trimmed();
         QByteArray bytes;
         if (name.isEmpty() || !codec::parseHexString(line.mid(eq + 1), bytes) || bytes.isEmpty()) {
-            continue; // silently skip malformed lines
+            continue;  // silently skip malformed lines
         }
         parsed.append({name, bytes});
     }
@@ -145,9 +143,8 @@ void MacroBar::pushHistory(const QByteArray &bytes, bool toDevice) {
         }
     }
     m_history.prepend(item);
-    m_historyBox->insertItem(0, QStringLiteral("%1 %2").arg(toDevice ? QStringLiteral("→Dev")
-                                                                     : QStringLiteral("→App"),
-                                                            codec::toHex(bytes)));
+    m_historyBox->insertItem(0,
+                             QStringLiteral("%1 %2").arg(toDevice ? QStringLiteral("→Dev") : QStringLiteral("→App"), codec::toHex(bytes)));
     m_historyBox->setCurrentIndex(0);
     while (m_history.size() > kMaxHistory) {
         m_history.removeLast();
@@ -164,4 +161,4 @@ void MacroBar::resendSelected() {
     emit send(item.bytes, item.toDevice);
 }
 
-} // namespace aether
+}  // namespace aether

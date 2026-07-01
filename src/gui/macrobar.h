@@ -69,4 +69,4 @@ private:
     QComboBox *m_historyBox = nullptr;
 };
 
-} // namespace aether
+}  // namespace aether

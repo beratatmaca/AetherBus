@@ -10,8 +10,13 @@
 #include <QString>
 
 #include <atomic>
+#include <cstdint>
+#include <deque>
+#include <memory>
 #include <mutex>
 #include <thread>
+
+class QFile;
 
 namespace aether {
 
@@ -108,6 +113,33 @@ public:
      */
     [[nodiscard]] bool sendBreak() const;
 
+    /**
+     * @brief Wire-traffic counters maintained by the backend independently of
+     *        the GUI render path, so they stay accurate even if the UI stalls.
+     */
+    struct Stats {
+        quint64 rx = 0;       ///< Bytes received from the physical UART.
+        quint64 tx = 0;       ///< Bytes received from the target app (PTY master).
+        quint64 dropped = 0;  ///< Bytes dropped after a write queue hit its ceiling.
+    };
+
+    /** @return A lock-free snapshot of the backend byte counters. */
+    [[nodiscard]] Stats stats() const;
+
+    /**
+     * @brief Begin recording all captured traffic to a pcap file
+     *        (@c LINKTYPE_RTAC_SERIAL), written straight from the worker thread.
+     * @param path Destination file (truncated if it exists).
+     * @return @c true if the file was opened; otherwise emits @ref errorOccurred().
+     */
+    bool startCapture(const QString &path);
+
+    /** @brief Stop and finalize the active pcap capture, if any. */
+    void stopCapture();
+
+    /** @return @c true while a pcap capture is being written. */
+    [[nodiscard]] bool isCapturing() const;
+
 signals:
     /** @brief Emitted for every captured transfer. @param chunk Timestamped, tagged bytes. */
     void chunkCaptured(const aether::CapturedChunk &chunk);
@@ -124,11 +156,49 @@ signals:
      */
     void disconnected();
 
+    /**
+     * @brief Emitted when the target application reconfigures the slave PTY line
+     *        settings and the backend has mirrored them onto the physical UART.
+     * @param baud     New baud rate (0 if it is a non-standard rate).
+     * @param dataBits New data bits (5..8).
+     * @param parity   New parity mode.
+     * @param stopBits New stop bits (1 or 2).
+     */
+    void lineReconfigured(int baud, int dataBits, aether::Parity parity, int stopBits);
+
+    /**
+     * @brief Emitted (throttled to ~1 Hz) when a write queue overflowed and bytes
+     *        were dropped because the peer stopped draining.
+     * @param dir          Stream whose destination is backlogged.
+     * @param droppedTotal Cumulative dropped-byte count since @ref open().
+     */
+    void writeStalled(aether::Direction dir, quint64 droppedTotal);
+
 private:
+    /// A pending-write FIFO for one output descriptor, drained on @c POLLOUT.
+    struct OutQueue {
+        std::deque<QByteArray> chunks;  ///< Queued payloads awaiting write.
+        std::size_t frontOffset = 0;    ///< Bytes of chunks.front() already written.
+        std::size_t queued = 0;         ///< Total unwritten bytes across the queue.
+    };
+
     void runLoop();                                     // worker-thread body
     bool configureTermios(const SerialConfig &config);  // apply baud/bits/parity
+    void mirrorSlaveTermios();                          // copy slave-PTY line settings to the UART
     void wakeLoop() const;                              // poke the self-pipe to break poll()
     void teardownDescriptors();
+    // Enqueue bytes for a destination fd and drain what it can accept now. Drops
+    // (and accounts) when the queue is over its ceiling; returns false on drop or
+    // a fatal write error. @p dir tags which stream stalled.
+    bool forward(int fd, OutQueue &queue, Direction dir, const QByteArray &data);
+    // Write as much of @p queue to @p fd as it accepts without blocking. Caller
+    // must hold @ref m_writeMutex. Returns false on a fatal write error.
+    static bool drainLocked(int fd, OutQueue &queue);
+    // Append one pcap record for @p data; no-op when no capture is active.
+    void writePcapPacket(qint64 timestampMs, Direction dir, const QByteArray &data);
+
+    /// Upper bound on per-destination buffered bytes before new writes are dropped.
+    static constexpr std::size_t kMaxQueueBytes = std::size_t{8} * 1024 * 1024;
 
     int m_uartFd = -1;       // physical device
     int m_masterFd = -1;     // PTY master
@@ -139,10 +209,27 @@ private:
     QString m_symlinkPath;  // created symlink, if any (unlinked on close)
 
     std::thread m_worker;
-    std::mutex m_writeMutex;  // serializes all writes to m_uartFd / m_masterFd
+    std::mutex m_writeMutex;   // guards the out-queues and the stall timestamp
+    OutQueue m_uartOut;        // bytes bound for the physical UART (Tx / inject-to-device)
+    OutQueue m_masterOut;      // bytes bound for the PTY master (Rx / inject-to-app)
+    qint64 m_lastStallMs = 0;  // last writeStalled() emission (guarded by m_writeMutex)
+    std::atomic<std::uint64_t> m_rxBytes{0};
+    std::atomic<std::uint64_t> m_txBytes{0};
+    std::atomic<std::uint64_t> m_droppedBytes{0};
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_directMode{false};
+    std::atomic<bool> m_ioFailed{false};  // set by a fatal write; runLoop breaks on it
+
+    // Last line settings mirrored from the slave (worker-thread only), used to
+    // suppress duplicate lineReconfigured() emissions.
+    int m_lastBaud = 0;
+    int m_lastDataBits = 0;
+    Parity m_lastParity = Parity::None;
+    int m_lastStopBits = 0;
+
+    mutable std::mutex m_captureMutex;     // guards m_captureFile
+    std::unique_ptr<QFile> m_captureFile;  // active pcap capture, or null
 };
 
 }  // namespace aether

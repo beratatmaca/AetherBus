@@ -82,6 +82,10 @@ set(AETHER_CORE_SOURCES
     src/core/serial_types.h
     src/core/format_codec.cpp
     src/core/format_codec.h
+    src/core/stats_calculator.cpp
+    src/core/stats_calculator.h
+    src/core/capture_replay.cpp
+    src/core/capture_replay.h
 )
 if(UNIX)
     list(APPEND AETHER_CORE_SOURCES
@@ -99,12 +103,24 @@ target_include_directories(aether_core PUBLIC
 add_library(aether_gui STATIC
     src/gui/mainwindow.cpp
     src/gui/mainwindow.h
+    src/gui/session_widget.cpp
+    src/gui/session_widget.h
+    src/gui/config_panel.cpp
+    src/gui/config_panel.h
+    src/gui/signal_panel.cpp
+    src/gui/signal_panel.h
+    src/gui/injection_panel.cpp
+    src/gui/injection_panel.h
     src/gui/consoleview.cpp
     src/gui/consoleview.h
     src/gui/macrobar.cpp
     src/gui/macrobar.h
     src/gui/theme_controller.cpp
     src/gui/theme_controller.h
+    src/gui/throughput_chart.cpp
+    src/gui/throughput_chart.h
+    src/gui/statspanel.cpp
+    src/gui/statspanel.h
     src/gui/resources.qrc          # compiled-in icon & assets
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
@@ -124,7 +140,7 @@ if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     enable_testing()
     add_executable(bus_test tests/bus_test.cpp)
-    target_link_libraries(bus_test PRIVATE aether_core Qt6::Core Qt6::Test)
+    target_link_libraries(bus_test PRIVATE aether_gui Qt6::Widgets Qt6::Core Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
 endif()
 

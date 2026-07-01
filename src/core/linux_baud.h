@@ -22,4 +22,4 @@ namespace aether {
  */
 bool setCustomBaud(int fd, int baud);
 
-} // namespace aether
+}  // namespace aether

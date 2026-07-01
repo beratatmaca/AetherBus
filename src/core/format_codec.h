@@ -85,4 +85,4 @@ bool parseDecString(const QString &text, QByteArray &out, int *errorPos = nullpt
  */
 bool parseBinString(const QString &text, QByteArray &out, int *errorPos = nullptr);
 
-} // namespace aether::codec
+}  // namespace aether::codec
