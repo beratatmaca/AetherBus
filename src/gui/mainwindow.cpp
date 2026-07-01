@@ -145,9 +145,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         body->setMaximumHeight(160);
         root->addWidget(body);
 
-        // OK button
-        auto *btns = new QDialogButtonBox(QDialogButtonBox::Ok, dlg);
-        connect(btns, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+        // Buttons
+        auto *btns = new QDialogButtonBox(dlg);
+        auto *okBtn = btns->addButton(QDialogButtonBox::Ok);
+        auto *qtBtn = btns->addButton(tr("About &Qt"), QDialogButtonBox::HelpRole);
+        connect(okBtn, &QPushButton::clicked, dlg, &QDialog::accept);
+        connect(qtBtn, &QPushButton::clicked, this, &MainWindow::showAboutQt);
         root->addWidget(btns);
 
         dlg->exec();
@@ -236,6 +239,10 @@ void MainWindow::closeSessionTab(int index) {
 
 void MainWindow::closeCurrentSession() {
     closeSessionTab(m_tabWidget->currentIndex());
+}
+
+void MainWindow::showAboutQt() {
+    QApplication::aboutQt();
 }
 
 }  // namespace aether

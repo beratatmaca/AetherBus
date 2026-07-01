@@ -19,6 +19,7 @@ private slots:
     void addNewSession();
     void closeSessionTab(int index);
     void closeCurrentSession();
+    void showAboutQt();
 
 private:
     void buildUi();

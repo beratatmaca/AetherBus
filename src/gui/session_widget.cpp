@@ -185,7 +185,7 @@ void SessionWidget::stopInterception() {
 QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(6, 0, 6, 0);
     layout->setSpacing(6);
 
     m_console = new ConsoleView(panel);
@@ -300,7 +300,6 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     m_captureBtn = makeAction(QStringLiteral("Capture"),
                               QStringLiteral("Record raw traffic to a pcap file (opens in Wireshark) straight from the backend"));
     m_captureBtn->setCheckable(true);
-    m_captureBtn->setProperty("primaryAction", true);
     connect(m_captureBtn, &QPushButton::clicked, this, &SessionWidget::toggleCapture);
     m_replayBtn = makeAction(QStringLiteral("Replay"),
                              QStringLiteral("Open a captured pcap file and replay it through the console with original timing"));
@@ -342,9 +341,9 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     findNextBtn->setFixedWidth(32);
     connect(findPrevBtn, &QPushButton::clicked, this, [this] { doFind(true); });
     connect(findNextBtn, &QPushButton::clicked, this, [this] { doFind(false); });
-    row2->addWidget(m_findEdit);
     row2->addWidget(findPrevBtn);
     row2->addWidget(findNextBtn);
+    row2->addWidget(m_findEdit);
 
     // Live match counter, updated on every highlight pass.
     auto *matchCountLabel = new QLabel(panel);
