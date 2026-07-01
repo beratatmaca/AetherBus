@@ -42,7 +42,7 @@ InjectionPanel::InjectionPanel(QWidget *parent) : QWidget(parent) {
     m_toAppBtn->setToolTip(QStringLiteral("Inject data to target virtual PTY interface (Rx)"));
 
     m_fileBtn = new QPushButton(QStringLiteral("File…"), this);
-    m_fileBtn->setToolTip(QStringLiteral("Send the raw contents of a file to the device"));
+    m_fileBtn->setToolTip(QStringLiteral("Select a file and send all bytes to the device"));
 
     connect(m_toDeviceBtn, &QPushButton::clicked, this, [this] { sendInjection(true); });
     connect(m_toAppBtn, &QPushButton::clicked, this, [this] { sendInjection(false); });

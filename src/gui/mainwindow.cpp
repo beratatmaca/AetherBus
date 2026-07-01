@@ -162,12 +162,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     qApp->setWindowIcon(windowIcon());  // propagate to taskbar / dock
 
     const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect();
-    QSize preferredSize(1440, 900);
+    QSize preferredSize(1650, 950);
+    int minWidth = 1450;
+    int minHeight = 850;
     if (available.isValid()) {
-        preferredSize.setWidth(qMin(preferredSize.width(), qMax(1180, available.width() - 80)));
-        preferredSize.setHeight(qMin(preferredSize.height(), qMax(760, available.height() - 80)));
+        minWidth = qMin(1450, available.width() - 80);
+        minHeight = qMin(850, available.height() - 80);
+        preferredSize.setWidth(qMin(preferredSize.width(), qMax(minWidth, available.width() - 80)));
+        preferredSize.setHeight(qMin(preferredSize.height(), qMax(minHeight, available.height() - 80)));
     }
-    setMinimumSize(1180, 760);
+    setMinimumSize(minWidth, minHeight);
     resize(preferredSize);
 
     // Add initial session tab

@@ -81,6 +81,7 @@ private:
     QPushButton *m_binCheck = nullptr;
     QPushButton *m_asciiCheck = nullptr;
     QComboBox *m_newlineModeBox = nullptr;
+    QComboBox *m_newlineFormatBox = nullptr;
     QLineEdit *m_newlineParamEdit = nullptr;
     QPushButton *m_autoScrollCheck = nullptr;
     QPushButton *m_pauseCheck = nullptr;

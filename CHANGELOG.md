@@ -8,6 +8,12 @@ and this project adheres to a `MAJOR.MINOR.PATCH.BUILD` version scheme (see the
 is derived automatically from the git commit count and is omitted here; entries
 are grouped by the semantic `MAJOR.MINOR.PATCH` base recorded in [`VERSION`](VERSION).
 
+## [1.0.2]
+
+### Changed
+
+- Refactored split/newline mode selection with 6 distinct modes (CR, LF, CR+LF, every packet, every N bytes, header byte array) and new format selector for header byte array detection (HEX, ASCII, DEC, BIN). Removed TLV mode and simplified naming.
+
 ## [1.0.1]
 
 ### Added

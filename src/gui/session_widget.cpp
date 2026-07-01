@@ -239,23 +239,38 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     row1->addWidget(makeDivider());
     row1->addWidget(makeSectionLabel(QStringLiteral("Split")));
     m_newlineModeBox = new QComboBox(panel);
-    m_newlineModeBox->addItem(QStringLiteral("Per chunk"));
-    m_newlineModeBox->addItem(QStringLiteral("On delimiter (hex)"));
-    m_newlineModeBox->addItem(QStringLiteral("Every N bytes"));
-    m_newlineModeBox->addItem(QStringLiteral("TLV header"));
-    m_newlineModeBox->addItem(QStringLiteral("CR / LF / CR+LF"));
-    m_newlineModeBox->setCurrentIndex(1);
+    m_newlineModeBox->addItem(QStringLiteral("CR"), 0);
+    m_newlineModeBox->addItem(QStringLiteral("LF"), 1);
+    m_newlineModeBox->addItem(QStringLiteral("CR+LF"), 2);
+    m_newlineModeBox->addItem(QStringLiteral("Every packet/chunk"), 3);
+    m_newlineModeBox->addItem(QStringLiteral("Every N bytes"), 4);
+    m_newlineModeBox->addItem(QStringLiteral("Header byte array"), 5);
+    m_newlineModeBox->setCurrentIndex(2);
     m_newlineModeBox->setToolTip(
-        QStringLiteral("Select how incoming streams are split into lines.\n"
-                       "TLV: enter header params as hdrSize,lenOffset,lenSize (e.g. 3,1,1)\n"
-                       "CR/LF/CR+LF: split on any carriage-return or line-feed"));
-    m_newlineParamEdit = new QLineEdit(QStringLiteral("0A"), panel);
-    m_newlineParamEdit->setFixedWidth(80);
-    m_newlineParamEdit->setToolTip(
-        QStringLiteral("Delimiter byte (hex), N bytes, or TLV params (hdrSize,lenOffset,lenSize)\nNot used in CR/LF mode"));
+        QStringLiteral("Split incoming streams into lines by:\n"
+                       "CR/LF/CR+LF: carriage return, line feed, or both\n"
+                       "Every packet/chunk: one line per captured chunk\n"
+                       "Every N bytes: fixed byte count per line\n"
+                       "Header byte array: split when header pattern is found"));
+
+    m_newlineParamEdit = new QLineEdit(panel);
+    m_newlineParamEdit->setFixedWidth(100);
+    m_newlineParamEdit->setPlaceholderText(QStringLiteral("param…"));
+
+    m_newlineFormatBox = new QComboBox(panel);
+    m_newlineFormatBox->addItem(QStringLiteral("HEX"));
+    m_newlineFormatBox->addItem(QStringLiteral("ASCII"));
+    m_newlineFormatBox->addItem(QStringLiteral("DEC"));
+    m_newlineFormatBox->addItem(QStringLiteral("BIN"));
+    m_newlineFormatBox->setFixedWidth(60);
+    m_newlineFormatBox->setToolTip(QStringLiteral("Data format for header pattern input"));
+    m_newlineFormatBox->hide();
+
     connect(m_newlineModeBox, &QComboBox::currentIndexChanged, this, &SessionWidget::applyNewlineMode);
     connect(m_newlineParamEdit, &QLineEdit::editingFinished, this, &SessionWidget::applyNewlineMode);
+    connect(m_newlineFormatBox, &QComboBox::currentIndexChanged, this, &SessionWidget::applyNewlineMode);
     row1->addWidget(m_newlineModeBox);
+    row1->addWidget(m_newlineFormatBox);
     row1->addWidget(m_newlineParamEdit);
 
     row1->addStretch(1);
@@ -442,53 +457,78 @@ void SessionWidget::applyFormats() {
 
 void SessionWidget::applyNewlineMode() {
     const int idx = m_newlineModeBox->currentIndex();
-    const bool needsParam = (idx == 1 || idx == 2 || idx == 3);
-    m_newlineParamEdit->setEnabled(needsParam);
+
+    // Show/hide format selector only for header byte array mode
+    m_newlineFormatBox->setVisible(idx == 5);
+
+    // Show/hide param edit for modes that need it
+    const bool needsParam = (idx == 4 || idx == 5);
+    m_newlineParamEdit->setVisible(needsParam);
 
     auto mode = ConsoleView::NewlineMode::PerChunk;
     int param = 0;
-    if (idx == 1) {
-        mode = ConsoleView::NewlineMode::Delimiter;
-        bool ok = false;
-        param = m_newlineParamEdit->text().toInt(&ok, 16);
-        if (!ok) {
-            param = 0x0A;
-        }
-    } else if (idx == 2) {
-        mode = ConsoleView::NewlineMode::FixedCount;
-        bool ok = false;
-        param = m_newlineParamEdit->text().toInt(&ok, 10);
-        if (!ok || param <= 0) {
-            param = 16;
-        }
-    } else if (idx == 3) {
-        mode = ConsoleView::NewlineMode::TLV;
-        const QStringList parts = m_newlineParamEdit->text().split(QLatin1Char(','));
-        int hdrSize = 3;
-        int lenOff = 1;
-        int lenSz = 1;
-        if (!parts.empty()) {
-            bool ok;
-            int v = parts[0].trimmed().toInt(&ok);
-            if (ok && v > 0)
-                hdrSize = v;
-        }
-        if (parts.size() >= 2) {
-            bool ok;
-            int v = parts[1].trimmed().toInt(&ok);
-            if (ok && v >= 0)
-                lenOff = v;
-        }
-        if (parts.size() >= 3) {
-            bool ok;
-            int v = parts[2].trimmed().toInt(&ok);
-            if (ok && v > 0)
-                lenSz = v;
-        }
-        m_console->setTlvParams(hdrSize, lenOff, lenSz);
-    } else if (idx == 4) {
-        mode = ConsoleView::NewlineMode::CrLf;
+
+    switch (idx) {
+        case 0:  // CR split
+            mode = ConsoleView::NewlineMode::CrLf;
+            param = '\r';
+            break;
+        case 1:  // LF split
+            mode = ConsoleView::NewlineMode::CrLf;
+            param = '\n';
+            break;
+        case 2:  // CR+LF split
+            mode = ConsoleView::NewlineMode::CrLf;
+            param = 0;  // Both
+            break;
+        case 3:  // Every packet/chunk
+            mode = ConsoleView::NewlineMode::PerChunk;
+            break;
+        case 4:  // Every N bytes
+            mode = ConsoleView::NewlineMode::FixedCount;
+            {
+                bool ok = false;
+                param = m_newlineParamEdit->text().toInt(&ok, 10);
+                if (!ok || param <= 0) {
+                    param = 16;
+                    m_newlineParamEdit->setText(QStringLiteral("16"));
+                }
+            }
+            break;
+        case 5:  // Header byte array
+            mode = ConsoleView::NewlineMode::Delimiter;
+            {
+                const QString text = m_newlineParamEdit->text();
+                bool ok = false;
+                int headerByte = 0;
+
+                // Parse based on selected format
+                switch (m_newlineFormatBox->currentIndex()) {
+                    case 0:  // HEX
+                        headerByte = text.toInt(&ok, 16);
+                        break;
+                    case 1:  // ASCII
+                        if (!text.isEmpty()) {
+                            headerByte = static_cast<unsigned char>(text.at(0).toLatin1());
+                            ok = true;
+                        }
+                        break;
+                    case 2:  // DEC
+                        headerByte = text.toInt(&ok, 10);
+                        break;
+                    case 3:  // BIN
+                        headerByte = text.toInt(&ok, 2);
+                        break;
+                    default:
+                        break;
+                }
+                param = ok ? (headerByte & 0xFF) : 0xAA;
+            }
+            break;
+        default:
+            break;
     }
+
     m_console->setNewlineMode(mode, param);
 }
 
