@@ -37,6 +37,7 @@ private slots:
 
     // GUI Tests
     void guiConsoleView();
+    void guiSearchModes();
     void guiMacroBar();
     void guiThemeController();
     void guiMainWindow();
