@@ -40,6 +40,7 @@ void StatsPanel::buildUi() {
     scrollArea->setFrameShape(QFrame::NoFrame);
 
     auto *content = new QWidget(scrollArea);
+    content->setMinimumHeight(330);
     auto *layout = new QVBoxLayout(content);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);

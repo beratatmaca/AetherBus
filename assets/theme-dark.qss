@@ -96,6 +96,65 @@ QPushButton:pressed {
     color: #ffffff;
 }
 
+QPushButton[toolbarToggle="true"],
+QPushButton[toolbarAction="true"] {
+    min-height: 24px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    background-color: #191b1f;
+    border: 1px solid #30343b;
+    color: #cfd6df;
+    font-weight: 600;
+}
+
+QPushButton[toolbarToggle="true"]:hover,
+QPushButton[toolbarAction="true"]:hover {
+    background-color: #22262d;
+    border-color: #48515f;
+}
+
+QPushButton[toolbarToggle="true"]:checked,
+QPushButton[toolbarAction="true"]:checked {
+    background-color: #0f4f8a;
+    border-color: #2d8bd8;
+    color: #ffffff;
+}
+
+QPushButton[toolbarAction="true"][primaryAction="true"] {
+    background-color: #123654;
+    border-color: #2d6f9f;
+    color: #e8f5ff;
+}
+
+QPushButton[toolbarAction="true"][primaryAction="true"]:checked {
+    background-color: #8a3b12;
+    border-color: #ff9f43;
+    color: #fff7ed;
+}
+
+QLabel#toolbarSectionLabel {
+    color: #7f8b99;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 2px;
+}
+
+QLabel#consoleCountsLabel,
+QLabel#consoleSelectionLabel {
+    color: #d8dee8;
+    padding: 3px 8px;
+    border: 1px solid #30343b;
+    border-radius: 5px;
+    background-color: #17191d;
+}
+
+QFrame#toolbarDivider {
+    color: #30343b;
+    background-color: #30343b;
+    max-width: 1px;
+    margin: 4px 4px;
+}
+
 /* ComboBoxes */
 QComboBox {
     background-color: #1e1e1e;

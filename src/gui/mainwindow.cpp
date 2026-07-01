@@ -14,6 +14,8 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QTabWidget>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -156,7 +158,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
     qApp->setWindowIcon(windowIcon());  // propagate to taskbar / dock
 
-    resize(1000, 720);
+    const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect();
+    QSize preferredSize(1440, 900);
+    if (available.isValid()) {
+        preferredSize.setWidth(qMin(preferredSize.width(), qMax(1180, available.width() - 80)));
+        preferredSize.setHeight(qMin(preferredSize.height(), qMax(760, available.height() - 80)));
+    }
+    setMinimumSize(1180, 760);
+    resize(preferredSize);
 
     // Add initial session tab
     addNewSession();

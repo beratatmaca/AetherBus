@@ -5,7 +5,6 @@
 #include <QWidget>
 
 class QTimer;
-class QCheckBox;
 class QComboBox;
 class QLineEdit;
 class QLabel;
@@ -77,17 +76,17 @@ private:
     SignalPanel *m_signalPanel = nullptr;
     InjectionPanel *m_injectPanel = nullptr;
 
-    QCheckBox *m_hexCheck = nullptr;
-    QCheckBox *m_decCheck = nullptr;
-    QCheckBox *m_binCheck = nullptr;
-    QCheckBox *m_asciiCheck = nullptr;
+    QPushButton *m_hexCheck = nullptr;
+    QPushButton *m_decCheck = nullptr;
+    QPushButton *m_binCheck = nullptr;
+    QPushButton *m_asciiCheck = nullptr;
     QComboBox *m_newlineModeBox = nullptr;
     QLineEdit *m_newlineParamEdit = nullptr;
-    QCheckBox *m_autoScrollCheck = nullptr;
-    QCheckBox *m_pauseCheck = nullptr;
+    QPushButton *m_autoScrollCheck = nullptr;
+    QPushButton *m_pauseCheck = nullptr;
     QLabel *m_countsLabel = nullptr;
     QLineEdit *m_findEdit = nullptr;
-    QCheckBox *m_tsCheck = nullptr;
+    QPushButton *m_tsCheck = nullptr;
 
     QLabel *m_selLabel = nullptr;
     QPushButton *m_logBtn = nullptr;

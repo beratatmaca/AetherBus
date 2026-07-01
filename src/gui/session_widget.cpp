@@ -10,12 +10,12 @@
 #include "gui/signal_panel.h"
 #include "gui/injection_panel.h"
 
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFile>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -139,6 +139,7 @@ void SessionWidget::buildUi() {
     // layout (no inner splitter), so the panels stay compact at the top rather
     // than floating apart. Stats takes the remaining vertical space.
     auto *leftColumn = new QWidget(mainSplitter);
+    leftColumn->setMinimumWidth(320);
     auto *leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(6);
@@ -151,13 +152,14 @@ void SessionWidget::buildUi() {
 
     m_statsPanel = new StatsPanel(leftColumn);
     m_statsPanel->setActiveCalculator(&m_stats);
+    m_statsPanel->setMinimumHeight(360);
     leftLayout->addWidget(m_statsPanel, 1);
 
     mainSplitter->addWidget(leftColumn);
     mainSplitter->addWidget(buildConsolePanel(this));
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
-    mainSplitter->setSizes({300, 700});
+    mainSplitter->setSizes({340, 1100});
 
     outer->addWidget(mainSplitter);
 }
@@ -184,25 +186,58 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(6);
 
     m_console = new ConsoleView(panel);
 
-    // --- Toolbar row 1: formats + newline rule + control chars --------------
+    const auto markToolbarButton = [](QPushButton *button, const char *kind) {
+        button->setProperty(kind, true);
+        button->setCursor(Qt::PointingHandCursor);
+    };
+    const auto makeToggle = [&](const QString &text, const QString &tooltip) {
+        auto *button = new QPushButton(text, panel);
+        button->setCheckable(true);
+        button->setToolTip(tooltip);
+        markToolbarButton(button, "toolbarToggle");
+        return button;
+    };
+    const auto makeAction = [&](const QString &text, const QString &tooltip) {
+        auto *button = new QPushButton(text, panel);
+        button->setToolTip(tooltip);
+        markToolbarButton(button, "toolbarAction");
+        return button;
+    };
+    const auto makeDivider = [&]() {
+        auto *line = new QFrame(panel);
+        line->setFrameShape(QFrame::VLine);
+        line->setObjectName(QStringLiteral("toolbarDivider"));
+        return line;
+    };
+    const auto makeSectionLabel = [&](const QString &text) {
+        auto *label = new QLabel(text, panel);
+        label->setObjectName(QStringLiteral("toolbarSectionLabel"));
+        return label;
+    };
+
+    // --- Toolbar row 1: format segments + line splitting --------------------
     auto *row1 = new QHBoxLayout();
-    m_hexCheck = new QCheckBox(QStringLiteral("HEX"), panel);
-    m_decCheck = new QCheckBox(QStringLiteral("DEC"), panel);
-    m_binCheck = new QCheckBox(QStringLiteral("BIN"), panel);
-    m_asciiCheck = new QCheckBox(QStringLiteral("ASCII"), panel);
+    row1->setSpacing(6);
+    row1->addWidget(makeSectionLabel(QStringLiteral("View")));
+
+    m_hexCheck = makeToggle(QStringLiteral("HEX"), QStringLiteral("Show hexadecimal bytes"));
+    m_decCheck = makeToggle(QStringLiteral("DEC"), QStringLiteral("Show decimal byte values"));
+    m_binCheck = makeToggle(QStringLiteral("BIN"), QStringLiteral("Show binary byte values"));
+    m_asciiCheck = makeToggle(QStringLiteral("ASCII"), QStringLiteral("Show ASCII gutter"));
     m_hexCheck->setChecked(true);
     m_asciiCheck->setChecked(true);
-    for (QCheckBox *c : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
-        c->setToolTip(QStringLiteral("Toggle this format layered display inside each byte cell"));
-        connect(c, &QCheckBox::toggled, this, &SessionWidget::applyFormats);
-        row1->addWidget(c);
+    for (QPushButton *button : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
+        button->setProperty("segmentButton", true);
+        connect(button, &QPushButton::toggled, this, &SessionWidget::applyFormats);
+        row1->addWidget(button);
     }
 
-    row1->addSpacing(12);
-    row1->addWidget(new QLabel(QStringLiteral("Newline:"), panel));
+    row1->addWidget(makeDivider());
+    row1->addWidget(makeSectionLabel(QStringLiteral("Split")));
     m_newlineModeBox = new QComboBox(panel);
     m_newlineModeBox->addItem(QStringLiteral("Per chunk"));
     m_newlineModeBox->addItem(QStringLiteral("On delimiter (hex)"));
@@ -226,52 +261,50 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     row1->addStretch(1);
     layout->addLayout(row1);
 
-    // --- Toolbar row 2: scroll/pause + counters + actions + find ------------
+    // --- Toolbar row 2: flow controls + actions + search --------------------
     auto *row2 = new QHBoxLayout();
-    m_autoScrollCheck = new QCheckBox(QStringLiteral("Autoscroll"), panel);
+    row2->setSpacing(6);
+    row2->addWidget(makeSectionLabel(QStringLiteral("Flow")));
+
+    m_autoScrollCheck = makeToggle(QStringLiteral("Auto"), QStringLiteral("Automatically scroll to the end of the log"));
     m_autoScrollCheck->setChecked(true);
-    m_autoScrollCheck->setToolTip(QStringLiteral("Automatically scroll to the end of the log"));
-    connect(m_autoScrollCheck, &QCheckBox::toggled, m_console, &ConsoleView::setAutoScroll);
-    m_pauseCheck = new QCheckBox(QStringLiteral("Pause"), panel);
-    m_pauseCheck->setToolTip(QStringLiteral("Suspend UI viewport updates"));
-    connect(m_pauseCheck, &QCheckBox::toggled, m_console, &ConsoleView::setPaused);
+    connect(m_autoScrollCheck, &QPushButton::toggled, m_console, &ConsoleView::setAutoScroll);
+    m_pauseCheck = makeToggle(QStringLiteral("Pause"), QStringLiteral("Suspend UI viewport updates"));
+    connect(m_pauseCheck, &QPushButton::toggled, m_console, &ConsoleView::setPaused);
+    m_tsCheck = makeToggle(QStringLiteral("Time"), QStringLiteral("Show or hide the [HH:mm:ss.zzz] timestamp prefix on each line"));
+    m_tsCheck->setChecked(true);
+    connect(m_tsCheck, &QPushButton::toggled, m_console, &ConsoleView::setShowTimestamps);
     row2->addWidget(m_autoScrollCheck);
     row2->addWidget(m_pauseCheck);
+    row2->addWidget(m_tsCheck);
 
-    row2->addSpacing(12);
+    row2->addWidget(makeDivider());
     m_countsLabel = new QLabel(QStringLiteral("Rx: 0  Tx: 0"), panel);
+    m_countsLabel->setObjectName(QStringLiteral("consoleCountsLabel"));
     m_countsLabel->setToolTip(QStringLiteral("Cumulative byte counts. Rate updates every second."));
     row2->addWidget(m_countsLabel);
-    auto *resetBtn = new QPushButton(QStringLiteral("Reset"), panel);
+    auto *resetBtn = makeAction(QStringLiteral("Reset"), QStringLiteral("Clear Tx/Rx byte counters"));
     resetBtn->setToolTip(QStringLiteral("Clear Tx/Rx byte counters"));
     connect(resetBtn, &QPushButton::clicked, m_console, &ConsoleView::resetCounts);
     row2->addWidget(resetBtn);
 
-    row2->addSpacing(12);
-    m_tsCheck = new QCheckBox(QStringLiteral("Timestamps"), panel);
-    m_tsCheck->setChecked(true);
-    m_tsCheck->setToolTip(QStringLiteral("Show or hide the [HH:mm:ss.zzz] timestamp prefix on each line"));
-    connect(m_tsCheck, &QCheckBox::toggled, m_console, &ConsoleView::setShowTimestamps);
-    row2->addWidget(m_tsCheck);
-
-    row2->addSpacing(12);
-    auto *clearBtn = new QPushButton(QStringLiteral("Clear"), panel);
-    clearBtn->setToolTip(QStringLiteral("Clear all text from viewport and raw history cache"));
+    row2->addWidget(makeDivider());
+    row2->addWidget(makeSectionLabel(QStringLiteral("Actions")));
+    auto *clearBtn = makeAction(QStringLiteral("Clear"), QStringLiteral("Clear all text from viewport and raw history cache"));
     connect(clearBtn, &QPushButton::clicked, m_console, &ConsoleView::clearConsole);
-    auto *saveBtn = new QPushButton(QStringLiteral("Save…"), panel);
-    saveBtn->setToolTip(QStringLiteral("Export all currently captured plain text to a file"));
+    auto *saveBtn = makeAction(QStringLiteral("Save"), QStringLiteral("Export all currently captured plain text to a file"));
     connect(saveBtn, &QPushButton::clicked, this, &SessionWidget::saveReceived);
-    m_logBtn = new QPushButton(QStringLiteral("Log…"), panel);
+    m_logBtn = makeAction(QStringLiteral("Log"), QStringLiteral("Continuously append every line to a file"));
     m_logBtn->setCheckable(true);
-    m_logBtn->setToolTip(QStringLiteral("Continuously append every line to a file"));
     connect(m_logBtn, &QPushButton::clicked, this, &SessionWidget::toggleLogging);
-    m_captureBtn = new QPushButton(QStringLiteral("Capture…"), panel);
+    m_captureBtn = makeAction(QStringLiteral("Capture"),
+                              QStringLiteral("Record raw traffic to a pcap file (opens in Wireshark) straight from the backend"));
     m_captureBtn->setCheckable(true);
-    m_captureBtn->setToolTip(QStringLiteral("Record raw traffic to a pcap file (opens in Wireshark) straight from the backend"));
+    m_captureBtn->setProperty("primaryAction", true);
     connect(m_captureBtn, &QPushButton::clicked, this, &SessionWidget::toggleCapture);
-    m_replayBtn = new QPushButton(QStringLiteral("Replay…"), panel);
+    m_replayBtn = makeAction(QStringLiteral("Replay"),
+                             QStringLiteral("Open a captured pcap file and replay it through the console with original timing"));
     m_replayBtn->setCheckable(true);
-    m_replayBtn->setToolTip(QStringLiteral("Open a captured pcap file and replay it through the console with original timing"));
     connect(m_replayBtn, &QPushButton::clicked, this, &SessionWidget::toggleReplay);
     row2->addWidget(clearBtn);
     row2->addWidget(saveBtn);
@@ -279,12 +312,13 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     row2->addWidget(m_captureBtn);
     row2->addWidget(m_replayBtn);
 
-    row2->addSpacing(12);
+    row2->addWidget(makeDivider());
     m_selLabel = new QLabel(QStringLiteral("Sel: 0"), panel);
+    m_selLabel->setObjectName(QStringLiteral("consoleSelectionLabel"));
     row2->addWidget(m_selLabel);
 
     row2->addStretch(1);
-    row2->addWidget(new QLabel(QStringLiteral("Find:"), panel));
+    row2->addWidget(makeSectionLabel(QStringLiteral("Find")));
 
     // Mode box: how the Find text is interpreted. Order matches ConsoleView::SearchMode.
     auto *searchModeBox = new QComboBox(panel);
@@ -302,12 +336,10 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
         QStringLiteral("Search the console history. Use the mode box to search by text or HEX / DEC / BIN byte values."));
     connect(m_findEdit, &QLineEdit::returnPressed, this, [this] { doFind(false); });
     connect(m_findEdit, &QLineEdit::textChanged, m_console, &ConsoleView::highlightSearchText);
-    auto *findPrevBtn = new QPushButton(QStringLiteral("◀"), panel);
-    auto *findNextBtn = new QPushButton(QStringLiteral("▶"), panel);
+    auto *findPrevBtn = makeAction(QStringLiteral("◀"), QStringLiteral("Find previous occurrence"));
+    auto *findNextBtn = makeAction(QStringLiteral("▶"), QStringLiteral("Find next occurrence"));
     findPrevBtn->setFixedWidth(32);
     findNextBtn->setFixedWidth(32);
-    findPrevBtn->setToolTip(QStringLiteral("Find previous occurrence"));
-    findNextBtn->setToolTip(QStringLiteral("Find next occurrence"));
     connect(findPrevBtn, &QPushButton::clicked, this, [this] { doFind(true); });
     connect(findNextBtn, &QPushButton::clicked, this, [this] { doFind(false); });
     row2->addWidget(m_findEdit);
