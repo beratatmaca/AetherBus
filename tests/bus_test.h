@@ -30,6 +30,7 @@ private slots:
     void pcapCaptureWritesRecords();
     void captureReplayRoundTrip();
     void writeQueueDropsWhenPeerStalls();
+    void crashCleanupUnlinksSymlink();
 
     // Stats Calculator Tests
     void statsCalculatorBasics();

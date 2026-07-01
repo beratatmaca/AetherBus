@@ -53,6 +53,7 @@ struct DisplayLine {
     // ones are populated).  Each element is a QStringList of width == bytes.size().
     QVector<QStringList> cols;  ///< cols[colIdx][byteIdx]
     QString prefix;             ///< "[HH:mm:ss.zzz Rx/Tx]" or "[Rx/Tx]"
+    QString ascii;              ///< ASCII representation on the right
 };
 
 /// Lightweight text cursor pointing into the DisplayLine vector.

@@ -364,10 +364,13 @@ DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray 
     if (m_showBin) {
         makeCol([](unsigned char b) { return QStringLiteral("%1").arg(b, 8, 2, QLatin1Char('0')); });
     }
+
     if (m_showAscii) {
-        makeCol([](unsigned char b) -> QString {
-            return (b >= 0x20 && b < 0x7F) ? QString(QLatin1Char(static_cast<char>(b))) : QStringLiteral(".");
-        });
+        dl.ascii.reserve(bytes.size());
+        for (char byte : bytes) {
+            auto b = static_cast<unsigned char>(byte);
+            dl.ascii.append((b >= 0x20 && b < 0x7F) ? QLatin1Char(static_cast<char>(b)) : QLatin1Char('.'));
+        }
     }
 
     return dl;
@@ -387,7 +390,15 @@ QString ConsoleView::lineToPlain(const DisplayLine &dl) const {
         }
         tokens << cellParts.join(QLatin1Char('/'));
     }
-    return QStringLiteral("%1 %2").arg(dl.prefix, tokens.join(QLatin1Char(' ')));
+
+    QString numText = tokens.join(QLatin1Char(' '));
+    if (!numText.isEmpty() && !dl.ascii.isEmpty()) {
+        return QStringLiteral("%1 %2  |  %3").arg(dl.prefix, numText, dl.ascii);
+    }
+    if (!numText.isEmpty()) {
+        return QStringLiteral("%1 %2").arg(dl.prefix, numText);
+    }
+    return QStringLiteral("%1 %2").arg(dl.prefix, dl.ascii);
 }
 
 QString ConsoleView::lineSearchText(const DisplayLine &dl) const {
@@ -432,15 +443,52 @@ void ConsoleView::updateScrollBars() {
     for (int i = m_lines.size() - scanLimit; i < m_lines.size(); ++i) {
         const DisplayLine &dl = m_lines.at(i);
         int lineW = kLeftPad + (dl.prefix.length() + 1) * m_charW;
-        if (!dl.cols.isEmpty() && !dl.bytes.isEmpty()) {
+
+        int numCols = dl.cols.size();
+        if (numCols > 0 && !dl.bytes.isEmpty()) {
             int cellW = 0;
-            for (const QStringList &col : dl.cols) {
-                if (!col.isEmpty()) {
-                    cellW += col.first().length();
+            for (int ci = 0; ci < numCols; ++ci) {
+                int formatType = -1;
+                int activeCount = 0;
+                if (m_showHex) {
+                    if (activeCount == ci) {
+                        formatType = 0;
+                    }
+                    activeCount++;
+                }
+                if (m_showDec) {
+                    if (activeCount == ci) {
+                        formatType = 1;
+                    }
+                    activeCount++;
+                }
+                if (m_showBin) {
+                    if (activeCount == ci) {
+                        formatType = 2;
+                    }
+                    activeCount++;
+                }
+
+                int tokenLen = dl.cols.at(ci).first().length();
+                if (formatType == 0) {
+                    cellW += tokenLen * m_charW;
+                } else {
+                    cellW += tokenLen * m_charW + 6;
+                }
+                if (ci < numCols - 1) {
+                    cellW += 4;
                 }
             }
-            lineW += dl.bytes.size() * (static_cast<qsizetype>(cellW * m_charW) + (dl.cols.size() - 1) * m_charW + m_charW);
+            lineW += dl.bytes.size() * (cellW + m_charW);
         }
+
+        if (numCols > 0 && !dl.ascii.isEmpty()) {
+            lineW += 5 * m_charW;  // "  |  "
+        }
+        if (!dl.ascii.isEmpty()) {
+            lineW += dl.ascii.length() * m_charW;
+        }
+
         maxW = qMax(maxW, lineW);
     }
 

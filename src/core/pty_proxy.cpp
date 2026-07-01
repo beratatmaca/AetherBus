@@ -214,8 +214,7 @@ bool PtyProxy::open(const SerialConfig &config) {
 
     // Register for signal-safe cleanup so a sudden exit still unlinks the symlink
     // and releases the device (see signal_cleanup.h / installSignalHandlers()).
-    m_cleanupSlot = registerCleanup(m_symlinkPath.isEmpty() ? nullptr : m_symlinkPath.toLocal8Bit().constData(),
-                                    m_uartFd, m_masterFd);
+    m_cleanupSlot = registerCleanup(m_symlinkPath.isEmpty() ? nullptr : m_symlinkPath.toLocal8Bit().constData(), m_uartFd, m_masterFd);
 
     // 5. Launch the multiplexing loop.
     m_stopRequested.store(false);

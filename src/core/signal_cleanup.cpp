@@ -115,7 +115,9 @@ void installSignalHandlers() {
 #else  // Non-POSIX: no PTY proxy, so nothing to clean up.
 
 namespace aether {
-int registerCleanup(const char *, int, int) { return -1; }
+int registerCleanup(const char *, int, int) {
+    return -1;
+}
 void releaseCleanup(int) {}
 void runEmergencyCleanup() {}
 void installSignalHandlers() {}

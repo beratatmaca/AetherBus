@@ -206,7 +206,7 @@ private:
     int m_wakeWriteFd = -1;  // self-pipe write end (close() writes here)
 
     QString m_slavePath;
-    QString m_symlinkPath;  // created symlink, if any (unlinked on close)
+    QString m_symlinkPath;   // created symlink, if any (unlinked on close)
     int m_cleanupSlot = -1;  // signal-safe cleanup registry handle (see signal_cleanup.h)
 
     std::thread m_worker;

@@ -25,9 +25,9 @@ void BusTest::guiConsoleView() {
     // Force synchronous flush to avoid relying on timer loops in tests
     QMetaObject::invokeMethod(&view, "flush");
 
-    // Text should contain plaintext representation: "41/A 42/B 43/C"
+    // Text should contain plaintext representation: "41 42 43  |  ABC"
     QString plainText = view.toPlainText();
-    QVERIFY(plainText.contains("41/A 42/B 43/C"));
+    QVERIFY(plainText.contains("41 42 43  |  ABC"));
 
     // Test search query (findQuery)
     view.moveCursorToStart();
@@ -42,16 +42,16 @@ void BusTest::guiConsoleView() {
     view.appendChunk(chunk2);
 
     QMetaObject::invokeMethod(&view, "flush");
-    // Should NOT contain "XYZ" or "58/X" in rendering while paused
+    // Should NOT contain "XYZ" or "58 59 5A" in rendering while paused
     QVERIFY(!view.toPlainText().contains("XYZ"));
-    QVERIFY(!view.toPlainText().contains("58/X"));
+    QVERIFY(!view.toPlainText().contains("58"));
     // But totals should be updated: m_tx count was 0, now it should be 3 bytes
     QCOMPARE(view.txCount(), static_cast<qint64>(3));
 
     // Resume and flush, "XYZ" should now be rendered
     view.setPaused(false);
     QMetaObject::invokeMethod(&view, "flush");
-    QVERIFY(view.toPlainText().contains("58/X 59/Y 5A/Z"));
+    QVERIFY(view.toPlainText().contains("58 59 5A  |  XYZ"));
 }
 
 void BusTest::guiMacroBar() {

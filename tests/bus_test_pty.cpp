@@ -2,9 +2,11 @@
 #include "core/capture_replay.h"
 #include "core/pty_proxy.h"
 #include "core/serial_types.h"
+#include "core/signal_cleanup.h"
 
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryFile>
 #include <QtTest/QtTest>
@@ -302,7 +304,10 @@ void BusTest::captureReplayRoundTrip() {
     QString error;
     const auto chunks = readRtacPcap(path, &error);
     QVERIFY2(chunks.has_value(), qPrintable(error));
-    const auto &chunkList = chunks.value();
+    if (!chunks.has_value()) {
+        return;  // explicit guard so static analysis sees the optional is checked
+    }
+    const auto &chunkList = *chunks;
     QCOMPARE(chunkList.size(), 2);
     QCOMPARE(chunkList.at(0).dir, Direction::Tx);
     QCOMPARE(chunkList.at(0).data, txBytes);
@@ -314,6 +319,36 @@ void BusTest::captureReplayRoundTrip() {
     QString err2;
     QVERIFY(!readRtacPcap(QStringLiteral("/nonexistent/aetherbus_missing.pcap"), &err2).has_value());
     QVERIFY(!err2.isEmpty());
+}
+
+void BusTest::crashCleanupUnlinksSymlink() {
+    // Stand in for a slave-PTY symlink: a link pointing at a real temp file.
+    QTemporaryFile target;
+    QVERIFY(target.open());
+    const QString targetPath = target.fileName();
+    const QString linkPath = targetPath + QStringLiteral(".sniff_link");
+    const QByteArray linkC = linkPath.toLocal8Bit();
+    ::unlink(linkC.constData());  // clear any leftover from a prior run
+    QCOMPARE(::symlink(targetPath.toLocal8Bit().constData(), linkC.constData()), 0);
+    QVERIFY(QFileInfo(linkPath).isSymLink());
+
+    // Registering then running the emergency path (what the signal handler calls)
+    // must remove the symlink — the resource a sudden exit would otherwise leak.
+    const int slot = registerCleanup(linkC.constData(), -1, -1);
+    QVERIFY(slot >= 0);
+    runEmergencyCleanup();
+    QVERIFY(!QFileInfo(linkPath).isSymLink());
+    releaseCleanup(slot);
+
+    // A released slot must NOT be cleaned: re-create, release, verify it survives.
+    QCOMPARE(::symlink(targetPath.toLocal8Bit().constData(), linkC.constData()), 0);
+    const int slot2 = registerCleanup(linkC.constData(), -1, -1);
+    QVERIFY(slot2 >= 0);
+    releaseCleanup(slot2);
+    runEmergencyCleanup();
+    QVERIFY(QFileInfo(linkPath).isSymLink());
+
+    ::unlink(linkC.constData());
 }
 
 void BusTest::writeQueueDropsWhenPeerStalls() {

@@ -72,12 +72,12 @@ void ConsoleView::highlightSearchText(const QString &text) {
                 QRegularExpressionMatchIterator it = regex.globalMatch(lineText);
                 while (it.hasNext()) {
                     const QRegularExpressionMatch m = it.next();
-                    m_searchHits.append(SearchHit{li, m.capturedStart(), m.capturedLength()});
+                    m_searchHits.append(SearchHit{li, static_cast<int>(m.capturedStart()), static_cast<int>(m.capturedLength())});
                 }
             } else {
                 int pos = 0;
                 while ((pos = lineText.indexOf(text, pos, Qt::CaseInsensitive)) >= 0) {
-                    m_searchHits.append(SearchHit{li, pos, text.length()});
+                    m_searchHits.append(SearchHit{li, pos, static_cast<int>(text.length())});
                     pos += text.length();
                 }
             }
@@ -147,7 +147,7 @@ void ConsoleView::contextMenuEvent(QContextMenuEvent *event) {
     connect(actSelectAll, &QAction::triggered, this, [this] {
         if (!m_lines.isEmpty()) {
             m_selAnchor = CursorPos{0, 0};
-            m_selEnd = CursorPos{m_lines.size() - 1, static_cast<int>(fullLineText(m_lines.size() - 1).length())};
+            m_selEnd = CursorPos{static_cast<int>(m_lines.size() - 1), static_cast<int>(fullLineText(m_lines.size() - 1).length())};
             m_hasSelection = true;
             emit selectionChars(static_cast<int>(selectedText().length()));
             viewport()->update();
@@ -267,8 +267,8 @@ QRegularExpression ConsoleView::buildSearchRegex(const QString &query) const {
     }
 
     QStringList cellPatterns;
-    for (int i = 0; i < bytes.size(); ++i) {
-        const auto b = static_cast<unsigned char>(bytes.at(i));
+    for (char byte : bytes) {
+        const auto b = static_cast<unsigned char>(byte);
         QStringList layers;
         if (m_showHex) {
             layers << QStringLiteral("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
@@ -279,7 +279,7 @@ QRegularExpression ConsoleView::buildSearchRegex(const QString &query) const {
         if (m_showBin) {
             layers << QStringLiteral("%1").arg(b, 8, 2, QLatin1Char('0'));
         }
-        if (m_showAscii) {
+        if (m_showAscii && layers.isEmpty()) {
             QString asc = (b >= 0x20 && b < 0x7F) ? QString(QLatin1Char(static_cast<char>(b))) : QStringLiteral(".");
             layers << QRegularExpression::escape(asc);
         }
