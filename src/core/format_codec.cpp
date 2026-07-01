@@ -146,4 +146,56 @@ bool parseBinString(const QString &text, QByteArray &out, int *errorPos) {
     return true;
 }
 
+bool encodePayload(int format, const QString &text, int ending, QByteArray &out, QString *error) {
+    QByteArray bytes;
+    int errPos = -1;
+    switch (static_cast<PayloadFormat>(format)) {
+        case PayloadFormat::Ascii:
+            bytes = text.toUtf8();
+            break;
+        case PayloadFormat::Dec:
+            if (!parseDecString(text, bytes, &errPos)) {
+                if (error != nullptr) {
+                    *error = QStringLiteral("Invalid decimal token at position %1").arg(errPos + 1);
+                }
+                return false;
+            }
+            break;
+        case PayloadFormat::Bin:
+            if (!parseBinString(text, bytes, &errPos)) {
+                if (error != nullptr) {
+                    *error = QStringLiteral("Invalid binary token at position %1").arg(errPos + 1);
+                }
+                return false;
+            }
+            break;
+        case PayloadFormat::Hex:
+        default:
+            if (!parseHexString(text, bytes, &errPos)) {
+                if (error != nullptr) {
+                    *error = QStringLiteral("Invalid hex token at position %1").arg(errPos + 1);
+                }
+                return false;
+            }
+            break;
+    }
+    switch (static_cast<LineEnding>(ending)) {
+        case LineEnding::CR:
+            bytes.append('\r');
+            break;
+        case LineEnding::LF:
+            bytes.append('\n');
+            break;
+        case LineEnding::CRLF:
+            bytes.append('\r');
+            bytes.append('\n');
+            break;
+        case LineEnding::None:
+        default:
+            break;
+    }
+    out = bytes;
+    return true;
+}
+
 }  // namespace aether::codec

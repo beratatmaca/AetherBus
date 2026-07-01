@@ -19,6 +19,7 @@ private slots:
     void parseValidHex();
     void parseRejectsGarbage();
     void parseDecAndBin();
+    void encodePayloadFormatsAndEndings();
 
     // PtyProxy Tests
     void proxyStartsAndExposesSlave();

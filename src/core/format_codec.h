@@ -11,6 +11,8 @@
 #include <QByteArray>
 #include <QString>
 
+#include <cstdint>
+
 namespace aether::codec {
 
 /**
@@ -84,5 +86,30 @@ bool parseDecString(const QString &text, QByteArray &out, int *errorPos = nullpt
  * @return @c true on success, @c false on any malformed token.
  */
 bool parseBinString(const QString &text, QByteArray &out, int *errorPos = nullptr);
+
+/**
+ * @brief Payload input format, matching the order of the injection/macro combo boxes.
+ */
+enum class PayloadFormat : std::uint8_t { Hex = 0, Ascii = 1, Dec = 2, Bin = 3 };
+
+/**
+ * @brief Trailing byte(s) appended to an encoded payload, matching the ending combo order.
+ */
+enum class LineEnding : std::uint8_t { None = 0, CR = 1, LF = 2, CRLF = 3 };
+
+/**
+ * @brief Encode user-entered text in the given format and append a line ending.
+ *
+ * Shared by the injection panel and the macro bar so both interpret input
+ * identically. Pure: no I/O or global state.
+ *
+ * @param[in]  format  One of @ref PayloadFormat (0=HEX, 1=ASCII, 2=DEC, 3=BIN).
+ * @param[in]  text    Raw user text in that format (ASCII is taken as UTF-8).
+ * @param[in]  ending  One of @ref LineEnding (0=none, 1=CR, 2=LF, 3=CR+LF).
+ * @param[out] out     Receives the encoded bytes on success; untouched on failure.
+ * @param[out] error   Optional; receives a human-readable reason on failure.
+ * @return @c true on success, @c false if @p text is malformed for @p format.
+ */
+bool encodePayload(int format, const QString &text, int ending, QByteArray &out, QString *error = nullptr);
 
 }  // namespace aether::codec

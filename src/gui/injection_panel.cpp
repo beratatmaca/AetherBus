@@ -43,10 +43,17 @@ InjectionPanel::InjectionPanel(QWidget *parent) : QWidget(parent) {
     m_fileBtn = new QPushButton(QStringLiteral("File…"), this);
     m_fileBtn->setToolTip(QStringLiteral("Select a file and send all bytes to the device"));
 
+    m_saveMacroBtn = new QPushButton(QStringLiteral("★ Save as macro"), this);
+    m_saveMacroBtn->setToolTip(QStringLiteral("Save the current input as a reusable one-click macro"));
+
     connect(m_toDeviceBtn, &QPushButton::clicked, this, [this] { sendInjection(true); });
     connect(m_toAppBtn, &QPushButton::clicked, this, [this] { sendInjection(false); });
     connect(m_fileBtn, &QPushButton::clicked, this, &InjectionPanel::onSendFileClicked);
     connect(m_injectEdit, &QLineEdit::returnPressed, this, [this] { sendInjection(true); });
+    connect(m_saveMacroBtn, &QPushButton::clicked, this, [this] {
+        emit saveAsMacroRequested(m_injectFormatBox->currentIndex(), m_injectEdit->text(), m_injectEndingBox->currentIndex(),
+                                  m_repeatToDevice);
+    });
 
     injectRow->addWidget(m_injectFormatBox);
     injectRow->addWidget(m_injectEdit, 1);
@@ -54,6 +61,7 @@ InjectionPanel::InjectionPanel(QWidget *parent) : QWidget(parent) {
     injectRow->addWidget(m_toDeviceBtn);
     injectRow->addWidget(m_toAppBtn);
     injectRow->addWidget(m_fileBtn);
+    injectRow->addWidget(m_saveMacroBtn);
     layout->addLayout(injectRow);
 
     auto *repeatRow = new QHBoxLayout();
@@ -93,49 +101,12 @@ void InjectionPanel::setRunningState(bool running, bool directMode) {
 }
 
 QByteArray InjectionPanel::encodeInjection(bool &ok) {
-    ok = true;
     QByteArray bytes;
-    const QString text = m_injectEdit->text();
-    int errPos = -1;
-    switch (m_injectFormatBox->currentIndex()) {
-        case 1:  // ASCII
-            bytes = text.toUtf8();
-            break;
-        case 2:  // DEC
-            if (!codec::parseDecString(text, bytes, &errPos)) {
-                emit injectionError(QStringLiteral("Invalid decimal token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-        case 3:  // BIN
-            if (!codec::parseBinString(text, bytes, &errPos)) {
-                emit injectionError(QStringLiteral("Invalid binary token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-        default:  // HEX
-            if (!codec::parseHexString(text, bytes, &errPos)) {
-                emit injectionError(QStringLiteral("Invalid hex token at position %1").arg(errPos + 1));
-                ok = false;
-                return {};
-            }
-            break;
-    }
-    switch (m_injectEndingBox->currentIndex()) {
-        case 1:
-            bytes.append('\r');
-            break;
-        case 2:
-            bytes.append('\n');
-            break;
-        case 3:
-            bytes.append('\r');
-            bytes.append('\n');
-            break;
-        default:
-            break;
+    QString error;
+    ok = codec::encodePayload(m_injectFormatBox->currentIndex(), m_injectEdit->text(), m_injectEndingBox->currentIndex(), bytes, &error);
+    if (!ok) {
+        emit injectionError(error);
+        return {};
     }
     return bytes;
 }

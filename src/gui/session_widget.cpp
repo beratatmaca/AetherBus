@@ -57,6 +57,12 @@ SessionWidget::SessionWidget(QWidget *parent) : QWidget(parent), m_proxy(new Pty
     });
     connect(m_injectPanel, &InjectionPanel::injectionError, this, &SessionWidget::onError);
     connect(m_injectPanel, &InjectionPanel::fileSendRequested, this, &SessionWidget::sendFile);
+    connect(m_injectPanel, &InjectionPanel::saveAsMacroRequested, this,
+            [this](int format, const QString &payload, int ending, bool toDevice) {
+                if (m_macroBar) {
+                    m_macroBar->addMacroFromState(format, payload, ending, toDevice);
+                }
+            });
 
     // Proxy connections
     connect(m_proxy, &PtyProxy::chunkCaptured, m_console, &ConsoleView::appendChunk);

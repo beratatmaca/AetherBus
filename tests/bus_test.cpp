@@ -71,6 +71,31 @@ void BusTest::parseDecAndBin() {
     QCOMPARE(err, 1);
 }
 
+void BusTest::encodePayloadFormatsAndEndings() {
+    QByteArray out;
+    QString err;
+
+    // HEX payload, no ending.
+    QVERIFY(codec::encodePayload(static_cast<int>(codec::PayloadFormat::Hex), QStringLiteral("41 42"),
+                                 static_cast<int>(codec::LineEnding::None), out, &err));
+    QCOMPARE(out, QByteArray::fromHex("4142"));
+
+    // ASCII payload with CR+LF ending appended.
+    QVERIFY(codec::encodePayload(static_cast<int>(codec::PayloadFormat::Ascii), QStringLiteral("AB"),
+                                 static_cast<int>(codec::LineEnding::CRLF), out, &err));
+    QCOMPARE(out, QByteArray::fromHex("41420D0A"));
+
+    // DEC payload with a lone CR.
+    QVERIFY(codec::encodePayload(static_cast<int>(codec::PayloadFormat::Dec), QStringLiteral("65 66"),
+                                 static_cast<int>(codec::LineEnding::CR), out, &err));
+    QCOMPARE(out, QByteArray::fromHex("41420D"));
+
+    // Malformed input is rejected with a reason and leaves out untouched.
+    QVERIFY(!codec::encodePayload(static_cast<int>(codec::PayloadFormat::Hex), QStringLiteral("ZZ"),
+                                  static_cast<int>(codec::LineEnding::None), out, &err));
+    QVERIFY(!err.isEmpty());
+}
+
 void BusTest::parseRejectsGarbage() {
     QByteArray out;
     int err = -1;
