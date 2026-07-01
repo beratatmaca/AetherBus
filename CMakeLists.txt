@@ -139,6 +139,8 @@ add_library(aether_gui STATIC
     src/gui/injection_panel.h
     src/gui/consoleview.cpp
     src/gui/consoleview.h
+    src/gui/console_panel.cpp
+    src/gui/console_panel.h
     src/gui/consoleview_paint.cpp
     src/gui/consoleview_search.cpp
     src/gui/macrobar.cpp

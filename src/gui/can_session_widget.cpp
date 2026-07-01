@@ -1,12 +1,15 @@
 #include "gui/can_session_widget.h"
 
 #include "core/can_backend.h"
+#include "core/format_codec.h"
 #include "gui/can_config_panel.h"
 #include "gui/consoleview.h"
+#include "gui/console_panel.h"
 #include "gui/statspanel.h"
 
 #include <QByteArray>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFile>
 #include <QFileDialog>
 #include <QFrame>
@@ -18,22 +21,12 @@
 #include <QSplitter>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QInputDialog>
+#include <QMenu>
+#include <QAction>
+#include <QSettings>
 
 namespace aether {
-
-namespace {
-/// Parse a hex-byte string ("DE AD BE EF" or "DEADBEEF") into raw bytes.
-QByteArray parseHexBytes(const QString &text, bool &ok) {
-    QString clean = text;
-    clean.remove(QRegularExpression(QStringLiteral("[^0-9A-Fa-f]")));
-    if (clean.size() % 2 != 0) {
-        ok = false;
-        return {};
-    }
-    ok = true;
-    return QByteArray::fromHex(clean.toLatin1());
-}
-}  // namespace
 
 CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_backend(new CanBackend(this)) {
     buildUi();
@@ -43,7 +36,7 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     connect(m_configPanel, &CanConfigPanel::stopCan, this, &CanSessionWidget::stopCapture);
     connect(m_configPanel, &CanConfigPanel::rescanRequested, this, &CanSessionWidget::rescan);
 
-    connect(m_backend, &CanBackend::chunkCaptured, m_console, &ConsoleView::appendChunk);
+    connect(m_backend, &CanBackend::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
     connect(m_backend, &CanBackend::chunkCaptured, this, &CanSessionWidget::onChunkCaptured);
     connect(m_backend, &CanBackend::started, this, &CanSessionWidget::onStarted);
     connect(m_backend, &CanBackend::stopped, this, &CanSessionWidget::onStopped);
@@ -62,8 +55,11 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
         m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>SocketCAN is not available on this platform.</span>"));
     }
 
-    m_console->setNewlineMode(ConsoleView::NewlineMode::Frame, 0);
+    m_consolePanel->console()->setNewlineMode(ConsoleView::NewlineMode::Frame, 0);
+    connect(m_consolePanel, &ConsolePanel::formatChanged, this, &CanSessionWidget::applyFormats);
     applyFormats();
+    loadMacros();
+    rebuildMacroButtons();
 }
 
 CanSessionWidget::~CanSessionWidget() {
@@ -116,19 +112,30 @@ void CanSessionWidget::buildUi() {
 QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(6, 0, 6, 0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
 
-    m_console = new ConsoleView(panel);
+    m_consolePanel = new ConsolePanel(panel);
+    m_consolePanel->setSplitControlsVisible(false);
+    m_consolePanel->setExtraActionsVisible(false);
+    m_consolePanel->setSelectionLabelVisible(false);
+    layout->addWidget(m_consolePanel, 1);
 
-    const auto makeToggle = [&](const QString &text, const QString &tooltip) {
-        auto *button = new QPushButton(text, panel);
-        button->setCheckable(true);
-        button->setToolTip(tooltip);
-        button->setProperty("toolbarToggle", true);
-        button->setCursor(Qt::PointingHandCursor);
-        return button;
-    };
+    // Save handling
+    connect(m_consolePanel, &ConsolePanel::saveRequested, this, [this] {
+        const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save CAN log"), QStringLiteral("aetherbus_can.txt"),
+                                                          QStringLiteral("Text files (*.txt);;All files (*)"));
+        if (path.isEmpty()) {
+            return;
+        }
+        QFile file(path);
+        if (file.open(QFile::WriteOnly | QFile::Text)) {
+            file.write(m_consolePanel->console()->toPlainText().toUtf8());
+        } else {
+            m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>Could not write %1</span>").arg(path));
+        }
+    });
+
     const auto makeAction = [&](const QString &text, const QString &tooltip) {
         auto *button = new QPushButton(text, panel);
         button->setToolTip(tooltip);
@@ -148,68 +155,6 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
         return label;
     };
 
-    auto *row = new QHBoxLayout();
-    row->setSpacing(6);
-    row->addWidget(makeSectionLabel(QStringLiteral("View")));
-
-    m_hexCheck = makeToggle(QStringLiteral("HEX"), QStringLiteral("Show hexadecimal payload bytes"));
-    m_decCheck = makeToggle(QStringLiteral("DEC"), QStringLiteral("Show decimal payload byte values"));
-    m_binCheck = makeToggle(QStringLiteral("BIN"), QStringLiteral("Show binary payload byte values"));
-    m_asciiCheck = makeToggle(QStringLiteral("ASCII"), QStringLiteral("Show ASCII gutter"));
-    m_hexCheck->setChecked(true);
-    m_asciiCheck->setChecked(true);
-    for (QPushButton *button : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
-        button->setProperty("segmentButton", true);
-        connect(button, &QPushButton::toggled, this, &CanSessionWidget::applyFormats);
-        row->addWidget(button);
-    }
-
-    row->addWidget(makeDivider());
-    row->addWidget(makeSectionLabel(QStringLiteral("Flow")));
-    m_autoScrollCheck = makeToggle(QStringLiteral("Auto"), QStringLiteral("Automatically scroll to the newest frame"));
-    m_autoScrollCheck->setChecked(true);
-    connect(m_autoScrollCheck, &QPushButton::toggled, m_console, &ConsoleView::setAutoScroll);
-    m_pauseCheck = makeToggle(QStringLiteral("Pause"), QStringLiteral("Suspend viewport updates"));
-    connect(m_pauseCheck, &QPushButton::toggled, m_console, &ConsoleView::setPaused);
-    m_tsCheck = makeToggle(QStringLiteral("Time"), QStringLiteral("Show or hide the timestamp prefix"));
-    m_tsCheck->setChecked(true);
-    connect(m_tsCheck, &QPushButton::toggled, m_console, &ConsoleView::setShowTimestamps);
-    row->addWidget(m_autoScrollCheck);
-    row->addWidget(m_pauseCheck);
-    row->addWidget(m_tsCheck);
-
-    row->addWidget(makeDivider());
-    row->addWidget(makeSectionLabel(QStringLiteral("Actions")));
-    auto *clearBtn = makeAction(QStringLiteral("Clear"), QStringLiteral("Clear the frame log"));
-    connect(clearBtn, &QPushButton::clicked, m_console, &ConsoleView::clearConsole);
-    auto *saveBtn = makeAction(QStringLiteral("Save"), QStringLiteral("Export the visible log to a text file"));
-    connect(saveBtn, &QPushButton::clicked, this, [this] {
-        const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save CAN log"), QStringLiteral("aetherbus_can.txt"),
-                                                          QStringLiteral("Text files (*.txt);;All files (*)"));
-        if (path.isEmpty()) {
-            return;
-        }
-        QFile file(path);
-        if (file.open(QFile::WriteOnly | QFile::Text)) {
-            file.write(m_console->toPlainText().toUtf8());
-        } else {
-            m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>Could not write %1</span>").arg(path));
-        }
-    });
-    row->addWidget(clearBtn);
-    row->addWidget(saveBtn);
-
-    row->addWidget(makeDivider());
-    m_countsLabel = new QLabel(QStringLiteral("Rx: 0  Tx: 0"), panel);
-    m_countsLabel->setObjectName(QStringLiteral("consoleCountsLabel"));
-    m_countsLabel->setToolTip(QStringLiteral("Cumulative frame counts. Rates update every second."));
-    row->addWidget(m_countsLabel);
-
-    row->addStretch(1);
-    layout->addLayout(row);
-
-    layout->addWidget(m_console, 1);
-
     // --- Transmit bar (cansend-style) ---
     auto *txRow = new QHBoxLayout();
     txRow->setSpacing(6);
@@ -221,10 +166,28 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     m_txIdEdit->setToolTip(QStringLiteral("Frame identifier in hexadecimal (e.g. 123 or 18DAF110)"));
     txRow->addWidget(m_txIdEdit);
 
+    m_txFormatBox = new QComboBox(panel);
+    m_txFormatBox->addItem(QStringLiteral("HEX"));
+    m_txFormatBox->addItem(QStringLiteral("ASCII"));
+    m_txFormatBox->addItem(QStringLiteral("DEC"));
+    m_txFormatBox->addItem(QStringLiteral("BIN"));
+    m_txFormatBox->setFixedWidth(72);
+    m_txFormatBox->setToolTip(QStringLiteral("Payload input format"));
+    txRow->addWidget(m_txFormatBox);
+
     m_txDataEdit = new QLineEdit(panel);
     m_txDataEdit->setPlaceholderText(QStringLiteral("payload hex, e.g. DE AD BE EF"));
     m_txDataEdit->setToolTip(QStringLiteral("Up to 8 bytes (classic) or 64 bytes (CAN-FD)"));
     txRow->addWidget(m_txDataEdit, 1);
+
+    connect(m_txFormatBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        switch (idx) {
+            case 0: m_txDataEdit->setPlaceholderText(QStringLiteral("payload hex, e.g. DE AD BE EF")); break;
+            case 1: m_txDataEdit->setPlaceholderText(QStringLiteral("payload ascii, e.g. hello")); break;
+            case 2: m_txDataEdit->setPlaceholderText(QStringLiteral("payload decimal, e.g. 65 66")); break;
+            case 3: m_txDataEdit->setPlaceholderText(QStringLiteral("payload binary, e.g. 01000001")); break;
+        }
+    });
 
     m_txEffCheck = new QCheckBox(QStringLiteral("EFF"), panel);
     m_txEffCheck->setToolTip(QStringLiteral("29-bit extended identifier (auto-enabled for ids > 0x7FF)"));
@@ -244,9 +207,55 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     connect(m_txIdEdit, &QLineEdit::returnPressed, this, &CanSessionWidget::transmit);
     txRow->addWidget(m_txButton);
 
+    txRow->addWidget(makeDivider());
+    txRow->addWidget(makeSectionLabel(QStringLiteral("History")));
+    m_txHistoryBox = new QComboBox(panel);
+    m_txHistoryBox->setMinimumWidth(200);
+    m_txHistoryBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_txHistoryBox->setToolTip(QStringLiteral("Recall recently transmitted CAN frames"));
+    connect(m_txHistoryBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0 || index >= m_txHistory.size()) return;
+        const auto &item = m_txHistory.at(index);
+        m_txIdEdit->setText(QString::number(item.id, 16).toUpper());
+        m_txDataEdit->setText(item.payload.toHex(' ').toUpper());
+        m_txEffCheck->setChecked(item.flags & FrameExtendedId);
+        m_txRtrCheck->setChecked(item.flags & FrameRemote);
+        m_txFdCheck->setChecked(item.flags & FrameFd);
+        m_txBrsCheck->setChecked(item.flags & FrameBitRateSwitch);
+    });
+    txRow->addWidget(m_txHistoryBox);
+
+    auto *txResendBtn = makeAction(QStringLiteral("Resend"), QStringLiteral("Re-transmit the selected history frame"));
+    connect(txResendBtn, &QPushButton::clicked, this, [this] {
+        const int idx = m_txHistoryBox->currentIndex();
+        if (idx < 0 || idx >= m_txHistory.size()) return;
+        const auto &item = m_txHistory.at(idx);
+        m_backend->sendFrame(item.id, item.flags, item.payload);
+    });
+    txRow->addWidget(txResendBtn);
+
     layout->addLayout(txRow);
 
-    connect(m_console, &ConsoleView::countsChanged, this, [this](qint64, qint64, qint64, qint64) { updateCounts(); });
+    // --- CAN Macro bar ---
+    auto *macroRow = new QHBoxLayout();
+    macroRow->setSpacing(6);
+    macroRow->addWidget(makeSectionLabel(QStringLiteral("Macros")));
+
+    m_macroContainer = new QWidget(panel);
+    m_macroLayout = new QHBoxLayout(m_macroContainer);
+    m_macroLayout->setContentsMargins(0, 0, 0, 0);
+    m_macroLayout->setSpacing(6);
+    macroRow->addWidget(m_macroContainer);
+
+    macroRow->addStretch(1);
+
+    auto *saveMacroBtn = makeAction(QStringLiteral("★ Save as macro"), QStringLiteral("Save current transmit fields as a quick-send macro"));
+    connect(saveMacroBtn, &QPushButton::clicked, this, &CanSessionWidget::saveCurrentAsMacro);
+    macroRow->addWidget(saveMacroBtn);
+
+    layout->addLayout(macroRow);
+
+    connect(m_consolePanel->console(), &ConsoleView::countsChanged, this, [this](qint64, qint64, qint64, qint64) { updateCounts(); });
 
     return panel;
 }
@@ -298,10 +307,11 @@ void CanSessionWidget::transmit() {
         return;
     }
 
-    bool okData = false;
-    const QByteArray payload = parseHexBytes(m_txDataEdit->text(), okData);
+    QByteArray payload;
+    QString error;
+    bool okData = codec::encodePayload(m_txFormatBox->currentIndex(), m_txDataEdit->text(), 0, payload, &error);
     if (!okData) {
-        m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>Payload must be whole hex bytes.</span>"));
+        m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>%1</span>").arg(error));
         return;
     }
 
@@ -323,11 +333,35 @@ void CanSessionWidget::transmit() {
         m_configPanel->setStatus(m_backend->isRunning()
                                      ? QStringLiteral("<span style='color:#e57373'>Transmit failed (payload too large?).</span>")
                                      : QStringLiteral("<span style='color:#e57373'>Start capture before transmitting.</span>"));
+    } else {
+        // Add to history
+        CanHistoryItem item{id, payload, flags};
+        for (int i = m_txHistory.size() - 1; i >= 0; --i) {
+            if (m_txHistory.at(i).id == id && m_txHistory.at(i).payload == payload && m_txHistory.at(i).flags == flags) {
+                m_txHistory.remove(i);
+                m_txHistoryBox->removeItem(i);
+            }
+        }
+        m_txHistory.prepend(item);
+        QString display = QStringLiteral("ID: %1 | Data: %2")
+                              .arg(QString::number(id, 16).toUpper())
+                              .arg(payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(payload.toHex(' ').toUpper()));
+        m_txHistoryBox->insertItem(0, display);
+        
+        m_txHistoryBox->blockSignals(true);
+        m_txHistoryBox->setCurrentIndex(0);
+        m_txHistoryBox->blockSignals(false);
+
+        constexpr int kMaxHistory = 50;
+        while (m_txHistory.size() > kMaxHistory) {
+            m_txHistory.removeLast();
+            m_txHistoryBox->removeItem(m_txHistoryBox->count() - 1);
+        }
     }
 }
 
 void CanSessionWidget::applyFormats() {
-    m_console->setFormats(m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked());
+    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(), m_consolePanel->isAsciiChecked());
 }
 
 void CanSessionWidget::updateCounts() {
@@ -342,7 +376,133 @@ void CanSessionWidget::updateCounts() {
                              .arg(fmtRate(m_stats.currentRxRate()))
                              .arg(m_stats.txChunks())
                              .arg(fmtRate(m_stats.currentTxRate()));
-    m_countsLabel->setText(text);
+    m_consolePanel->setCountsText(text);
+}
+
+void CanSessionWidget::loadMacros() {
+    m_macros.clear();
+    QSettings settings;
+    const int count = settings.beginReadArray(QStringLiteral("can_macros"));
+    for (int i = 0; i < count; ++i) {
+        settings.setArrayIndex(i);
+        CanMacro macro;
+        macro.name = settings.value(QStringLiteral("name")).toString();
+        macro.id = settings.value(QStringLiteral("id")).toUInt();
+        macro.payload = settings.value(QStringLiteral("payload")).toByteArray();
+        macro.flags = static_cast<quint16>(settings.value(QStringLiteral("flags")).toUInt());
+        m_macros.append(macro);
+    }
+    settings.endArray();
+}
+
+void CanSessionWidget::saveMacros() {
+    QSettings settings;
+    settings.beginWriteArray(QStringLiteral("can_macros"));
+    for (int i = 0; i < m_macros.size(); ++i) {
+        settings.setArrayIndex(i);
+        const auto &macro = m_macros.at(i);
+        settings.setValue(QStringLiteral("name"), macro.name);
+        settings.setValue(QStringLiteral("id"), macro.id);
+        settings.setValue(QStringLiteral("payload"), macro.payload);
+        settings.setValue(QStringLiteral("flags"), macro.flags);
+    }
+    settings.endArray();
+}
+
+void CanSessionWidget::rebuildMacroButtons() {
+    // Clear layout
+    QLayoutItem *child;
+    while ((child = m_macroLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) {
+            child->widget()->deleteLater();
+        }
+        delete child;
+    }
+
+    if (m_macros.isEmpty()) {
+        m_emptyMacroHint = new QLabel(QStringLiteral("<i>none yet — click ★ Save as macro</i>"), m_macroContainer);
+        m_macroLayout->addWidget(m_emptyMacroHint);
+        return;
+    }
+    m_emptyMacroHint = nullptr;
+
+    for (int i = 0; i < m_macros.size(); ++i) {
+        const auto &macro = m_macros.at(i);
+        auto *btn = new QPushButton(macro.name, m_macroContainer);
+        btn->setProperty("toolbarAction", true);
+        btn->setCursor(Qt::PointingHandCursor);
+        
+        QString details = QStringLiteral("ID: %1 | Data: %2")
+                              .arg(QString::number(macro.id, 16).toUpper())
+                              .arg(macro.payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(macro.payload.toHex(' ').toUpper()));
+        btn->setToolTip(details);
+
+        connect(btn, &QPushButton::clicked, this, [this, macro] {
+            m_backend->sendFrame(macro.id, macro.flags, macro.payload);
+        });
+
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QPushButton::customContextMenuRequested, this, [this, i](const QPoint &pos) {
+            auto *senderBtn = qobject_cast<QPushButton*>(sender());
+            if (!senderBtn) return;
+            QMenu menu(this);
+            auto *deleteAct = menu.addAction(QStringLiteral("Delete Macro"));
+            connect(deleteAct, &QAction::triggered, this, [this, i] {
+                if (i >= 0 && i < m_macros.size()) {
+                    m_macros.removeAt(i);
+                    saveMacros();
+                    rebuildMacroButtons();
+                }
+            });
+            menu.exec(senderBtn->mapToGlobal(pos));
+        });
+
+        m_macroLayout->addWidget(btn);
+    }
+}
+
+void CanSessionWidget::saveCurrentAsMacro() {
+    bool okId = false;
+    const quint32 id = m_txIdEdit->text().trimmed().toUInt(&okId, 16);
+    if (!okId) {
+        m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>Invalid transmit id.</span>"));
+        return;
+    }
+
+    QByteArray payload;
+    QString error;
+    bool okData = codec::encodePayload(m_txFormatBox->currentIndex(), m_txDataEdit->text(), 0, payload, &error);
+    if (!okData) {
+        m_configPanel->setStatus(QStringLiteral("<span style='color:#e57373'>%1</span>").arg(error));
+        return;
+    }
+
+    quint16 flags = 0;
+    if (m_txEffCheck->isChecked() || id > 0x7FF) {
+        flags |= FrameExtendedId;
+    }
+    if (m_txRtrCheck->isChecked()) {
+        flags |= FrameRemote;
+    }
+    if (m_txFdCheck->isChecked()) {
+        flags |= FrameFd;
+    }
+    if (m_txBrsCheck->isChecked()) {
+        flags |= FrameBitRateSwitch;
+    }
+
+    bool nameOk = false;
+    QString name = QInputDialog::getText(this, QStringLiteral("Save CAN Macro"),
+                                         QStringLiteral("Enter a name for this macro:"),
+                                         QLineEdit::Normal, QString(), &nameOk);
+    if (!nameOk || name.trimmed().isEmpty()) {
+        return;
+    }
+
+    CanMacro macro{name.trimmed(), id, payload, flags};
+    m_macros.append(macro);
+    saveMacros();
+    rebuildMacroButtons();
 }
 
 }  // namespace aether

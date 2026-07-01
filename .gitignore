@@ -44,6 +44,9 @@ build/
 Build/
 build-*/
 
+# Cross-compiled Windows output (scripts/build-windows.sh); dist/*.in stays tracked
+dist/windows/
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt

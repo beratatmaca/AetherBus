@@ -6,6 +6,8 @@ cleanup() {
     kill "$SOCAT_PID" 2>/dev/null
     kill "$AGENT_A_PID" 2>/dev/null
     kill "$AGENT_B_PID" 2>/dev/null
+    kill "$AGENT_C_SENDER_PID" 2>/dev/null
+    kill "$AGENT_C_LISTENER_PID" 2>/dev/null
     rm -f ./tty_sniffed
     exit 0
 }
@@ -16,6 +18,35 @@ if ! command -v socat &>/dev/null; then
     echo "Error: 'socat' utility is required but not installed."
     echo "Please install it via: sudo apt install socat"
     exit 1
+fi
+
+# Setup CAN interface (vcan0)
+echo "============================================================="
+echo "Initializing virtual CAN interface (vcan0)..."
+if ! ip link show vcan0 &>/dev/null; then
+    echo "vcan0 interface not found. Attempting to create it (requires sudo)..."
+    sudo modprobe vcan 2>/dev/null || true
+    if sudo ip link add dev vcan0 type vcan 2>/dev/null; then
+        echo "vcan0 created successfully."
+    else
+        echo "WARNING: Failed to create vcan0. If it fails, please run:"
+        echo "  sudo modprobe vcan"
+        echo "  sudo ip link add dev vcan0 type vcan"
+        echo "  sudo ip link set up vcan0"
+    fi
+fi
+
+if ip link show vcan0 &>/dev/null; then
+    if ! ip link show vcan0 | grep -q "UP"; then
+        echo "Bringing vcan0 interface UP..."
+        if sudo ip link set up vcan0 2>/dev/null; then
+            echo "vcan0 is now UP."
+        else
+            echo "WARNING: Failed to bring vcan0 UP. Please run: sudo ip link set up vcan0"
+        fi
+    else
+        echo "vcan0 is already UP."
+    fi
 fi
 
 echo "============================================================="
@@ -40,64 +71,106 @@ stty -F "$PTS_A" raw -echo cs8 115200
 stty -F "$PTS_B" raw -echo cs8 115200
 
 echo "============================================================="
-echo "                AetherBus Sniffing Simulator (Bash)          "
+echo "                AetherBus Sniffing Simulator                 "
 echo "============================================================="
 echo "1. Physical Port (PTS_A): $PTS_A"
 echo "2. Device Mock Port (PTS_B): $PTS_B"
 echo "3. Symlink to be created by GUI: ./tty_sniffed"
+echo "4. CAN Interface: vcan0"
 echo "-------------------------------------------------------------"
 echo "INSTRUCTIONS FOR AETHERBUS GUI:"
-echo "  - Physical device: Copy and paste: $PTS_A"
-echo "  - Slave symlink:   Copy and paste: ./tty_sniffed"
-echo "  - Click 'Start Interception' to begin sniffing."
+echo "  - For Serial Interception:"
+echo "    - Physical device: Copy and paste: $PTS_A"
+echo "    - Slave symlink:   Copy and paste: ./tty_sniffed"
+echo "    - Click 'Start Interception' to begin sniffing."
+echo "  - For CAN Interception:"
+echo "    - Select interface: vcan0"
 echo "============================================================="
 
-# Agent A (Device): Simulates physical device on PTS_B sending telemetry
-# Telemetry frame: 55 AA 01 02 03 0D 0A
+# Agent A (Serial - Device Mock): Simulates physical device on PTS_B
 (
-    while true; do
-        # Send telemetry frame in binary format
-        echo -ne "\x55\xaa\x01\x02\x03\x0d\x0a" > "$PTS_B"
-        echo "[Agent A (Device)] Sent Telemetry: 55AA0102030D0A"
-        sleep 2
+    # Open file descriptor 3 for reading and writing to hold PTY open
+    exec 3<> "$PTS_B"
+    
+    # Start sender in background using the descriptor
+    (
+        while true; do
+            echo -ne "Hello from Agent A\r\n" >&3
+            sleep 3
+        done
+    ) &
+    AGENT_A_SENDER_INNER_PID=$!
+    
+    # Reader loop using the descriptor
+    while read -r -u 3 line; do
+        clean_line=$(echo "$line" | tr -d '\r')
+        echo "[Agent A (Serial Device)] Received: $clean_line"
     done
+    
+    kill "$AGENT_A_SENDER_INNER_PID" 2>/dev/null
 ) &
 AGENT_A_PID=$!
 
-# Agent A listener: Log commands from PTS_B
+# Agent B (Serial - App Mock): Connects to ./tty_sniffed once GUI creates it
 (
-    hexdump -v -e '1/1 "%02X "' "$PTS_B" | while read -r line; do
-        if [ ! -z "$line" ]; then
-            echo "[Agent A (Device)] Received Command: $line"
-        fi
-    done
-) &
-AGENT_A_LISTENER_PID=$!
-
-# Agent B (App): Wait for AetherBus to create the symlink, then connect
-(
-    echo "[Agent B (App)] Waiting for ./tty_sniffed to be created by AetherBus..."
     while [ ! -e "./tty_sniffed" ]; do
         sleep 0.5
     done
-    echo "[Agent B (App)] Symlink detected! Connecting to ./tty_sniffed..."
     
     # Configure terminal line settings
     stty -F ./tty_sniffed raw -echo cs8 115200 2>/dev/null
-
-    # Command frame to reply: AA 55 FF 00 0D 0A
-    # Read incoming bytes and reply
-    hexdump -v -e '1/1 "%02X "' ./tty_sniffed | while read -r line; do
-        if [ ! -z "$line" ]; then
-            echo "[Agent B (App)] Received Telemetry: $line"
-            # Processing delay, then reply
-            sleep 0.1
-            echo -ne "\xaa\x55\xff\x00\x0d\x0a" > ./tty_sniffed
-            echo "[Agent B (App)] Sent Command Reply: AA55FF000D0A"
-        fi
+    
+    # Open file descriptor 3 for reading and writing to hold PTY open
+    exec 3<> ./tty_sniffed
+    
+    # Start sender in background using the descriptor
+    (
+        while true; do
+            echo -ne "Hello from Agent B\r\n" >&3
+            sleep 3
+        done
+    ) &
+    AGENT_B_SENDER_INNER_PID=$!
+    
+    # Reader loop using the descriptor
+    while read -r -u 3 line; do
+        clean_line=$(echo "$line" | tr -d '\r')
+        echo "[Agent B (Serial App)] Received: $clean_line"
     done
+    
+    kill "$AGENT_B_SENDER_INNER_PID" 2>/dev/null
 ) &
 AGENT_B_PID=$!
+
+# Agent C (CAN Mock): Sends random CAN messages to vcan0 and listens for replies
+# Sender loop
+(
+    while true; do
+        if command -v cansend &>/dev/null && ip link show vcan0 | grep -q "UP" 2>/dev/null; then
+            # Random CAN ID between 0x100 and 0x7FF
+            CAN_ID=$(printf "%X" $((0x100 + RANDOM % 0x700)))
+            # Random length between 1 and 8 bytes
+            LEN=$((1 + RANDOM % 8))
+            DATA=""
+            for ((i=0; i<LEN; i++)); do
+                DATA+=$(printf "%02X" $((RANDOM % 256)))
+            done
+            cansend vcan0 "${CAN_ID}#${DATA}" 2>/dev/null
+        fi
+        sleep 2
+    done
+) &
+AGENT_C_SENDER_PID=$!
+
+# Listener loop
+(
+    if command -v candump &>/dev/null; then
+        candump vcan0 2>/dev/null | while read -r line; do
+            echo "[Agent C (CAN)] Received: $line"
+        done
+    fi
+) &
+AGENT_C_LISTENER_PID=$!
 
 # Keep running
 wait

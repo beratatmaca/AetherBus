@@ -4,6 +4,7 @@
 #include "core/format_codec.h"
 #include "core/pty_proxy.h"
 #include "gui/consoleview.h"
+#include "gui/console_panel.h"
 #include "gui/macrobar.h"
 #include "gui/statspanel.h"
 #include "gui/config_panel.h"
@@ -65,7 +66,7 @@ SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new
             });
 
     // Proxy connections
-    connect(m_proxy, &PtyProxy::chunkCaptured, m_console, &ConsoleView::appendChunk);
+    connect(m_proxy, &PtyProxy::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
     connect(m_proxy, &PtyProxy::chunkCaptured, this, &SessionWidget::onChunkCaptured);
     connect(m_proxy, &PtyProxy::started, this, &SessionWidget::onStarted);
     connect(m_proxy, &PtyProxy::stopped, this, &SessionWidget::onStopped);
@@ -76,7 +77,7 @@ SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new
 
     // Offline replay feeds chunks through the same rendering path as live capture.
     m_replayer = new CaptureReplayer(this);
-    connect(m_replayer, &CaptureReplayer::chunkReplayed, m_console, &ConsoleView::appendChunk);
+    connect(m_replayer, &CaptureReplayer::chunkReplayed, m_consolePanel->console(), &ConsoleView::appendChunk);
     connect(m_replayer, &CaptureReplayer::finished, this, &SessionWidget::onReplayFinished);
 
     m_modemTimer = new QTimer(this);
@@ -112,6 +113,14 @@ SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new
         parityVal = Parity::Odd;
     int stopVal = settings.value(QStringLiteral("connection/stopBits"), 1).toInt();
     m_stats.setSerialConfig(baudVal, dataVal, parityVal, stopVal);
+
+    // Console Panel configuration connections
+    connect(m_consolePanel, &ConsolePanel::formatChanged, this, &SessionWidget::applyFormats);
+    connect(m_consolePanel, &ConsolePanel::newlineModeChanged, this, &SessionWidget::applyNewlineMode);
+    connect(m_consolePanel, &ConsolePanel::saveRequested, this, &SessionWidget::saveReceived);
+    connect(m_consolePanel, &ConsolePanel::logToggled, this, &SessionWidget::toggleLogging);
+    connect(m_consolePanel, &ConsolePanel::captureToggled, this, &SessionWidget::toggleCapture);
+    connect(m_consolePanel, &ConsolePanel::replayToggled, this, &SessionWidget::toggleReplay);
 
     applyFormats();
     applyNewlineMode();
@@ -174,7 +183,7 @@ void SessionWidget::startInterception(const SerialConfig &cfg) {
     // A live session and an offline replay can't share the console; drop the replay.
     if (m_replayer != nullptr && m_replayer->isReplaying()) {
         m_replayer->stop();
-        m_replayBtn->setChecked(false);
+        m_consolePanel->replayButton()->setChecked(false);
     }
     m_lastConfig = cfg;
     if (m_reconnectTimer) {
@@ -191,190 +200,11 @@ void SessionWidget::stopInterception() {
 QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(6, 0, 6, 0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
 
-    m_console = new ConsoleView(panel);
-
-    const auto markToolbarButton = [](QPushButton *button, const char *kind) {
-        button->setProperty(kind, true);
-        button->setCursor(Qt::PointingHandCursor);
-    };
-    const auto makeToggle = [&](const QString &text, const QString &tooltip) {
-        auto *button = new QPushButton(text, panel);
-        button->setCheckable(true);
-        button->setToolTip(tooltip);
-        markToolbarButton(button, "toolbarToggle");
-        return button;
-    };
-    const auto makeAction = [&](const QString &text, const QString &tooltip) {
-        auto *button = new QPushButton(text, panel);
-        button->setToolTip(tooltip);
-        markToolbarButton(button, "toolbarAction");
-        return button;
-    };
-    const auto makeDivider = [&]() {
-        auto *line = new QFrame(panel);
-        line->setFrameShape(QFrame::VLine);
-        line->setObjectName(QStringLiteral("toolbarDivider"));
-        return line;
-    };
-    const auto makeSectionLabel = [&](const QString &text) {
-        auto *label = new QLabel(text, panel);
-        label->setObjectName(QStringLiteral("toolbarSectionLabel"));
-        return label;
-    };
-
-    auto *row1 = new QHBoxLayout();
-    row1->setSpacing(6);
-    row1->addWidget(makeSectionLabel(QStringLiteral("View")));
-
-    m_hexCheck = makeToggle(QStringLiteral("HEX"), QStringLiteral("Show hexadecimal bytes"));
-    m_decCheck = makeToggle(QStringLiteral("DEC"), QStringLiteral("Show decimal byte values"));
-    m_binCheck = makeToggle(QStringLiteral("BIN"), QStringLiteral("Show binary byte values"));
-    m_asciiCheck = makeToggle(QStringLiteral("ASCII"), QStringLiteral("Show ASCII gutter"));
-    m_hexCheck->setChecked(true);
-    m_asciiCheck->setChecked(true);
-    for (QPushButton *button : {m_hexCheck, m_decCheck, m_binCheck, m_asciiCheck}) {
-        button->setProperty("segmentButton", true);
-        connect(button, &QPushButton::toggled, this, &SessionWidget::applyFormats);
-        row1->addWidget(button);
-    }
-
-    row1->addWidget(makeDivider());
-    row1->addWidget(makeSectionLabel(QStringLiteral("Split")));
-    m_newlineModeBox = new QComboBox(panel);
-    m_newlineModeBox->addItem(QStringLiteral("CR"), 0);
-    m_newlineModeBox->addItem(QStringLiteral("LF"), 1);
-    m_newlineModeBox->addItem(QStringLiteral("CR+LF"), 2);
-    m_newlineModeBox->addItem(QStringLiteral("Every packet/chunk"), 3);
-    m_newlineModeBox->addItem(QStringLiteral("Every N bytes"), 4);
-    m_newlineModeBox->addItem(QStringLiteral("Header byte array"), 5);
-    m_newlineModeBox->setCurrentIndex(2);
-    m_newlineModeBox->setToolTip(
-        QStringLiteral("Split incoming streams into lines by:\n"
-                       "CR/LF/CR+LF: carriage return, line feed, or both\n"
-                       "Every packet/chunk: one line per captured chunk\n"
-                       "Every N bytes: fixed byte count per line\n"
-                       "Header byte array: split when header pattern is found"));
-
-    m_newlineParamEdit = new QLineEdit(panel);
-    m_newlineParamEdit->setFixedWidth(100);
-    m_newlineParamEdit->setPlaceholderText(QStringLiteral("param…"));
-
-    m_newlineFormatBox = new QComboBox(panel);
-    m_newlineFormatBox->addItem(QStringLiteral("HEX"));
-    m_newlineFormatBox->addItem(QStringLiteral("ASCII"));
-    m_newlineFormatBox->addItem(QStringLiteral("DEC"));
-    m_newlineFormatBox->addItem(QStringLiteral("BIN"));
-    m_newlineFormatBox->setFixedWidth(60);
-    m_newlineFormatBox->setToolTip(QStringLiteral("Data format for header pattern input"));
-    m_newlineFormatBox->hide();
-
-    connect(m_newlineModeBox, &QComboBox::currentIndexChanged, this, &SessionWidget::applyNewlineMode);
-    connect(m_newlineParamEdit, &QLineEdit::editingFinished, this, &SessionWidget::applyNewlineMode);
-    connect(m_newlineFormatBox, &QComboBox::currentIndexChanged, this, &SessionWidget::applyNewlineMode);
-    row1->addWidget(m_newlineModeBox);
-    row1->addWidget(m_newlineFormatBox);
-    row1->addWidget(m_newlineParamEdit);
-
-    row1->addStretch(1);
-    layout->addLayout(row1);
-
-    auto *row2 = new QHBoxLayout();
-    row2->setSpacing(6);
-    row2->addWidget(makeSectionLabel(QStringLiteral("Flow")));
-
-    m_autoScrollCheck = makeToggle(QStringLiteral("Auto"), QStringLiteral("Automatically scroll to the end of the log"));
-    m_autoScrollCheck->setChecked(true);
-    connect(m_autoScrollCheck, &QPushButton::toggled, m_console, &ConsoleView::setAutoScroll);
-    m_pauseCheck = makeToggle(QStringLiteral("Pause"), QStringLiteral("Suspend UI viewport updates"));
-    connect(m_pauseCheck, &QPushButton::toggled, m_console, &ConsoleView::setPaused);
-    m_tsCheck = makeToggle(QStringLiteral("Time"), QStringLiteral("Show or hide the [HH:mm:ss.zzz] timestamp prefix on each line"));
-    m_tsCheck->setChecked(true);
-    connect(m_tsCheck, &QPushButton::toggled, m_console, &ConsoleView::setShowTimestamps);
-    row2->addWidget(m_autoScrollCheck);
-    row2->addWidget(m_pauseCheck);
-    row2->addWidget(m_tsCheck);
-
-    row2->addWidget(makeDivider());
-    m_countsLabel = new QLabel(QStringLiteral("Rx: 0  Tx: 0"), panel);
-    m_countsLabel->setObjectName(QStringLiteral("consoleCountsLabel"));
-    m_countsLabel->setToolTip(QStringLiteral("Cumulative byte counts. Rate updates every second."));
-    row2->addWidget(m_countsLabel);
-    auto *resetBtn = makeAction(QStringLiteral("Reset"), QStringLiteral("Clear Tx/Rx byte counters"));
-    resetBtn->setToolTip(QStringLiteral("Clear Tx/Rx byte counters"));
-    connect(resetBtn, &QPushButton::clicked, m_console, &ConsoleView::resetCounts);
-    row2->addWidget(resetBtn);
-
-    row2->addWidget(makeDivider());
-    row2->addWidget(makeSectionLabel(QStringLiteral("Actions")));
-    auto *clearBtn = makeAction(QStringLiteral("Clear"), QStringLiteral("Clear all text from viewport and raw history cache"));
-    connect(clearBtn, &QPushButton::clicked, m_console, &ConsoleView::clearConsole);
-    auto *saveBtn = makeAction(QStringLiteral("Save"), QStringLiteral("Export all currently captured plain text to a file"));
-    connect(saveBtn, &QPushButton::clicked, this, &SessionWidget::saveReceived);
-    m_logBtn = makeAction(QStringLiteral("Log"), QStringLiteral("Continuously append every line to a file"));
-    m_logBtn->setCheckable(true);
-    connect(m_logBtn, &QPushButton::clicked, this, &SessionWidget::toggleLogging);
-    m_captureBtn = makeAction(QStringLiteral("Capture"),
-                              QStringLiteral("Record raw traffic to a pcap file (opens in Wireshark) straight from the backend"));
-    m_captureBtn->setCheckable(true);
-    connect(m_captureBtn, &QPushButton::clicked, this, &SessionWidget::toggleCapture);
-    m_replayBtn = makeAction(QStringLiteral("Replay"),
-                             QStringLiteral("Open a captured pcap file and replay it through the console with original timing"));
-    m_replayBtn->setCheckable(true);
-    connect(m_replayBtn, &QPushButton::clicked, this, &SessionWidget::toggleReplay);
-    row2->addWidget(clearBtn);
-    row2->addWidget(saveBtn);
-    row2->addWidget(m_logBtn);
-    row2->addWidget(m_captureBtn);
-    row2->addWidget(m_replayBtn);
-
-    row2->addWidget(makeDivider());
-    m_selLabel = new QLabel(QStringLiteral("Sel: 0"), panel);
-    m_selLabel->setObjectName(QStringLiteral("consoleSelectionLabel"));
-    row2->addWidget(m_selLabel);
-
-    row2->addStretch(1);
-    row2->addWidget(makeSectionLabel(QStringLiteral("Find")));
-
-    // Mode box: how the Find text is interpreted. Order matches ConsoleView::SearchMode.
-    auto *searchModeBox = new QComboBox(panel);
-    searchModeBox->addItems(
-        {QStringLiteral("Auto"), QStringLiteral("Text"), QStringLiteral("HEX"), QStringLiteral("DEC"), QStringLiteral("BIN")});
-    searchModeBox->setToolTip(QStringLiteral("Interpret the Find text as: Auto (detect), literal Text, or HEX / DEC / BIN byte values"));
-    connect(searchModeBox, &QComboBox::currentIndexChanged, this,
-            [this](int index) { m_console->setSearchMode(static_cast<ConsoleView::SearchMode>(index)); });
-    row2->addWidget(searchModeBox);
-
-    m_findEdit = new QLineEdit(panel);
-    m_findEdit->setPlaceholderText(QStringLiteral("find…"));
-    m_findEdit->setFixedWidth(160);
-    m_findEdit->setToolTip(
-        QStringLiteral("Search the console history. Use the mode box to search by text or HEX / DEC / BIN byte values."));
-    connect(m_findEdit, &QLineEdit::returnPressed, this, [this] { doFind(false); });
-    connect(m_findEdit, &QLineEdit::textChanged, m_console, &ConsoleView::highlightSearchText);
-    auto *findPrevBtn = makeAction(QStringLiteral("◀"), QStringLiteral("Find previous occurrence"));
-    auto *findNextBtn = makeAction(QStringLiteral("▶"), QStringLiteral("Find next occurrence"));
-    findPrevBtn->setFixedWidth(32);
-    findNextBtn->setFixedWidth(32);
-    connect(findPrevBtn, &QPushButton::clicked, this, [this] { doFind(true); });
-    connect(findNextBtn, &QPushButton::clicked, this, [this] { doFind(false); });
-    row2->addWidget(findPrevBtn);
-    row2->addWidget(findNextBtn);
-    row2->addWidget(m_findEdit);
-
-    // Live match counter, updated on every highlight pass.
-    auto *matchCountLabel = new QLabel(panel);
-    matchCountLabel->setToolTip(QStringLiteral("Number of matches for the current search"));
-    connect(m_console, &ConsoleView::searchMatchCount, matchCountLabel, [matchCountLabel](int count) {
-        matchCountLabel->setText(count > 0 ? QStringLiteral("%1 match%2").arg(count).arg(count == 1 ? QString() : QStringLiteral("es"))
-                                           : QString());
-    });
-    row2->addWidget(matchCountLabel);
-    layout->addLayout(row2);
-
-    layout->addWidget(m_console, 1);
+    m_consolePanel = new ConsolePanel(panel);
+    layout->addWidget(m_consolePanel, 1);
 
     m_injectPanel = new InjectionPanel(panel);
     layout->addWidget(m_injectPanel);
@@ -389,9 +219,7 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     });
     layout->addWidget(m_macroBar);
 
-    connect(m_console, &ConsoleView::countsChanged, this, &SessionWidget::updateCounts);
-    connect(m_console, &ConsoleView::selectionChars, this,
-            [this](int chars) { m_selLabel->setText(QStringLiteral("Sel: %1").arg(chars)); });
+    connect(m_consolePanel->console(), &ConsoleView::countsChanged, this, &SessionWidget::updateCounts);
 
     return panel;
 }
@@ -450,23 +278,23 @@ void SessionWidget::onError(const QString &message) {
 }
 
 void SessionWidget::applyFormats() {
-    m_console->setFormats(m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked());
+    m_consolePanel->console()->setFormats(m_consolePanel->isHexChecked(), m_consolePanel->isDecChecked(), m_consolePanel->isBinChecked(), m_consolePanel->isAsciiChecked());
     QSettings settings;
-    settings.setValue(QStringLiteral("connection/showHex"), m_hexCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showDec"), m_decCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showBin"), m_binCheck->isChecked());
-    settings.setValue(QStringLiteral("connection/showAscii"), m_asciiCheck->isChecked());
+    settings.setValue(QStringLiteral("connection/showHex"), m_consolePanel->isHexChecked());
+    settings.setValue(QStringLiteral("connection/showDec"), m_consolePanel->isDecChecked());
+    settings.setValue(QStringLiteral("connection/showBin"), m_consolePanel->isBinChecked());
+    settings.setValue(QStringLiteral("connection/showAscii"), m_consolePanel->isAsciiChecked());
 }
 
 void SessionWidget::applyNewlineMode() {
-    const int idx = m_newlineModeBox->currentIndex();
+    const int idx = m_consolePanel->newlineModeBox()->currentIndex();
 
     // Show/hide format selector only for header byte array mode
-    m_newlineFormatBox->setVisible(idx == 5);
+    m_consolePanel->newlineFormatBox()->setVisible(idx == 5);
 
     // Show/hide param edit for modes that need it
     const bool needsParam = (idx == 4 || idx == 5);
-    m_newlineParamEdit->setVisible(needsParam);
+    m_consolePanel->newlineParamEdit()->setVisible(needsParam);
 
     auto mode = ConsoleView::NewlineMode::PerChunk;
     int param = 0;
@@ -491,22 +319,22 @@ void SessionWidget::applyNewlineMode() {
             mode = ConsoleView::NewlineMode::FixedCount;
             {
                 bool ok = false;
-                param = m_newlineParamEdit->text().toInt(&ok, 10);
+                param = m_consolePanel->newlineParamEdit()->text().toInt(&ok, 10);
                 if (!ok || param <= 0) {
                     param = 16;
-                    m_newlineParamEdit->setText(QStringLiteral("16"));
+                    m_consolePanel->newlineParamEdit()->setText(QStringLiteral("16"));
                 }
             }
             break;
         case 5:  // Header byte array
             mode = ConsoleView::NewlineMode::Delimiter;
             {
-                const QString text = m_newlineParamEdit->text();
+                const QString text = m_consolePanel->newlineParamEdit()->text();
                 bool ok = false;
                 int headerByte = 0;
 
                 // Parse based on selected format
-                switch (m_newlineFormatBox->currentIndex()) {
+                switch (m_consolePanel->newlineFormatBox()->currentIndex()) {
                     case 0:  // HEX
                         headerByte = text.toInt(&ok, 16);
                         break;
@@ -532,7 +360,7 @@ void SessionWidget::applyNewlineMode() {
             break;
     }
 
-    m_console->setNewlineMode(mode, param);
+    m_consolePanel->console()->setNewlineMode(mode, param);
 }
 
 void SessionWidget::updateCounts(qint64 rx, qint64 tx, qint64 rxRate, qint64 txRate) {
@@ -550,26 +378,7 @@ void SessionWidget::updateCounts(qint64 rx, qint64 tx, qint64 rxRate, qint64 txR
     if (dropped > 0) {
         text += QStringLiteral("  <span style='color:#e57373'>Drop: %1</span>").arg(dropped);
     }
-    m_countsLabel->setText(text);
-}
-
-void SessionWidget::doFind(bool backward) {
-    const QString query = m_findEdit->text();
-    if (query.isEmpty()) {
-        return;
-    }
-    QTextDocument::FindFlags flags;
-    if (backward) {
-        flags |= QTextDocument::FindBackward;
-    }
-    if (!m_console->findQuery(query, flags)) {
-        if (backward) {
-            m_console->moveCursorToEnd();
-        } else {
-            m_console->moveCursorToStart();
-        }
-        m_console->findQuery(query, flags);
-    }
+    m_consolePanel->setCountsText(text);
 }
 
 void SessionWidget::saveReceived() {
@@ -583,15 +392,15 @@ void SessionWidget::saveReceived() {
         onError(QStringLiteral("Could not write %1: %2").arg(path, file.errorString()));
         return;
     }
-    file.write(m_console->toPlainText().toUtf8());
+    file.write(m_consolePanel->console()->toPlainText().toUtf8());
     file.close();
     m_configPanel->setStatus(QStringLiteral("Saved capture to %1").arg(path));
 }
 
 void SessionWidget::toggleLogging() {
-    if (m_console->isLogging()) {
-        m_console->stopLogging();
-        m_logBtn->setChecked(false);
+    if (m_consolePanel->console()->isLogging()) {
+        m_consolePanel->console()->stopLogging();
+        m_consolePanel->logButton()->setChecked(false);
         m_configPanel->setStatus(QStringLiteral("Logging stopped."));
         return;
     }
@@ -599,15 +408,15 @@ void SessionWidget::toggleLogging() {
         QFileDialog::getSaveFileName(this, QStringLiteral("Log captured data to file"), QStringLiteral("aetherbus_session.log"),
                                      QStringLiteral("Log files (*.log *.txt);;All files (*)"));
     if (path.isEmpty()) {
-        m_logBtn->setChecked(false);
+        m_consolePanel->logButton()->setChecked(false);
         return;
     }
-    if (!m_console->startLogging(path)) {
-        m_logBtn->setChecked(false);
+    if (!m_consolePanel->console()->startLogging(path)) {
+        m_consolePanel->logButton()->setChecked(false);
         onError(QStringLiteral("Could not open log file: %1").arg(path));
         return;
     }
-    m_logBtn->setChecked(true);
+    m_consolePanel->logButton()->setChecked(true);
     m_configPanel->setStatus(QStringLiteral("Logging to %1").arg(path));
 }
 
@@ -656,7 +465,7 @@ void SessionWidget::onDisconnected() {
 void SessionWidget::toggleCapture() {
     if (m_proxy->isCapturing()) {
         m_proxy->stopCapture();
-        m_captureBtn->setChecked(false);
+        m_consolePanel->captureButton()->setChecked(false);
         m_configPanel->setStatus(QStringLiteral("Capture stopped."));
         return;
     }
@@ -664,50 +473,50 @@ void SessionWidget::toggleCapture() {
         QFileDialog::getSaveFileName(this, QStringLiteral("Capture traffic to pcap"), QStringLiteral("aetherbus_capture.pcap"),
                                      QStringLiteral("pcap files (*.pcap);;All files (*)"));
     if (path.isEmpty()) {
-        m_captureBtn->setChecked(false);
+        m_consolePanel->captureButton()->setChecked(false);
         return;
     }
     if (!m_proxy->startCapture(path)) {
-        m_captureBtn->setChecked(false);
+        m_consolePanel->captureButton()->setChecked(false);
         return;
     }
-    m_captureBtn->setChecked(true);
+    m_consolePanel->captureButton()->setChecked(true);
     m_configPanel->setStatus(QStringLiteral("Capturing to %1").arg(path));
 }
 
 void SessionWidget::toggleReplay() {
     if (m_replayer->isReplaying()) {
         m_replayer->stop();
-        m_replayBtn->setChecked(false);
+        m_consolePanel->replayButton()->setChecked(false);
         m_configPanel->setStatus(QStringLiteral("Replay stopped."));
         return;
     }
     // Replay is offline analysis; refuse while a live session owns the console.
     if (m_proxy->isRunning()) {
-        m_replayBtn->setChecked(false);
+        m_consolePanel->replayButton()->setChecked(false);
         onError(QStringLiteral("Stop interception before replaying a capture file."));
         return;
     }
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Open capture file for replay"), QString(),
                                                       QStringLiteral("pcap files (*.pcap);;All files (*)"));
     if (path.isEmpty()) {
-        m_replayBtn->setChecked(false);
+        m_consolePanel->replayButton()->setChecked(false);
         return;
     }
     QString error;
     if (!m_replayer->load(path, &error)) {
-        m_replayBtn->setChecked(false);
+        m_consolePanel->replayButton()->setChecked(false);
         onError(QStringLiteral("Could not open capture: %1").arg(error));
         return;
     }
-    m_console->clearConsole();
-    m_replayBtn->setChecked(true);
+    m_consolePanel->console()->clearConsole();
+    m_consolePanel->replayButton()->setChecked(true);
     m_configPanel->setStatus(QStringLiteral("Replaying %1 (%2 packets)…").arg(path).arg(m_replayer->chunkCount()));
     m_replayer->start();
 }
 
 void SessionWidget::onReplayFinished() {
-    m_replayBtn->setChecked(false);
+    m_consolePanel->replayButton()->setChecked(false);
     m_configPanel->setStatus(QStringLiteral("Replay complete (%1 packets).").arg(m_replayer->chunkCount()));
 }
 

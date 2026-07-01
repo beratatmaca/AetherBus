@@ -15,6 +15,7 @@ namespace aether {
 
 class PtyProxy;
 class ConsoleView;
+class ConsolePanel;
 class MacroBar;
 class StatsPanel;
 class CaptureReplayer;
@@ -65,32 +66,13 @@ private slots:
 private:
     void buildUi();
     QWidget *buildConsolePanel(QWidget *parent);
-    void doFind(bool backward);
 
     PtyProxy *m_proxy;
-    ConsoleView *m_console{nullptr};
+    ConsolePanel *m_consolePanel = nullptr;
 
     ConfigPanel *m_configPanel = nullptr;
     SignalPanel *m_signalPanel = nullptr;
     InjectionPanel *m_injectPanel = nullptr;
-
-    QPushButton *m_hexCheck = nullptr;
-    QPushButton *m_decCheck = nullptr;
-    QPushButton *m_binCheck = nullptr;
-    QPushButton *m_asciiCheck = nullptr;
-    QComboBox *m_newlineModeBox = nullptr;
-    QComboBox *m_newlineFormatBox = nullptr;
-    QLineEdit *m_newlineParamEdit = nullptr;
-    QPushButton *m_autoScrollCheck = nullptr;
-    QPushButton *m_pauseCheck = nullptr;
-    QLabel *m_countsLabel = nullptr;
-    QLineEdit *m_findEdit = nullptr;
-    QPushButton *m_tsCheck = nullptr;
-
-    QLabel *m_selLabel = nullptr;
-    QPushButton *m_logBtn = nullptr;
-    QPushButton *m_captureBtn = nullptr;
-    QPushButton *m_replayBtn = nullptr;  ///< offline capture-file replay toggle
 
     CaptureReplayer *m_replayer = nullptr;
 

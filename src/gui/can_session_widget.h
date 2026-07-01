@@ -10,11 +10,14 @@ class QPushButton;
 class QCheckBox;
 class QLabel;
 class QTimer;
+class QComboBox;
+class QHBoxLayout;
 
 namespace aether {
 
 class CanBackend;
 class ConsoleView;
+class ConsolePanel;
 class StatsPanel;
 class CanConfigPanel;
 
@@ -49,20 +52,12 @@ private:
     QWidget *buildConsolePanel(QWidget *parent);
 
     CanBackend *m_backend;
-    ConsoleView *m_console = nullptr;
+    ConsolePanel *m_consolePanel = nullptr;
     CanConfigPanel *m_configPanel = nullptr;
     StatsPanel *m_statsPanel = nullptr;
 
-    QPushButton *m_hexCheck = nullptr;
-    QPushButton *m_decCheck = nullptr;
-    QPushButton *m_binCheck = nullptr;
-    QPushButton *m_asciiCheck = nullptr;
-    QPushButton *m_autoScrollCheck = nullptr;
-    QPushButton *m_pauseCheck = nullptr;
-    QPushButton *m_tsCheck = nullptr;
-    QLabel *m_countsLabel = nullptr;
-
     // Transmit bar.
+    QComboBox *m_txFormatBox = nullptr;
     QLineEdit *m_txIdEdit = nullptr;
     QLineEdit *m_txDataEdit = nullptr;
     QCheckBox *m_txEffCheck = nullptr;
@@ -73,6 +68,30 @@ private:
 
     StatsCalculator m_stats;
     QTimer *m_statsTimer = nullptr;
+
+    struct CanHistoryItem {
+        quint32 id = 0;
+        QByteArray payload;
+        quint16 flags = 0;
+    };
+    QVector<CanHistoryItem> m_txHistory;
+    QComboBox *m_txHistoryBox = nullptr;
+
+    struct CanMacro {
+        QString name;
+        quint32 id = 0;
+        QByteArray payload;
+        quint16 flags = 0;
+    };
+    QVector<CanMacro> m_macros;
+    QWidget *m_macroContainer = nullptr;
+    QHBoxLayout *m_macroLayout = nullptr;
+    QLabel *m_emptyMacroHint = nullptr;
+
+    void loadMacros();
+    void saveMacros();
+    void rebuildMacroButtons();
+    void saveCurrentAsMacro();
 };
 
 }  // namespace aether
