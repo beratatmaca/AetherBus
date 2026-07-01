@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/serial_types.h"
+#include <QHash>
 #include <QVector>
 
 namespace aether {
@@ -28,6 +29,16 @@ struct StatValue {
         sum = 0;
         count = 0;
     }
+};
+
+/// Per-identifier statistics for framed transports (CAN), accumulated purely
+/// from observed traffic.
+struct CanIdStat {
+    quint64 count = 0;            ///< Frames seen with this id.
+    qint64 lastTimestampMs = -1;  ///< Timestamp of the most recent frame.
+    StatValue gap;                ///< Inter-frame gap for this id (ms).
+    quint16 lastFlags = 0;        ///< Flags of the most recent frame.
+    int lastLen = 0;              ///< Payload length of the most recent frame.
 };
 
 class StatsCalculator {
@@ -61,6 +72,9 @@ public:
     const QVector<double> &rxRateHistory() const { return m_rxRateHistory; }
     const QVector<double> &txRateHistory() const { return m_txRateHistory; }
 
+    /// Per-CAN-id statistics keyed by identifier (populated only for framed chunks).
+    const QHash<quint32, CanIdStat> &perIdStats() const { return m_perId; }
+
 private:
     qint64 m_rxBytes = 0;
     qint64 m_txBytes = 0;
@@ -88,6 +102,8 @@ private:
 
     QVector<double> m_rxRateHistory;
     QVector<double> m_txRateHistory;
+
+    QHash<quint32, CanIdStat> m_perId;
 
     // Serial parameters
     int m_baud = 115200;

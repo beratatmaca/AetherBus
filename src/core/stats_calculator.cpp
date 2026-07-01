@@ -30,6 +30,8 @@ void StatsCalculator::reset() {
 
     m_rxRateHistory.fill(0.0, 60);
     m_txRateHistory.fill(0.0, 60);
+
+    m_perId.clear();
 }
 
 void StatsCalculator::addChunk(const CapturedChunk &chunk) {
@@ -75,6 +77,20 @@ void StatsCalculator::addChunk(const CapturedChunk &chunk) {
     m_lastDir = chunk.dir;
     m_lastChunkTime = chunk.timestampMs;
     m_hasLastChunk = true;
+
+    if (chunk.isFrame) {
+        CanIdStat &s = m_perId[chunk.frameId];
+        if (s.lastTimestampMs != -1) {
+            const qint64 gap = chunk.timestampMs - s.lastTimestampMs;
+            if (gap >= 0) {
+                s.gap.update(gap);
+            }
+        }
+        s.count++;
+        s.lastTimestampMs = chunk.timestampMs;
+        s.lastFlags = chunk.frameFlags;
+        s.lastLen = size;
+    }
 }
 
 void StatsCalculator::setSerialConfig(int baud, int dataBits, aether::Parity parity, int stopBits) {

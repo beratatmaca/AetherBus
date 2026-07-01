@@ -35,6 +35,13 @@ private slots:
 
     // Stats Calculator Tests
     void statsCalculatorBasics();
+    void statsCalculatorPerId();
+
+    // CAN Backend Tests (skipped when no vcan interface is present)
+    void canConfigValidate();
+    void canBackendCapturesFrame();
+    void canBackendTransmitsFrame();
+    void canBackendFdFrame();
 
     // GUI Tests
     void guiConsoleView();

@@ -177,6 +177,7 @@ if(BUILD_TESTING)
         tests/bus_test.cpp
         tests/bus_test_pty.cpp
         tests/bus_test_gui.cpp
+        tests/bus_test_can.cpp
     )
     target_link_libraries(bus_test PRIVATE aether_gui Qt6::Widgets Qt6::Core Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
