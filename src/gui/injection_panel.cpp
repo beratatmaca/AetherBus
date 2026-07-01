@@ -15,7 +15,6 @@ InjectionPanel::InjectionPanel(QWidget *parent) : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    // --- Injection panel ----------------------------------------------------
     auto *injectRow = new QHBoxLayout();
     m_injectFormatBox = new QComboBox(this);
     m_injectFormatBox->addItem(QStringLiteral("HEX"));
@@ -57,7 +56,6 @@ InjectionPanel::InjectionPanel(QWidget *parent) : QWidget(parent) {
     injectRow->addWidget(m_fileBtn);
     layout->addLayout(injectRow);
 
-    // --- Repeat / periodic send row ----------------------------------------
     auto *repeatRow = new QHBoxLayout();
     m_repeatCheck = new QCheckBox(QStringLiteral("Repeat send every"), this);
     m_repeatCheck->setToolTip(QStringLiteral("Check to enable auto-injection repeat timer"));

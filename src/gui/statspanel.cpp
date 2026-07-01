@@ -45,7 +45,6 @@ void StatsPanel::buildUi() {
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 
-    // 1. Throughput rates group box
     auto *ratesGroup = new QGroupBox(tr("Throughput & Packet Rates"), content);
     auto *ratesLayout = new QGridLayout(ratesGroup);
     ratesLayout->setSpacing(4);
@@ -94,7 +93,6 @@ void StatsPanel::buildUi() {
 
     layout->addWidget(ratesGroup);
 
-    // 2. Chart group box
     auto *chartGroup = new QGroupBox(tr("Throughput History"), content);
     auto *chartLayout = new QVBoxLayout(chartGroup);
     chartLayout->setContentsMargins(2, 2, 2, 2);
@@ -102,7 +100,6 @@ void StatsPanel::buildUi() {
     chartLayout->addWidget(m_chart);
     layout->addWidget(chartGroup);
 
-    // 3. Gap analysis group box
     auto *gapGroup = new QGroupBox(tr("Inter-Packet Gap & Latency"), content);
     auto *gapLayout = new QGridLayout(gapGroup);
     gapLayout->setSpacing(4);
@@ -162,7 +159,6 @@ void StatsPanel::buildUi() {
 
     layout->addWidget(gapGroup);
 
-    // 4. Control buttons
     m_resetBtn = new QPushButton(tr("Reset Statistics"), content);
     connect(m_resetBtn, &QPushButton::clicked, this, &StatsPanel::resetStats);
     layout->addWidget(m_resetBtn);

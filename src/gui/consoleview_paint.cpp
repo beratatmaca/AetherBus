@@ -48,12 +48,10 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
 
         int x = kLeftPad - hOff;
 
-        // ---------- Prefix ----------
         p.setPen(kMetaFg);
         p.drawText(x, yBase, dl.prefix);
         x += (dl.prefix.length() + 1) * m_charW;
 
-        // ---------- Byte cells (Numeric Pane) ----------
         const QColor &fgColor = isRx ? kRxFg : kTxFg;
         int numCols = dl.cols.size();
         int numBytes = dl.bytes.size();
@@ -95,7 +93,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
                     }
                 }
 
-                // --- Search-hit overlay ---
                 for (const SearchHit &hit : m_searchHits) {
                     if (hit.line != li) {
                         continue;
@@ -116,7 +113,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
                     }
                 }
 
-                // --- Selection overlay ---
                 if (m_hasSelection) {
                     const CursorPos selLo =
                         (m_selAnchor.line < m_selEnd.line || (m_selAnchor.line == m_selEnd.line && m_selAnchor.column <= m_selEnd.column))
@@ -180,7 +176,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
                     }
                 }
 
-                // --- Draw numeric tokens with optional badges ---
                 int innerX = x;
                 for (int ci = 0; ci < numCols; ++ci) {
                     if (bi >= dl.cols.at(ci).size()) {
@@ -238,7 +233,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
             }
         }
 
-        // ---------- Separator and ASCII Pane ----------
         if (numCols > 0 && !dl.ascii.isEmpty()) {
             p.setPen(QColor(85, 85, 85));  // Muted separator color
             p.drawText(x, yBase, QStringLiteral("  |  "));

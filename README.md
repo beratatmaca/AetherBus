@@ -154,7 +154,7 @@ cmake --build build --target docs          # generate Doxygen HTML
 
 AetherBus uses an **auto-incrementing version** of the form `MAJOR.MINOR.PATCH.BUILD`:
 
-* **`MAJOR.MINOR.PATCH`** — the semantic base, kept in the top-level [`VERSION`](VERSION) file. Bump it by hand for meaningful releases. Notable changes per version are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+* **`MAJOR.MINOR.PATCH`** — the semantic base, kept in the top-level [`VERSION`](VERSION) file. Bump it by hand for meaningful releases.
 * **`BUILD`** — the git commit count (`git rev-list --count HEAD`), which increases automatically with every commit/merge to `main`, so each build gets a unique, monotonically increasing version with no manual edits.
 
 The version is the single source of truth across the whole project:
@@ -197,7 +197,7 @@ Launch AetherBus and intercept a live serial link in four steps:
 4. **Decode and inject.** Switch the console format on the fly, and use the injection panel to send crafted bytes — as space-separated HEX (`41 42 0D 0A`), ASCII, decimal, or binary, with an optional CR/LF ending and one-shot or repeating delivery — directly to either the **device** or the **application** side of the link. Save frequently-used payloads as macros.
 5. **Capture and replay.** Arm **Capture…** to record everything to a `LINKTYPE_RTAC_SERIAL` pcap (open it in Wireshark), or **Replay…** a previous capture back through the console for offline analysis with the original timing preserved.
 
-#### Example: sniffing a modem session with `minicom`
+### Example: sniffing a modem session with `minicom`
 
 ```bash
 # Terminal 1 — start AetherBus, intercept /dev/ttyUSB0 at 115200 8N1.

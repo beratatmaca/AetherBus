@@ -15,7 +15,7 @@
   "C_Cpp.intelliSenseEngine": "disabled",
   "editor.formatOnSave": true,
   "editor.rulers": [
-    80
+    140
   ],
   "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,

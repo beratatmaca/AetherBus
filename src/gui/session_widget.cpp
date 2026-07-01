@@ -219,7 +219,6 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
         return label;
     };
 
-    // --- Toolbar row 1: format segments + line splitting --------------------
     auto *row1 = new QHBoxLayout();
     row1->setSpacing(6);
     row1->addWidget(makeSectionLabel(QStringLiteral("View")));
@@ -276,7 +275,6 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     row1->addStretch(1);
     layout->addLayout(row1);
 
-    // --- Toolbar row 2: flow controls + actions + search --------------------
     auto *row2 = new QHBoxLayout();
     row2->setSpacing(6);
     row2->addWidget(makeSectionLabel(QStringLiteral("Flow")));
@@ -375,7 +373,6 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     m_injectPanel = new InjectionPanel(panel);
     layout->addWidget(m_injectPanel);
 
-    // --- Macros + send history ---------------------------------------------
     m_macroBar = new MacroBar(panel);
     connect(m_macroBar, &MacroBar::send, this, [this](const QByteArray &bytes, bool toDevice) {
         const bool sent = toDevice ? m_proxy->injectToDevice(bytes) : m_proxy->injectToApp(bytes);

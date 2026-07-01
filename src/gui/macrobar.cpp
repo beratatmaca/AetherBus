@@ -91,6 +91,7 @@ void MacroBar::rebuildButtons() {
 void MacroBar::editMacros() {
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("Edit macros"));
+    setWindowIcon(QIcon(QStringLiteral(":/aether/icon.ico")));
     auto *vbox = new QVBoxLayout(&dialog);
     vbox->addWidget(new QLabel(QStringLiteral("One macro per line, as <b>Name = hex bytes</b> (e.g. <tt>Reset = 1B 40</tt>)."), &dialog));
 

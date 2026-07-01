@@ -38,10 +38,6 @@ class QMimeData;
 
 namespace aether {
 
-// ---------------------------------------------------------------------------
-// Internal data types
-// ---------------------------------------------------------------------------
-
 /// One fully-assembled display line ready to be painted.
 struct DisplayLine {
     qint64 timestampMs = 0;
@@ -61,10 +57,6 @@ struct CursorPos {
     int line = 0;    ///< index into m_lines
     int column = 0;  ///< flat character index within the rendered line text
 };
-
-// ---------------------------------------------------------------------------
-// ConsoleView
-// ---------------------------------------------------------------------------
 
 class ConsoleView : public QAbstractScrollArea {
     Q_OBJECT
@@ -94,9 +86,6 @@ public:
     [[nodiscard]] qint64 rxCount() const { return m_rx; }
     [[nodiscard]] qint64 txCount() const { return m_tx; }
 
-    // -----------------------------------------------------------------------
-    // QPlainTextEdit-compatible surface used by mainwindow.cpp
-    // -----------------------------------------------------------------------
     /// Return all visible history as plain text (used by Save… action).
     [[nodiscard]] QString toPlainText() const;
 
@@ -179,9 +168,6 @@ private slots:
     void flush();
 
 private:
-    // -----------------------------------------------------------------------
-    // Line assembly helpers
-    // -----------------------------------------------------------------------
     void processChunk(const CapturedChunk &chunk);
     void beginLineIfEmpty(const CapturedChunk &chunk);
     void commitOpenLine();  ///< push m_openLine into m_lines and reset
@@ -191,9 +177,6 @@ private:
     DisplayLine buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes) const;
     [[nodiscard]] QString lineToPlain(const DisplayLine &dl) const;
 
-    // -----------------------------------------------------------------------
-    // Search helpers
-    // -----------------------------------------------------------------------
     /// Build a regex matching @p bytes against the active display columns.
     [[nodiscard]] QRegularExpression buildByteRegex(const QByteArray &bytes) const;
     /// Resolve the query into a matcher per @ref m_searchMode. Returns a regex to
@@ -204,9 +187,6 @@ private:
     /// Flat plain-text representation of a line for search matching.
     [[nodiscard]] QString lineSearchText(const DisplayLine &dl) const;
 
-    // -----------------------------------------------------------------------
-    // Scroll / layout helpers
-    // -----------------------------------------------------------------------
     void updateScrollBars();
     int lineHeight() const;
     int firstVisibleLine() const;
@@ -219,20 +199,10 @@ private:
     /// Full rendered plain text of a line for measuring selection.
     QString fullLineText(int li) const;
 
-    // -----------------------------------------------------------------------
-    // Clipboard / mime helpers
-    // -----------------------------------------------------------------------
     [[nodiscard]] QString selectedText() const;
     void copySelectionToClipboard(int layerIndex) const;
 
-    // -----------------------------------------------------------------------
-    // Reapply history after a settings change
-    // -----------------------------------------------------------------------
     void reapplyHistory();
-
-    // -----------------------------------------------------------------------
-    // Data
-    // -----------------------------------------------------------------------
 
     // Pending capture queue + flush timer.
     QVector<CapturedChunk> m_pending;

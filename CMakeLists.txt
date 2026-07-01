@@ -139,7 +139,7 @@ add_library(aether_gui STATIC
     src/gui/throughput_chart.h
     src/gui/statspanel.cpp
     src/gui/statspanel.h
-    src/gui/resources.qrc          # compiled-in icon & assets
+    src/gui/resources.qrc
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
 

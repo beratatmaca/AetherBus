@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=AetherBus
-Comment=Transparent serial-port interceptor with an HTerm-style sniffer console
+Comment=Transparent serial-port interceptor with a console
 Exec=aetherbus
 Icon=${SNAP}/meta/gui/icon.png
 Terminal=false

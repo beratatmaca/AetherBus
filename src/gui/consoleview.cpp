@@ -1,5 +1,4 @@
 #include "gui/consoleview.h"
-#include "core/format_codec.h"
 
 #include <QDateTime>
 #include <QFile>
@@ -8,7 +7,6 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QWheelEvent>
-#include <cstddef>
 
 namespace aether {
 
@@ -442,7 +440,7 @@ void ConsoleView::updateScrollBars() {
     const int scanLimit = qMin(m_lines.size(), 200);
     for (int i = m_lines.size() - scanLimit; i < m_lines.size(); ++i) {
         const DisplayLine &dl = m_lines.at(i);
-        int lineW = kLeftPad + (dl.prefix.length() + 1) * m_charW;
+        int lineW = kLeftPad + ((dl.prefix.length() + 1) * m_charW);
 
         int numCols = dl.cols.size();
         if (numCols > 0 && !dl.bytes.isEmpty()) {
@@ -473,7 +471,7 @@ void ConsoleView::updateScrollBars() {
                 if (formatType == 0) {
                     cellW += tokenLen * m_charW;
                 } else {
-                    cellW += tokenLen * m_charW + 6;
+                    cellW += (tokenLen * m_charW) + 6;
                 }
                 if (ci < numCols - 1) {
                     cellW += 4;
@@ -507,7 +505,7 @@ int ConsoleView::firstVisibleLine() const {
 }
 
 int ConsoleView::visibleLineCount() const {
-    return viewport()->height() / m_lineH + 2;
+    return (viewport()->height() / m_lineH) + 2;
 }
 
 void ConsoleView::resizeEvent(QResizeEvent *event) {
@@ -517,7 +515,7 @@ void ConsoleView::resizeEvent(QResizeEvent *event) {
 
 void ConsoleView::wheelEvent(QWheelEvent *event) {
     QScrollBar *vsb = verticalScrollBar();
-    vsb->setValue(vsb->value() - event->angleDelta().y() / 120 * m_lineH * 3);
+    vsb->setValue(vsb->value() - (event->angleDelta().y() / 120 * m_lineH * 3));
     event->accept();
 }
 
