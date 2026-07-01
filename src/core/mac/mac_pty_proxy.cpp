@@ -61,4 +61,4 @@ PtyProxy::Stats MacPtyProxy::stats() const {
     return {};
 }
 
-} // namespace aether
+}  // namespace aether

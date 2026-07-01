@@ -82,4 +82,4 @@ private:
     std::unique_ptr<QFile> m_captureFile;
 };
 
-} // namespace aether
+}  // namespace aether

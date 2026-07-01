@@ -1,4 +1,7 @@
 #include "gui/consoleview.h"
+
+#include "core/format_codec.h"
+
 #include <QScrollBar>
 #include <QMenu>
 #include <QContextMenuEvent>
@@ -10,14 +13,26 @@ namespace aether {
 
 static const QColor kSelBg(48, 63, 159, 128);  // Semi-transparent Indigo
 
+void ConsoleView::setSearchMode(SearchMode mode) {
+    if (m_searchMode == mode) {
+        return;
+    }
+    m_searchMode = mode;
+    highlightSearchText(m_searchText);  // reinterpret the current query
+}
+
 bool ConsoleView::findQuery(const QString &query, int flags) {
     if (query.isEmpty() || m_lines.isEmpty()) {
         return false;
     }
 
     const bool backward = (flags & kFindBackward) != 0;
-    const QRegularExpression regex = buildSearchRegex(query);
+    bool useLiteral = false;
+    const QRegularExpression regex = searchRegexForQuery(query, useLiteral);
     const bool useRegex = regex.isValid() && !regex.pattern().isEmpty();
+    if (!useRegex && !useLiteral) {
+        return false;  // explicit hex/dec/bin query that did not parse
+    }
 
     const int total = m_lines.size();
     int startLine = qBound(0, m_cursor.line, total - 1);
@@ -62,10 +77,11 @@ void ConsoleView::highlightSearchText(const QString &text) {
     m_searchText = text;
     m_searchHits.clear();
 
-    if (!text.isEmpty()) {
-        const QRegularExpression regex = buildSearchRegex(text);
-        const bool useRegex = regex.isValid() && !regex.pattern().isEmpty();
+    bool useLiteral = false;
+    const QRegularExpression regex = searchRegexForQuery(text, useLiteral);
+    const bool useRegex = regex.isValid() && !regex.pattern().isEmpty();
 
+    if (!text.isEmpty() && (useRegex || useLiteral)) {
         for (int li = 0; li < m_lines.size(); ++li) {
             const QString lineText = lineSearchText(m_lines.at(li));
             if (useRegex) {
@@ -84,6 +100,7 @@ void ConsoleView::highlightSearchText(const QString &text) {
         }
     }
     viewport()->update();
+    emit searchMatchCount(static_cast<int>(m_searchHits.size()));
 }
 
 CursorPos ConsoleView::posFromPoint(QPoint pt) const {
@@ -248,24 +265,59 @@ QString ConsoleView::fullLineText(int li) const {
     return lineToPlain(m_lines.at(li));
 }
 
-QRegularExpression ConsoleView::buildSearchRegex(const QString &query) const {
-    QByteArray bytes;
-    QString cleanQuery = query.trimmed();
+QRegularExpression ConsoleView::searchRegexForQuery(const QString &query, bool &useLiteral) const {
+    useLiteral = false;
+    const QString clean = query.trimmed();
+    if (clean.isEmpty()) {
+        return {};
+    }
 
-    QRegularExpression hexPattern(QStringLiteral("^(?:(?:0x)?[0-9a-fA-F]{2}\\s*)+$"));
-    if (hexPattern.match(cleanQuery).hasMatch()) {
-        QString hexStr = cleanQuery;
-        hexStr.remove(QStringLiteral("0x"));
-        hexStr.remove(QStringLiteral(" "));
-        bytes = QByteArray::fromHex(hexStr.toUtf8());
-    } else {
-        bytes = query.toUtf8();
+    QByteArray bytes;
+    switch (m_searchMode) {
+        case SearchMode::Text:
+            // Literal substring of the rendered line — no regex.
+            useLiteral = true;
+            return {};
+        case SearchMode::Hex:
+            if (!codec::parseHexString(clean, bytes)) {
+                return {};  // invalid hex -> no matches (not a literal fallback)
+            }
+            break;
+        case SearchMode::Dec:
+            if (!codec::parseDecString(clean, bytes)) {
+                return {};
+            }
+            break;
+        case SearchMode::Bin:
+            if (!codec::parseBinString(clean, bytes)) {
+                return {};
+            }
+            break;
+        case SearchMode::Auto:
+        default: {
+            // Heuristic: input that is entirely hex byte tokens is treated as
+            // bytes, otherwise as literal text (preserves the original UX).
+            const QRegularExpression hexPattern(QStringLiteral("^(?:(?:0x)?[0-9a-fA-F]{2}\\s*)+$"));
+            if (hexPattern.match(clean).hasMatch()) {
+                QString hexStr = clean;
+                hexStr.remove(QStringLiteral("0x"));
+                hexStr.remove(QStringLiteral(" "));
+                bytes = QByteArray::fromHex(hexStr.toUtf8());
+            } else {
+                useLiteral = true;
+                return {};
+            }
+            break;
+        }
     }
 
     if (bytes.isEmpty()) {
         return {};
     }
+    return buildByteRegex(bytes);
+}
 
+QRegularExpression ConsoleView::buildByteRegex(const QByteArray &bytes) const {
     QStringList cellPatterns;
     for (char byte : bytes) {
         const auto b = static_cast<unsigned char>(byte);

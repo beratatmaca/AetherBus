@@ -76,7 +76,17 @@ public:
         Delimiter,   ///< break after a chosen byte value (e.g. 0x0A)
         FixedCount,  ///< break every N bytes
         TLV,         ///< split on length encoded in a fixed-size header
-        CrLf,        ///< break on \r, \n, or \r\n
+        CrLf,        ///< break on \\r, \\n, or \\r\\n
+    };
+
+    /// How the Find query text is interpreted before matching. Order matches the
+    /// GUI mode combo, so an index can be cast directly to this enum.
+    enum class SearchMode : std::uint8_t {
+        Auto,  ///< guess: hex-looking input is bytes, otherwise literal text
+        Text,  ///< literal (case-insensitive) substring of the rendered line
+        Hex,   ///< space/comma-separated hex byte values (e.g. "41 42 0D")
+        Dec,   ///< decimal byte values 0..255 (e.g. "65 66 13")
+        Bin,   ///< 8-bit binary byte values (e.g. "01000001 01000010")
     };
 
     explicit ConsoleView(QWidget *parent = nullptr);
@@ -99,6 +109,7 @@ public:
     void moveCursorToEnd();
 
     /// Find forward or backward from the current cursor position.
+    /// @param query  Text (or pattern) to search for in the console buffer.
     /// @param flags  QTextDocument::FindBackward is honoured; others ignored.
     bool findQuery(const QString &query, int flags = 0);
 
@@ -141,12 +152,18 @@ public slots:
     /// Highlight all occurrences of @p text in the viewport.
     void highlightSearchText(const QString &text);
 
+    /// Choose how the Find query is interpreted (text / hex / dec / bin / auto).
+    void setSearchMode(SearchMode mode);
+
 signals:
     /// Emitted whenever the running byte totals change.
     void countsChanged(qint64 rx, qint64 tx, qint64 rxRate, qint64 txRate);
 
     /// Emitted when the text selection changes; @p chars is the selected length.
     void selectionChars(int chars);
+
+    /// Emitted after a highlight pass with the number of matches found.
+    void searchMatchCount(int count);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -177,7 +194,13 @@ private:
     // -----------------------------------------------------------------------
     // Search helpers
     // -----------------------------------------------------------------------
-    [[nodiscard]] QRegularExpression buildSearchRegex(const QString &query) const;
+    /// Build a regex matching @p bytes against the active display columns.
+    [[nodiscard]] QRegularExpression buildByteRegex(const QByteArray &bytes) const;
+    /// Resolve the query into a matcher per @ref m_searchMode. Returns a regex to
+    /// match; if it is empty, @p useLiteral says whether the caller should fall
+    /// back to a literal substring search (true) or treat it as no match (false,
+    /// e.g. an explicit hex/dec/bin query that failed to parse).
+    [[nodiscard]] QRegularExpression searchRegexForQuery(const QString &query, bool &useLiteral) const;
     /// Flat plain-text representation of a line for search matching.
     [[nodiscard]] QString lineSearchText(const DisplayLine &dl) const;
 
@@ -282,6 +305,7 @@ private:
     };
     QVector<SearchHit> m_searchHits;
     QString m_searchText;
+    SearchMode m_searchMode = SearchMode::Auto;
 
     // Optional full-session log file (owned; parented to this).
     QFile *m_logFile = nullptr;

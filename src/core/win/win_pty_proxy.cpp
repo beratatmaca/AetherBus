@@ -61,4 +61,4 @@ PtyProxy::Stats WindowsPtyProxy::stats() const {
     return {};
 }
 
-} // namespace aether
+}  // namespace aether

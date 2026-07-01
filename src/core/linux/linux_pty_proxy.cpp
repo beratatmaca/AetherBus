@@ -100,12 +100,12 @@ constexpr int kRtacHeaderLen = 12;
 LinuxPtyProxy::LinuxPtyProxy(PtyProxy *q) : PtyProxyImpl(q) {}
 
 LinuxPtyProxy::~LinuxPtyProxy() {
-    close();
+    LinuxPtyProxy::close();  // qualified: non-virtual dispatch is intended in a dtor
 }
 
 bool LinuxPtyProxy::open(const SerialConfig &config) {
     if (const QString problem = config.validate(); !problem.isEmpty()) {
-        emit q_ptr->errorOccurred(q_ptr->tr("Invalid serial configuration: %1").arg(problem));
+        emit q_ptr->errorOccurred(PtyProxy::tr("Invalid serial configuration: %1").arg(problem));
         return false;
     }
 
@@ -131,7 +131,7 @@ bool LinuxPtyProxy::open(const SerialConfig &config) {
 
     m_uartFd = ::open(config.device.toLocal8Bit().constData(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (m_uartFd < 0) {
-        emit q_ptr->errorOccurred(q_ptr->tr("Cannot open %1: %2").arg(config.device, QString::fromLocal8Bit(strerror(errno))));
+        emit q_ptr->errorOccurred(PtyProxy::tr("Cannot open %1: %2").arg(config.device, QString::fromLocal8Bit(strerror(errno))));
         return false;
     }
     if (!configureTermios(config)) {
@@ -146,13 +146,13 @@ bool LinuxPtyProxy::open(const SerialConfig &config) {
     } else {
         m_masterFd = ::posix_openpt(O_RDWR | O_NOCTTY);
         if (m_masterFd < 0 || ::grantpt(m_masterFd) != 0 || ::unlockpt(m_masterFd) != 0) {
-            emit q_ptr->errorOccurred(q_ptr->tr("Failed to allocate pseudo-terminal: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+            emit q_ptr->errorOccurred(PtyProxy::tr("Failed to allocate pseudo-terminal: %1").arg(QString::fromLocal8Bit(strerror(errno))));
             teardownDescriptors();
             return false;
         }
         const char *slave = ::ptsname(m_masterFd);
         if (slave == nullptr) {
-            emit q_ptr->errorOccurred(q_ptr->tr("ptsname() failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+            emit q_ptr->errorOccurred(PtyProxy::tr("ptsname() failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
             teardownDescriptors();
             return false;
         }
@@ -169,14 +169,15 @@ bool LinuxPtyProxy::open(const SerialConfig &config) {
             if (::symlink(slave, config.symlinkPath.toLocal8Bit().constData()) == 0) {
                 m_symlinkPath = config.symlinkPath;
             } else {
-                emit q_ptr->errorOccurred(q_ptr->tr("Could not create symlink %1: %2").arg(config.symlinkPath, QString::fromLocal8Bit(strerror(errno))));
+                emit q_ptr->errorOccurred(
+                    PtyProxy::tr("Could not create symlink %1: %2").arg(config.symlinkPath, QString::fromLocal8Bit(strerror(errno))));
             }
         }
     }
 
     std::array<int, 2> pipeFds{-1, -1};
     if (::pipe(pipeFds.data()) != 0) {
-        emit q_ptr->errorOccurred(q_ptr->tr("pipe() failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+        emit q_ptr->errorOccurred(PtyProxy::tr("pipe() failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
         teardownDescriptors();
         return false;
     }
@@ -200,7 +201,7 @@ bool LinuxPtyProxy::configureTermios(const SerialConfig &config) {
 
     termios tio{};
     if (::tcgetattr(m_uartFd, &tio) != 0) {
-        emit q_ptr->errorOccurred(q_ptr->tr("tcgetattr failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+        emit q_ptr->errorOccurred(PtyProxy::tr("tcgetattr failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
         return false;
     }
 
@@ -254,13 +255,13 @@ bool LinuxPtyProxy::configureTermios(const SerialConfig &config) {
     }
 
     if (::tcsetattr(m_uartFd, TCSANOW, &tio) != 0) {
-        emit q_ptr->errorOccurred(q_ptr->tr("tcsetattr failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+        emit q_ptr->errorOccurred(PtyProxy::tr("tcsetattr failed: %1").arg(QString::fromLocal8Bit(strerror(errno))));
         return false;
     }
 
     if (!standardBaud) {
         if (!setCustomBaud(m_uartFd, config.baud)) {
-            emit q_ptr->errorOccurred(q_ptr->tr("Unsupported baud rate: %1").arg(config.baud));
+            emit q_ptr->errorOccurred(PtyProxy::tr("Unsupported baud rate: %1").arg(config.baud));
             return false;
         }
     }
@@ -469,7 +470,8 @@ void LinuxPtyProxy::mirrorSlaveTermios() {
     uartTio.c_iflag = (uartTio.c_iflag & ~imask) | (slaveTio.c_iflag & imask);
 
     if (::tcsetattr(m_uartFd, TCSANOW, &uartTio) != 0) {
-        emit q_ptr->errorOccurred(q_ptr->tr("Failed to mirror line settings to the device: %1").arg(QString::fromLocal8Bit(strerror(errno))));
+        emit q_ptr->errorOccurred(
+            PtyProxy::tr("Failed to mirror line settings to the device: %1").arg(QString::fromLocal8Bit(strerror(errno))));
         return;
     }
 
@@ -589,7 +591,7 @@ bool LinuxPtyProxy::startCapture(const QString &path) {
     std::lock_guard<std::mutex> lk(m_captureMutex);
     auto file = std::make_unique<QFile>(path);
     if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        emit q_ptr->errorOccurred(q_ptr->tr("Cannot open capture file %1: %2").arg(path, file->errorString()));
+        emit q_ptr->errorOccurred(PtyProxy::tr("Cannot open capture file %1: %2").arg(path, file->errorString()));
         return false;
     }
     QByteArray header;

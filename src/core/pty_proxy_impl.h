@@ -27,7 +27,7 @@ public:
     virtual PtyProxy::Stats stats() const = 0;
 
 protected:
-    PtyProxy *q_ptr; // pointer to public QObject wrapper to emit signals
+    PtyProxy *q_ptr;  // pointer to public QObject wrapper to emit signals
 };
 
-} // namespace aether
+}  // namespace aether

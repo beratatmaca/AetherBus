@@ -285,10 +285,21 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
 
     row2->addStretch(1);
     row2->addWidget(new QLabel(QStringLiteral("Find:"), panel));
+
+    // Mode box: how the Find text is interpreted. Order matches ConsoleView::SearchMode.
+    auto *searchModeBox = new QComboBox(panel);
+    searchModeBox->addItems(
+        {QStringLiteral("Auto"), QStringLiteral("Text"), QStringLiteral("HEX"), QStringLiteral("DEC"), QStringLiteral("BIN")});
+    searchModeBox->setToolTip(QStringLiteral("Interpret the Find text as: Auto (detect), literal Text, or HEX / DEC / BIN byte values"));
+    connect(searchModeBox, &QComboBox::currentIndexChanged, this,
+            [this](int index) { m_console->setSearchMode(static_cast<ConsoleView::SearchMode>(index)); });
+    row2->addWidget(searchModeBox);
+
     m_findEdit = new QLineEdit(panel);
-    m_findEdit->setPlaceholderText(QStringLiteral("text…"));
+    m_findEdit->setPlaceholderText(QStringLiteral("find…"));
     m_findEdit->setFixedWidth(160);
-    m_findEdit->setToolTip(QStringLiteral("Search string or bytes in the console history"));
+    m_findEdit->setToolTip(
+        QStringLiteral("Search the console history. Use the mode box to search by text or HEX / DEC / BIN byte values."));
     connect(m_findEdit, &QLineEdit::returnPressed, this, [this] { doFind(false); });
     connect(m_findEdit, &QLineEdit::textChanged, m_console, &ConsoleView::highlightSearchText);
     auto *findPrevBtn = new QPushButton(QStringLiteral("◀"), panel);
@@ -302,6 +313,15 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     row2->addWidget(m_findEdit);
     row2->addWidget(findPrevBtn);
     row2->addWidget(findNextBtn);
+
+    // Live match counter, updated on every highlight pass.
+    auto *matchCountLabel = new QLabel(panel);
+    matchCountLabel->setToolTip(QStringLiteral("Number of matches for the current search"));
+    connect(m_console, &ConsoleView::searchMatchCount, matchCountLabel, [matchCountLabel](int count) {
+        matchCountLabel->setText(count > 0 ? QStringLiteral("%1 match%2").arg(count).arg(count == 1 ? QString() : QStringLiteral("es"))
+                                           : QString());
+    });
+    row2->addWidget(matchCountLabel);
     layout->addLayout(row2);
 
     layout->addWidget(m_console, 1);

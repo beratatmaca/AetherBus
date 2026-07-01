@@ -27,4 +27,4 @@ public:
     PtyProxy::Stats stats() const override;
 };
 
-} // namespace aether
+}  // namespace aether
