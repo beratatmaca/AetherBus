@@ -96,6 +96,8 @@ set(AETHER_CORE_SOURCES
     src/core/serial/pty_proxy_impl.hpp
     src/core/can/can_backend.cpp
     src/core/can/can_backend.hpp
+    src/core/can/dbc_parser.cpp
+    src/core/can/dbc_parser.hpp
 )
 if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
@@ -129,6 +131,8 @@ add_library(aether_gui STATIC
     src/gui/session_widget.hpp
     src/gui/can_session_widget.cpp
     src/gui/can_session_widget.hpp
+    src/gui/can_decoder_panel.cpp
+    src/gui/can_decoder_panel.hpp
     src/gui/config_panel.cpp
     src/gui/config_panel.hpp
     src/gui/can_config_panel.cpp

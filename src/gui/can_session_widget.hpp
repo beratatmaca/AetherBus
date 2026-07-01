@@ -20,6 +20,7 @@ class ConsoleView;
 class ConsolePanel;
 class StatsPanel;
 class CanConfigPanel;
+class CanDecoderPanel;
 
 /// A SocketCAN session: candump-style frame log plus a cansend-style transmit
 /// bar, reusing the shared ConsoleView and StatsPanel. Kept separate from the
@@ -55,6 +56,7 @@ private:
     ConsolePanel *m_consolePanel = nullptr;
     CanConfigPanel *m_configPanel = nullptr;
     StatsPanel *m_statsPanel = nullptr;
+    CanDecoderPanel *m_decoderPanel = nullptr;
 
     // Transmit bar.
     QComboBox *m_txFormatBox = nullptr;

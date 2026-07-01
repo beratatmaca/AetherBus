@@ -5,6 +5,7 @@
 #include "gui/can_config_panel.hpp"
 #include "gui/consoleview.hpp"
 #include "gui/console_panel.hpp"
+#include "gui/can_decoder_panel.hpp"
 #include "gui/statspanel.hpp"
 
 #include <QByteArray>
@@ -37,6 +38,7 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     connect(m_configPanel, &CanConfigPanel::rescanRequested, this, &CanSessionWidget::rescan);
 
     connect(m_backend, &CanBackend::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
+    connect(m_backend, &CanBackend::chunkCaptured, m_decoderPanel, &CanDecoderPanel::processChunk);
     connect(m_backend, &CanBackend::chunkCaptured, this, &CanSessionWidget::onChunkCaptured);
     connect(m_backend, &CanBackend::started, this, &CanSessionWidget::onStarted);
     connect(m_backend, &CanBackend::stopped, this, &CanSessionWidget::onStopped);
@@ -102,9 +104,15 @@ void CanSessionWidget::buildUi() {
 
     mainSplitter->addWidget(leftColumn);
     mainSplitter->addWidget(buildConsolePanel(this));
+
+    m_decoderPanel = new CanDecoderPanel(mainSplitter);
+    m_decoderPanel->setMinimumWidth(320);
+    mainSplitter->addWidget(m_decoderPanel);
+
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
-    mainSplitter->setSizes({340, 1100});
+    mainSplitter->setStretchFactor(2, 0);
+    mainSplitter->setSizes({340, 760, 340});
 
     outer->addWidget(mainSplitter);
 }
