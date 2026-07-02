@@ -89,6 +89,8 @@ set(AETHER_CORE_SOURCES
     src/core/common/stats_calculator.hpp
     src/core/common/capture_replay.cpp
     src/core/common/capture_replay.hpp
+    src/core/common/pcap_writer.cpp
+    src/core/common/pcap_writer.hpp
     src/core/common/signal_cleanup.cpp
     src/core/common/signal_cleanup.hpp
     src/core/serial/pty_proxy.cpp
@@ -106,11 +108,17 @@ if(WIN32)
     )
 elseif(APPLE)
     list(APPEND AETHER_CORE_SOURCES
+        src/core/serial/posix/posix_pty_proxy.cpp
+        src/core/serial/posix/posix_pty_proxy.hpp
         src/core/serial/mac/mac_pty_proxy.cpp
         src/core/serial/mac/mac_pty_proxy.hpp
+        src/core/serial/mac/mac_baud.cpp
+        src/core/serial/mac/mac_baud.hpp
     )
 else() # Default to Linux
     list(APPEND AETHER_CORE_SOURCES
+        src/core/serial/posix/posix_pty_proxy.cpp
+        src/core/serial/posix/posix_pty_proxy.hpp
         src/core/serial/linux/linux_pty_proxy.cpp
         src/core/serial/linux/linux_pty_proxy.hpp
         src/core/serial/linux_baud.cpp
@@ -119,6 +127,10 @@ else() # Default to Linux
 endif()
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
 target_link_libraries(aether_core PUBLIC Qt6::Core)
+# macOS custom-baud support (IOSSIOSPEED) lives in <IOKit/serial/ioss.h>.
+if(APPLE)
+    target_link_libraries(aether_core PUBLIC "-framework IOKit" "-framework CoreFoundation")
+endif()
 target_include_directories(aether_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/generated)
