@@ -293,7 +293,7 @@ void BusTest::canPcapCaptureAndReplay() {
         return;
     }
     const auto &chunkList = *chunks;
-    QVERIFY(chunkList.size() >= 1);
+    QVERIFY(!chunkList.empty());
     QCOMPARE(chunkList.at(0).dir, Direction::Tx);
     QCOMPARE(chunkList.at(0).data, txPayload);
     QVERIFY(chunkList.at(0).isFrame);

@@ -234,6 +234,10 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
         }
 
         if (numCols > 0 && !dl.ascii.isEmpty()) {
+            // Snap the separator to the shared column so pipes align vertically
+            // across lines; short lines are padded, wider off-window lines keep
+            // their own position (qMax never pulls the pipe left into the hex).
+            x = qMax(x, m_asciiSepCol - hOff);
             p.setPen(QColor(85, 85, 85));  // Muted separator color
             p.drawText(x, yBase, QStringLiteral("  |  "));
             x += 5 * m_charW;

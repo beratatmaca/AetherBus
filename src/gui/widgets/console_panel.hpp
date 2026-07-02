@@ -77,7 +77,6 @@ private:
     QPushButton *m_decCheck = nullptr;
     QPushButton *m_binCheck = nullptr;
     QPushButton *m_asciiCheck = nullptr;
-    QPushButton *m_inspectCheck = nullptr;
 
     // Split mode controls
     QWidget *m_splitContainer = nullptr;

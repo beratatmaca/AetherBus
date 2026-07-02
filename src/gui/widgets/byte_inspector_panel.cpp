@@ -1,11 +1,81 @@
 #include "gui/widgets/byte_inspector_panel.hpp"
-#include <QTableWidget>
-#include <QHeaderView>
+
+#include <QFontDatabase>
 #include <QLabel>
+#include <QStringList>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 
 namespace aether {
+
+namespace {
+
+float readFloat(const QByteArray &bytes, bool bigEndian) {
+    union {
+        float f;
+        quint32 u;
+    } val;
+    if (bigEndian) {
+        val.u = (static_cast<quint32>(static_cast<quint8>(bytes[0])) << 24) | (static_cast<quint32>(static_cast<quint8>(bytes[1])) << 16) |
+                (static_cast<quint32>(static_cast<quint8>(bytes[2])) << 8) | static_cast<quint32>(static_cast<quint8>(bytes[3]));
+    } else {
+        val.u = static_cast<quint32>(static_cast<quint8>(bytes[0])) | (static_cast<quint32>(static_cast<quint8>(bytes[1])) << 8) |
+                (static_cast<quint32>(static_cast<quint8>(bytes[2])) << 16) | (static_cast<quint32>(static_cast<quint8>(bytes[3])) << 24);
+    }
+    return val.f;
+}
+
+double readDouble(const QByteArray &bytes, bool bigEndian) {
+    union {
+        double d;
+        quint64 u;
+    } val;
+    val.u = 0;
+    for (int i = 0; i < 8; ++i) {
+        const int shift = bigEndian ? (7 - i) * 8 : i * 8;
+        val.u |= static_cast<quint64>(static_cast<quint8>(bytes[i])) << shift;
+    }
+    return val.d;
+}
+
+quint16 readU16(const QByteArray &b, bool bigEndian) {
+    return bigEndian ? static_cast<quint16>((static_cast<quint8>(b[0]) << 8) | static_cast<quint8>(b[1]))
+                     : static_cast<quint16>(static_cast<quint8>(b[0]) | (static_cast<quint8>(b[1]) << 8));
+}
+
+quint32 readU32(const QByteArray &b, bool bigEndian) {
+    quint32 u = 0;
+    for (int i = 0; i < 4; ++i) {
+        const int shift = bigEndian ? (3 - i) * 8 : i * 8;
+        u |= static_cast<quint32>(static_cast<quint8>(b[i])) << shift;
+    }
+    return u;
+}
+
+quint64 readU64(const QByteArray &b, bool bigEndian) {
+    quint64 u = 0;
+    for (int i = 0; i < 8; ++i) {
+        const int shift = bigEndian ? (7 - i) * 8 : i * 8;
+        u |= static_cast<quint64>(static_cast<quint8>(b[i])) << shift;
+    }
+    return u;
+}
+
+// Format an integer's LE/BE interpretation, appending the signed value in
+// parentheses only when the high bit is set (i.e. signed != unsigned).
+template <typename U, typename S>
+QString intRow(const QString &tag, U le, U be) {
+    const auto fmt = [](U v) {
+        QString s = QString::number(v);
+        const auto signedV = static_cast<S>(v);
+        if (signedV < 0) {
+            s += QStringLiteral(" (%1)").arg(signedV);
+        }
+        return s;
+    };
+    return QStringLiteral("%1 LE %2  BE %3").arg(tag, fmt(le), fmt(be));
+}
+
+}  // namespace
 
 ByteInspectorPanel::ByteInspectorPanel(QWidget *parent) : QWidget(parent) {
     setupUi();
@@ -15,226 +85,57 @@ ByteInspectorPanel::~ByteInspectorPanel() = default;
 
 void ByteInspectorPanel::setupUi() {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(4, 4, 4, 4);
-    layout->setSpacing(4);
+    layout->setContentsMargins(6, 4, 6, 4);
+    layout->setSpacing(0);
 
-    m_infoLabel = new QLabel(QStringLiteral("Select bytes in the console to inspect..."), this);
-    m_infoLabel->setStyleSheet(QStringLiteral("font-weight: bold; color: #888;"));
-    layout->addWidget(m_infoLabel);
-
-    m_table = new QTableWidget(this);
-    m_table->setColumnCount(3);
-    m_table->setRowCount(9);
-    m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("Type"), QStringLiteral("Little Endian (Intel)"), QStringLiteral("Big Endian (Motorola)")});
-
-    m_table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-
-    QStringList types = {QStringLiteral("Binary (bits)"),
-                         QStringLiteral("ASCII / Plain Text"),
-                         QStringLiteral("8-bit Integer (Int8 / Uint8)"),
-                         QStringLiteral("16-bit Integer (Int16 / Uint16)"),
-                         QStringLiteral("32-bit Integer (Int32 / Uint32)"),
-                         QStringLiteral("64-bit Integer (Int64 / Uint64)"),
-                         QStringLiteral("Float (32-bit)"),
-                         QStringLiteral("Double (64-bit)"),
-                         QStringLiteral("Hexadecimal Sequence")};
-
-    for (int i = 0; i < types.size(); ++i) {
-        auto *typeItem = new QTableWidgetItem(types.at(i));
-        typeItem->setFont(QFont(QStringLiteral("monospace")));
-        m_table->setItem(i, 0, typeItem);
-
-        auto *leItem = new QTableWidgetItem(QStringLiteral("---"));
-        leItem->setFont(QFont(QStringLiteral("monospace")));
-        m_table->setItem(i, 1, leItem);
-
-        auto *beItem = new QTableWidgetItem(QStringLiteral("---"));
-        beItem->setFont(QFont(QStringLiteral("monospace")));
-        m_table->setItem(i, 2, beItem);
-    }
-
-    layout->addWidget(m_table, 1);
+    m_content = new QLabel(this);
+    m_content->setObjectName(QStringLiteral("byteInspectorContent"));
+    m_content->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_content->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_content->setWordWrap(true);
+    m_content->setTextFormat(Qt::PlainText);
+    m_content->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    layout->addWidget(m_content);
 }
 
 void ByteInspectorPanel::setBytes(const QByteArray &bytes) {
     m_bytes = bytes;
+    m_content->setText(buildText());
+}
+
+QString ByteInspectorPanel::buildText() const {
     if (m_bytes.isEmpty()) {
-        m_infoLabel->setText(QStringLiteral("No bytes selected."));
-        for (int i = 0; i < m_table->rowCount(); ++i) {
-            m_table->item(i, 1)->setText(QStringLiteral("---"));
-            m_table->item(i, 2)->setText(QStringLiteral("---"));
-        }
-        return;
+        return {};
     }
+    const auto len = static_cast<int>(m_bytes.size());
+    QStringList lines;
 
-    m_infoLabel->setText(QStringLiteral("Inspecting %1 bytes:").arg(m_bytes.size()));
-    updateTableValues();
-}
-
-static QString toBinaryString(const QByteArray &bytes) {
-    QStringList list;
-    for (char byte : bytes) {
-        list.append(QString("%1").arg(static_cast<quint8>(byte), 8, 2, QLatin1Char('0')));
-    }
-    return list.join(QLatin1Char(' '));
-}
-
-static QString toAsciiString(const QByteArray &bytes) {
-    QString result;
-    for (char ch : bytes) {
-        if (ch >= 32 && ch <= 126) {
-            result.append(ch);
-        } else {
-            result.append(QLatin1Char('.'));
-        }
-    }
-    return result;
-}
-
-static float readFloat(const QByteArray &bytes, bool bigEndian) {
-    union {
-        float f;
-        quint32 u;
-    } val;
-    if (bigEndian) {
-        val.u = (static_cast<quint8>(bytes[0]) << 24) | (static_cast<quint8>(bytes[1]) << 16) | (static_cast<quint8>(bytes[2]) << 8) |
-                (static_cast<quint8>(bytes[3]));
-    } else {
-        val.u = (static_cast<quint8>(bytes[0])) | (static_cast<quint8>(bytes[1]) << 8) | (static_cast<quint8>(bytes[2]) << 16) |
-                (static_cast<quint8>(bytes[3]) << 24);
-    }
-    return val.f;
-}
-
-static double readDouble(const QByteArray &bytes, bool bigEndian) {
-    union {
-        double d;
-        quint64 u;
-    } val;
-    if (bigEndian) {
-        val.u = (static_cast<quint64>(static_cast<quint8>(bytes[0])) << 56) | (static_cast<quint64>(static_cast<quint8>(bytes[1])) << 48) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[2])) << 40) | (static_cast<quint64>(static_cast<quint8>(bytes[3])) << 32) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[4])) << 24) | (static_cast<quint64>(static_cast<quint8>(bytes[5])) << 16) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[6])) << 8) | (static_cast<quint64>(static_cast<quint8>(bytes[7])));
-    } else {
-        val.u = (static_cast<quint64>(static_cast<quint8>(bytes[0]))) | (static_cast<quint64>(static_cast<quint8>(bytes[1])) << 8) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[2])) << 16) | (static_cast<quint64>(static_cast<quint8>(bytes[3])) << 24) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[4])) << 32) | (static_cast<quint64>(static_cast<quint8>(bytes[5])) << 40) |
-                (static_cast<quint64>(static_cast<quint8>(bytes[6])) << 48) | (static_cast<quint64>(static_cast<quint8>(bytes[7])) << 56);
-    }
-    return val.d;
-}
-
-void ByteInspectorPanel::updateTableValues() {
-    int len = m_bytes.size();
-
-    // 0. Binary
-    m_table->item(0, 1)->setText(toBinaryString(m_bytes));
-    m_table->item(0, 2)->setText(toBinaryString(m_bytes));
-
-    // 1. ASCII
-    m_table->item(1, 1)->setText(toAsciiString(m_bytes));
-    m_table->item(1, 2)->setText(toAsciiString(m_bytes));
-
-    // 2. 8-bit Integer (Int8 / Uint8)
-    if (len >= 1) {
-        auto i8 = static_cast<qint8>(m_bytes.at(0));
-        auto u8 = static_cast<quint8>(m_bytes.at(0));
-        QString leText = QStringLiteral("Signed: %1 | Unsigned: %2").arg(i8).arg(u8);
-        m_table->item(2, 1)->setText(leText);
-        m_table->item(2, 2)->setText(leText);  // 8-bit endianness is same
-    } else {
-        m_table->item(2, 1)->setText(QStringLiteral("N/A"));
-        m_table->item(2, 2)->setText(QStringLiteral("N/A"));
-    }
-
-    // 3. 16-bit Integer (Int16 / Uint16)
+    // Hex / ASCII / binary are already visible in the console, so the inspector
+    // shows only the numeric interpretations. LE/BE are spelled out once (they
+    // only appear for multi-byte selections).
+    QString header = QStringLiteral("▸ %1 byte%2").arg(len).arg(len == 1 ? QString() : QStringLiteral("s"));
     if (len >= 2) {
-        quint16 u16le = static_cast<quint8>(m_bytes[0]) | (static_cast<quint8>(m_bytes[1]) << 8);
-        auto i16le = static_cast<qint16>(u16le);
-
-        quint16 u16be = (static_cast<quint8>(m_bytes[0]) << 8) | static_cast<quint8>(m_bytes[1]);
-        auto i16be = static_cast<qint16>(u16be);
-
-        m_table->item(3, 1)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i16le).arg(u16le));
-        m_table->item(3, 2)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i16be).arg(u16be));
-    } else {
-        m_table->item(3, 1)->setText(QStringLiteral("N/A (needs 2 bytes)"));
-        m_table->item(3, 2)->setText(QStringLiteral("N/A (needs 2 bytes)"));
+        header += QStringLiteral("     LE = Little-Endian (Intel)     BE = Big-Endian (Motorola)");
     }
+    lines << header;
 
-    // 4. 32-bit Integer (Int32 / Uint32)
+    lines << QStringLiteral("u8 %1  i8 %2").arg(static_cast<quint8>(m_bytes.at(0))).arg(static_cast<qint8>(m_bytes.at(0)));
+
+    if (len >= 2) {
+        lines << intRow<quint16, qint16>(QStringLiteral("u16"), readU16(m_bytes, false), readU16(m_bytes, true));
+    }
     if (len >= 4) {
-        quint32 u32le = (static_cast<quint8>(m_bytes[0])) | (static_cast<quint8>(m_bytes[1]) << 8) |
-                        (static_cast<quint8>(m_bytes[2]) << 16) | (static_cast<quint8>(m_bytes[3]) << 24);
-        auto i32le = static_cast<qint32>(u32le);
-
-        quint32 u32be = (static_cast<quint8>(m_bytes[0]) << 24) | (static_cast<quint8>(m_bytes[1]) << 16) |
-                        (static_cast<quint8>(m_bytes[2]) << 8) | (static_cast<quint8>(m_bytes[3]));
-        auto i32be = static_cast<qint32>(u32be);
-
-        m_table->item(4, 1)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i32le).arg(u32le));
-        m_table->item(4, 2)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i32be).arg(u32be));
-    } else {
-        m_table->item(4, 1)->setText(QStringLiteral("N/A (needs 4 bytes)"));
-        m_table->item(4, 2)->setText(QStringLiteral("N/A (needs 4 bytes)"));
+        lines << intRow<quint32, qint32>(QStringLiteral("u32"), readU32(m_bytes, false), readU32(m_bytes, true));
+        lines << QStringLiteral("f32 LE %1  BE %2")
+                     .arg(QString::number(readFloat(m_bytes, false), 'g', 6), QString::number(readFloat(m_bytes, true), 'g', 6));
     }
-
-    // 5. 64-bit Integer (Int64 / Uint64)
     if (len >= 8) {
-        quint64 u64le =
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[0]))) | (static_cast<quint64>(static_cast<quint8>(m_bytes[1])) << 8) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[2])) << 16) | (static_cast<quint64>(static_cast<quint8>(m_bytes[3])) << 24) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[4])) << 32) | (static_cast<quint64>(static_cast<quint8>(m_bytes[5])) << 40) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[6])) << 48) | (static_cast<quint64>(static_cast<quint8>(m_bytes[7])) << 56);
-        auto i64le = static_cast<qint64>(u64le);
-
-        quint64 u64be =
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[0])) << 56) | (static_cast<quint64>(static_cast<quint8>(m_bytes[1])) << 48) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[2])) << 40) | (static_cast<quint64>(static_cast<quint8>(m_bytes[3])) << 32) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[4])) << 24) | (static_cast<quint64>(static_cast<quint8>(m_bytes[5])) << 16) |
-            (static_cast<quint64>(static_cast<quint8>(m_bytes[6])) << 8) | (static_cast<quint64>(static_cast<quint8>(m_bytes[7])));
-        auto i64be = static_cast<qint64>(u64be);
-
-        m_table->item(5, 1)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i64le).arg(u64le));
-        m_table->item(5, 2)->setText(QStringLiteral("Signed: %1 | Unsigned: %2").arg(i64be).arg(u64be));
-    } else {
-        m_table->item(5, 1)->setText(QStringLiteral("N/A (needs 8 bytes)"));
-        m_table->item(5, 2)->setText(QStringLiteral("N/A (needs 8 bytes)"));
+        lines << intRow<quint64, qint64>(QStringLiteral("u64"), readU64(m_bytes, false), readU64(m_bytes, true));
+        lines << QStringLiteral("f64 LE %1  BE %2")
+                     .arg(QString::number(readDouble(m_bytes, false), 'g', 10), QString::number(readDouble(m_bytes, true), 'g', 10));
     }
 
-    // 6. Float
-    if (len >= 4) {
-        float fLe = readFloat(m_bytes, false);
-        float fBe = readFloat(m_bytes, true);
-        m_table->item(6, 1)->setText(QString::number(fLe, 'g', 6));
-        m_table->item(6, 2)->setText(QString::number(fBe, 'g', 6));
-    } else {
-        m_table->item(6, 1)->setText(QStringLiteral("N/A (needs 4 bytes)"));
-        m_table->item(6, 2)->setText(QStringLiteral("N/A (needs 4 bytes)"));
-    }
-
-    // 7. Double
-    if (len >= 8) {
-        double dLe = readDouble(m_bytes, false);
-        double dBe = readDouble(m_bytes, true);
-        m_table->item(7, 1)->setText(QString::number(dLe, 'g', 10));
-        m_table->item(7, 2)->setText(QString::number(dBe, 'g', 10));
-    } else {
-        m_table->item(7, 1)->setText(QStringLiteral("N/A (needs 8 bytes)"));
-        m_table->item(7, 2)->setText(QStringLiteral("N/A (needs 8 bytes)"));
-    }
-
-    // 8. Hex
-    QString hexStr = m_bytes.toHex(' ').toUpper();
-    m_table->item(8, 1)->setText(hexStr);
-    m_table->item(8, 2)->setText(hexStr);
+    return lines.join(QLatin1Char('\n'));
 }
 
 }  // namespace aether

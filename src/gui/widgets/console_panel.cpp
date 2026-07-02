@@ -153,17 +153,8 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
 
     m_saveBtn = makeAction(QStringLiteral("Save"), QStringLiteral("Export all currently captured plain text to a file"));
     connect(m_saveBtn, &QPushButton::clicked, this, &ConsolePanel::saveRequested);
-    m_inspectCheck = makeToggle(QStringLiteral("Inspector"), QStringLiteral("Show structural byte inspector panel"));
-    m_inspectCheck->setChecked(false);
-    connect(m_inspectCheck, &QPushButton::toggled, this, [this](bool on) {
-        m_inspector->setVisible(on);
-        if (on) {
-            onSelectionChanged();
-        }
-    });
     row2->addWidget(m_clearBtn);
     row2->addWidget(m_saveBtn);
-    row2->addWidget(m_inspectCheck);
 
     // Extra actions container (log, capture, replay)
     m_extraActionsContainer = new QWidget(this);
@@ -247,6 +238,7 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
     connect(m_console, &ConsoleView::selectionChars, this, [this](int count) {
         if (count == 0 && m_inspector) {
             m_inspector->setBytes(QByteArray());
+            m_inspector->hide();
         }
     });
     connect(m_console, &ConsoleView::selectionChars, this, [this] { onSelectionChanged(); });
@@ -340,7 +332,7 @@ void ConsolePanel::doFind(bool backward) {
 }
 
 void ConsolePanel::onSelectionChanged() {
-    if (!m_inspector || !m_inspector->isVisible()) {
+    if (!m_inspector) {
         return;
     }
 
@@ -356,26 +348,18 @@ void ConsolePanel::onSelectionChanged() {
 
     if (text.isEmpty()) {
         m_inspector->setBytes(QByteArray());
+        m_inspector->hide();
         return;
     }
 
     QByteArray bytes;
-    bool ok = false;
-
-    // Try parsing as Hex first.
-    if (codec::parseHexString(text, bytes) || codec::parseDecString(text, bytes) || codec::parseBinString(text, bytes)) {
-        ok = true;
-    } else {
-        // Fallback: treat as raw ASCII/UTF-8 bytes
+    // Try structured parses first, then fall back to raw ASCII/UTF-8 bytes.
+    if (!codec::parseHexString(text, bytes) && !codec::parseDecString(text, bytes) && !codec::parseBinString(text, bytes)) {
         bytes = text.toUtf8();
-        ok = true;
     }
 
-    if (ok) {
-        m_inspector->setBytes(bytes);
-    } else {
-        m_inspector->setBytes(QByteArray());
-    }
+    m_inspector->setBytes(bytes);
+    m_inspector->setVisible(!bytes.isEmpty());
 }
 
 }  // namespace aether

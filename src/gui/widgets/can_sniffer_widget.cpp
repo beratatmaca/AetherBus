@@ -32,20 +32,31 @@ void CanSnifferWidget::buildUi() {
     m_clearBtn = new QPushButton(tr("Clear Sniffer"), this);
     connect(m_clearBtn, &QPushButton::clicked, this, &CanSnifferWidget::clearSniffer);
     controlsLayout->addWidget(m_clearBtn);
+
+    m_autoScrollBtn = new QPushButton(tr("Autoscroll"), this);
+    m_autoScrollBtn->setCheckable(true);
+    m_autoScrollBtn->setChecked(true);
+    m_autoScrollBtn->setToolTip(tr("Keep the most recently received frame in view"));
+    controlsLayout->addWidget(m_autoScrollBtn);
+
+    m_pauseBtn = new QPushButton(tr("Pause"), this);
+    m_pauseBtn->setCheckable(true);
+    m_pauseBtn->setToolTip(tr("Freeze the table; frames keep accumulating and the view catches up on resume"));
+    controlsLayout->addWidget(m_pauseBtn);
+
     controlsLayout->addStretch(1);
     layout->addLayout(controlsLayout);
 
     // Table
     m_table = new QTableWidget(this);
-    m_table->setColumnCount(6);
-    m_table->setHorizontalHeaderLabels({tr("CAN ID"), tr("DLC"), tr("Count"), tr("Period"), tr("Last Seen"), tr("Data (Hex)")});
+    m_table->setColumnCount(5);
+    m_table->setHorizontalHeaderLabels({tr("CAN ID"), tr("DLC"), tr("Count"), tr("Received"), tr("Data (Hex)")});
 
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
 
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -67,54 +78,37 @@ void CanSnifferWidget::clearSniffer() {
 }
 
 void CanSnifferWidget::refreshUi() {
-    if (!m_calc) {
+    if (!m_calc || m_pauseBtn->isChecked()) {
         return;
     }
 
     auto stats = m_calc->perIdStats();
     QList<quint32> keys = stats.keys();
-    std::sort(keys.begin(), keys.end());
+    // Sort by reception time ascending so the most recently received frame is
+    // at the bottom; tie-break by id for a stable order of equal timestamps.
+    std::sort(keys.begin(), keys.end(), [&](quint32 a, quint32 b) {
+        const qint64 ta = stats[a].lastTimestampMs;
+        const qint64 tb = stats[b].lastTimestampMs;
+        return ta != tb ? ta < tb : a < b;
+    });
 
-    // Check if we need to rebuild the row structures
-    bool rebuild = (m_table->rowCount() != keys.size());
-    if (!rebuild) {
-        for (int i = 0; i < keys.size(); ++i) {
-            if (m_table->item(i, 0)->data(Qt::UserRole).toUInt() != keys[i]) {
-                rebuild = true;
-                break;
-            }
-        }
-    }
-
-    if (rebuild) {
+    // Rows reorder as traffic arrives, so a row index is no longer tied to a
+    // fixed id. Recreate the item/widget objects only when the row count
+    // changes; the content of every row is rewritten by position below.
+    if (m_table->rowCount() != keys.size()) {
         m_table->setRowCount(keys.size());
         for (int i = 0; i < keys.size(); ++i) {
-            auto *idItem = new QTableWidgetItem();
-            idItem->setData(Qt::UserRole, keys[i]);
-            idItem->setTextAlignment(Qt::AlignCenter);
-            m_table->setItem(i, 0, idItem);
-
-            auto *dlcItem = new QTableWidgetItem();
-            dlcItem->setTextAlignment(Qt::AlignCenter);
-            m_table->setItem(i, 1, dlcItem);
-
-            auto *countItem = new QTableWidgetItem();
-            countItem->setTextAlignment(Qt::AlignCenter);
-            m_table->setItem(i, 2, countItem);
-
-            auto *periodItem = new QTableWidgetItem();
-            periodItem->setTextAlignment(Qt::AlignCenter);
-            m_table->setItem(i, 3, periodItem);
-
-            auto *lastSeenItem = new QTableWidgetItem();
-            lastSeenItem->setTextAlignment(Qt::AlignCenter);
-            m_table->setItem(i, 4, lastSeenItem);
+            for (int col = 0; col < 4; ++col) {
+                auto *item = new QTableWidgetItem();
+                item->setTextAlignment(Qt::AlignCenter);
+                m_table->setItem(i, col, item);
+            }
 
             // Data column
             auto *dataLabel = new QLabel(this);
             dataLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
             dataLabel->setContentsMargins(6, 0, 6, 0);
-            m_table->setCellWidget(i, 5, dataLabel);
+            m_table->setCellWidget(i, 4, dataLabel);
         }
     }
 
@@ -136,32 +130,27 @@ void CanSnifferWidget::refreshUi() {
         // 2. Count
         m_table->item(i, 2)->setText(QString::number(s.count));
 
-        // 3. Period
-        m_table->item(i, 3)->setText(s.gap.count > 0 ? QString("%1 ms").arg(s.gap.avg(), 0, 'f', 1) : QStringLiteral("-"));
+        // 3. Received (absolute reception timestamp)
+        m_table->item(i, 3)->setText(s.lastTimestampMs == -1
+                                         ? QStringLiteral("-")
+                                         : QDateTime::fromMSecsSinceEpoch(s.lastTimestampMs).toString(QStringLiteral("HH:mm:ss.zzz")));
 
-        // 4. Last Seen
-        qint64 elapsed = now - s.lastTimestampMs;
-        QString elapsedStr;
-        if (s.lastTimestampMs == -1) {
-            elapsedStr = QStringLiteral("-");
-        } else if (elapsed < 1000) {
-            elapsedStr = QString("%1 ms ago").arg(elapsed);
-        } else {
-            elapsedStr = QString("%1 s ago").arg(elapsed / 1000.0, 0, 'f', 1);
-        }
-        m_table->item(i, 4)->setText(elapsedStr);
-
-        // 5. Data
-        auto *dataLabel = qobject_cast<QLabel *>(m_table->cellWidget(i, 5));
+        // 4. Data
+        auto *dataLabel = qobject_cast<QLabel *>(m_table->cellWidget(i, 4));
         if (dataLabel) {
             dataLabel->setText(formatDataHtml(id, s.lastPayload, now));
         }
 
-        // Color coding for stale rows: if elapsed > 3000 ms, show in gray
-        QColor textCol = (elapsed > 3000) ? QColor(128, 128, 128) : palette().color(QPalette::WindowText);
-        for (int col = 0; col < 5; ++col) {
+        // Color coding for stale rows: if last reception was > 3000 ms ago, gray it out.
+        qint64 elapsed = now - s.lastTimestampMs;
+        QColor textCol = (s.lastTimestampMs != -1 && elapsed > 3000) ? QColor(128, 128, 128) : palette().color(QPalette::WindowText);
+        for (int col = 0; col < 4; ++col) {
             m_table->item(i, col)->setForeground(textCol);
         }
+    }
+
+    if (m_autoScrollBtn->isChecked()) {
+        m_table->scrollToBottom();
     }
 }
 

@@ -199,6 +199,9 @@ private:
     [[nodiscard]] QString lineSearchText(const DisplayLine &dl) const;
 
     void updateScrollBars();
+    /// Content-space x (pixels, pre-scroll) at which @p dl's hex region ends,
+    /// i.e. where its "  |  " separator would begin without alignment.
+    [[nodiscard]] int hexRegionEndX(const DisplayLine &dl) const;
     int lineHeight() const;
     int firstVisibleLine() const;
     int visibleLineCount() const;
@@ -267,6 +270,11 @@ private:
     int m_charW = 8;   ///< character cell width in pixels
     int m_lineH = 16;  ///< line height in pixels (ascent+descent+leading)
     int m_fontAscent = 12;
+
+    /// Shared content-space x (pre-scroll) where the ASCII "  |  " separator
+    /// begins, so pipes align into a vertical column across lines. Widest
+    /// hex-region end among lines that render a separator.
+    int m_asciiSepCol = 0;
 
     // Cursor (for find / wrap-around).
     CursorPos m_cursor;

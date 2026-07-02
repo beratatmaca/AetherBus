@@ -454,6 +454,51 @@ void ConsoleView::reapplyHistory() {
     viewport()->update();
 }
 
+int ConsoleView::hexRegionEndX(const DisplayLine &dl) const {
+    int endX = kLeftPad + ((dl.prefix.length() + 1) * m_charW);
+
+    const int numCols = dl.cols.size();
+    if (numCols == 0 || dl.bytes.isEmpty()) {
+        return endX;
+    }
+
+    int cellW = 0;
+    for (int ci = 0; ci < numCols; ++ci) {
+        int formatType = -1;
+        int activeCount = 0;
+        if (m_showHex) {
+            if (activeCount == ci) {
+                formatType = 0;
+            }
+            activeCount++;
+        }
+        if (m_showDec) {
+            if (activeCount == ci) {
+                formatType = 1;
+            }
+            activeCount++;
+        }
+        if (m_showBin) {
+            if (activeCount == ci) {
+                formatType = 2;
+            }
+            activeCount++;
+        }
+
+        const int tokenLen = dl.cols.at(ci).first().length();
+        if (formatType == 0) {
+            cellW += tokenLen * m_charW;
+        } else {
+            cellW += (tokenLen * m_charW) + 6;
+        }
+        if (ci < numCols - 1) {
+            cellW += 4;
+        }
+    }
+    endX += dl.bytes.size() * (cellW + m_charW);
+    return endX;
+}
+
 void ConsoleView::updateScrollBars() {
     const int totalH = m_lines.size() * m_lineH;
     const int viewH = viewport()->height();
@@ -465,55 +510,33 @@ void ConsoleView::updateScrollBars() {
 
     int maxW = 0;
     const int scanLimit = qMin(m_lines.size(), 200);
-    for (int i = m_lines.size() - scanLimit; i < m_lines.size(); ++i) {
+    const int scanStart = m_lines.size() - scanLimit;
+
+    // Pass 1: find the shared separator column — the widest hex-region end
+    // among lines that render a "  |  " separator — so pipes align vertically.
+    int sepCol = 0;
+    for (int i = scanStart; i < m_lines.size(); ++i) {
         const DisplayLine &dl = m_lines.at(i);
-        int lineW = kLeftPad + ((dl.prefix.length() + 1) * m_charW);
+        if (dl.cols.isEmpty() || dl.ascii.isEmpty()) {
+            continue;
+        }
+        sepCol = qMax(sepCol, hexRegionEndX(dl));
+    }
+    m_asciiSepCol = sepCol;
 
-        int numCols = dl.cols.size();
-        if (numCols > 0 && !dl.bytes.isEmpty()) {
-            int cellW = 0;
-            for (int ci = 0; ci < numCols; ++ci) {
-                int formatType = -1;
-                int activeCount = 0;
-                if (m_showHex) {
-                    if (activeCount == ci) {
-                        formatType = 0;
-                    }
-                    activeCount++;
-                }
-                if (m_showDec) {
-                    if (activeCount == ci) {
-                        formatType = 1;
-                    }
-                    activeCount++;
-                }
-                if (m_showBin) {
-                    if (activeCount == ci) {
-                        formatType = 2;
-                    }
-                    activeCount++;
-                }
-
-                int tokenLen = dl.cols.at(ci).first().length();
-                if (formatType == 0) {
-                    cellW += tokenLen * m_charW;
-                } else {
-                    cellW += (tokenLen * m_charW) + 6;
-                }
-                if (ci < numCols - 1) {
-                    cellW += 4;
-                }
+    // Pass 2: content width, using the aligned separator column so the
+    // horizontal scrollbar accounts for padded (snapped) ASCII regions.
+    for (int i = scanStart; i < m_lines.size(); ++i) {
+        const DisplayLine &dl = m_lines.at(i);
+        int lineW;
+        if (!dl.cols.isEmpty() && !dl.ascii.isEmpty()) {
+            lineW = m_asciiSepCol + (5 * m_charW) + (dl.ascii.length() * m_charW);
+        } else {
+            lineW = hexRegionEndX(dl);
+            if (!dl.ascii.isEmpty()) {
+                lineW += dl.ascii.length() * m_charW;  // ASCII-only line
             }
-            lineW += dl.bytes.size() * (cellW + m_charW);
         }
-
-        if (numCols > 0 && !dl.ascii.isEmpty()) {
-            lineW += 5 * m_charW;  // "  |  "
-        }
-        if (!dl.ascii.isEmpty()) {
-            lineW += dl.ascii.length() * m_charW;
-        }
-
         maxW = qMax(maxW, lineW);
     }
 

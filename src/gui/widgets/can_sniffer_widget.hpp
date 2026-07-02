@@ -32,6 +32,8 @@ private:
     StatsCalculator *m_calc = nullptr;
     QTableWidget *m_table = nullptr;
     QPushButton *m_clearBtn = nullptr;
+    QPushButton *m_autoScrollBtn = nullptr;
+    QPushButton *m_pauseBtn = nullptr;
 
     struct ByteChangeInfo {
         QByteArray prevData;
