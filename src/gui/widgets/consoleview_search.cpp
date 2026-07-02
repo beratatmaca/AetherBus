@@ -236,6 +236,72 @@ QString ConsoleView::selectedText() const {
     return out.join(QLatin1Char('\n'));
 }
 
+QByteArray ConsoleView::selectedBytes() const {
+    if (!m_hasSelection || m_lines.isEmpty()) {
+        return {};
+    }
+
+    const bool anchorFirst =
+        m_selAnchor.line < m_selEnd.line || (m_selAnchor.line == m_selEnd.line && m_selAnchor.column <= m_selEnd.column);
+    const CursorPos selLo = anchorFirst ? m_selAnchor : m_selEnd;
+    const CursorPos selHi = anchorFirst ? m_selEnd : m_selAnchor;
+
+    QByteArray out;
+    const int lastLine = qMin(selHi.line, m_lines.size() - 1);
+    for (int li = selLo.line; li <= lastLine; ++li) {
+        const DisplayLine &dl = m_lines.at(li);
+        const int byteCount = static_cast<int>(dl.bytes.size());
+        if (byteCount == 0) {
+            continue;
+        }
+
+        // The column span selected on this line. Middle lines are fully covered.
+        const bool isFirst = li == selLo.line;
+        const bool isLast = li == selHi.line;
+        const int cLo = isFirst ? selLo.column : 0;
+        const int cHi = isLast ? selHi.column : std::numeric_limits<int>::max();
+
+        // Rebuild each byte's token character span exactly as lineToPlain does:
+        // line = prefix + ' ' + tok0 + ' ' + tok1 + ... ('/'-joined columns per byte).
+        const int numCols = dl.cols.size();
+        QString numText;
+        QVector<int> tokStart(byteCount);
+        QVector<int> tokEnd(byteCount);
+        int off = dl.prefix.length() + 1;  // prefix followed by one space
+        for (int bi = 0; bi < byteCount; ++bi) {
+            QStringList cellParts;
+            cellParts.reserve(numCols);
+            for (int ci = 0; ci < numCols; ++ci) {
+                if (bi < dl.cols.at(ci).size()) {
+                    cellParts << dl.cols.at(ci).at(bi);
+                }
+            }
+            const QString cell = cellParts.join(QLatin1Char('/'));
+            tokStart[bi] = off;
+            tokEnd[bi] = off + cell.length();
+            off += cell.length() + 1;  // token plus its trailing space separator
+            if (bi > 0) {
+                numText += QLatin1Char(' ');
+            }
+            numText += cell;
+        }
+
+        // ASCII gutter starts after "prefix numText  |  " (5-char "  |  "), or
+        // directly after the prefix when no numeric columns are shown.
+        const int asciiStart = numText.isEmpty() ? dl.prefix.length() + 1 : dl.prefix.length() + 1 + numText.length() + 5;
+
+        for (int bi = 0; bi < byteCount; ++bi) {
+            const bool numHit = numText.isEmpty() ? false : (tokStart[bi] < cHi && tokEnd[bi] > cLo);
+            const int aPos = asciiStart + bi;  // one ASCII char per byte
+            const bool asciiHit = bi < dl.ascii.length() && aPos < cHi && aPos + 1 > cLo;
+            if (numHit || asciiHit) {
+                out.append(dl.bytes.at(bi));
+            }
+        }
+    }
+    return out;
+}
+
 void ConsoleView::copySelectionToClipboard(int layerIndex) const {
     if (!m_hasSelection || m_lines.isEmpty()) {
         return;

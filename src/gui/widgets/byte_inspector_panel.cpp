@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QStringList>
 #include <QVBoxLayout>
+#include <QVector>
 
 namespace aether {
 
@@ -60,21 +61,6 @@ quint64 readU64(const QByteArray &b, bool bigEndian) {
     return u;
 }
 
-// Format an integer's LE/BE interpretation, appending the signed value in
-// parentheses only when the high bit is set (i.e. signed != unsigned).
-template <typename U, typename S>
-QString intRow(const QString &tag, U le, U be) {
-    const auto fmt = [](U v) {
-        QString s = QString::number(v);
-        const auto signedV = static_cast<S>(v);
-        if (signedV < 0) {
-            s += QStringLiteral(" (%1)").arg(signedV);
-        }
-        return s;
-    };
-    return QStringLiteral("%1 LE %2  BE %3").arg(tag, fmt(le), fmt(be));
-}
-
 }  // namespace
 
 ByteInspectorPanel::ByteInspectorPanel(QWidget *parent) : QWidget(parent) {
@@ -108,31 +94,113 @@ QString ByteInspectorPanel::buildText() const {
         return {};
     }
     const auto len = static_cast<int>(m_bytes.size());
-    QStringList lines;
 
     // Hex / ASCII / binary are already visible in the console, so the inspector
-    // shows only the numeric interpretations. LE/BE are spelled out once (they
-    // only appear for multi-byte selections).
-    QString header = QStringLiteral("▸ %1 byte%2").arg(len).arg(len == 1 ? QString() : QStringLiteral("s"));
-    if (len >= 2) {
-        header += QStringLiteral("     LE = Little-Endian (Intel)     BE = Big-Endian (Motorola)");
+    // shows only the numeric interpretations. Little-/big-endian are named once
+    // as column headers; each integer row shows the unsigned ("u") and signed
+    // ("s") reading side by side, and everything is space-padded so the columns
+    // line up in the monospace label.
+    struct Row {
+        QString tag;
+        bool isFloat = false;
+        bool hasBe = false;
+        QString uLe, sLe, uBe, sBe;  ///< integer readings
+        QString fLe, fBe;            ///< float readings
+    };
+    QVector<Row> rows;
+
+    {
+        Row r;
+        r.tag = QStringLiteral("int8");
+        r.uLe = QString::number(static_cast<quint8>(m_bytes.at(0)));
+        r.sLe = QString::number(static_cast<qint8>(m_bytes.at(0)));
+        rows.push_back(r);
     }
-    lines << header;
-
-    lines << QStringLiteral("u8 %1  i8 %2").arg(static_cast<quint8>(m_bytes.at(0))).arg(static_cast<qint8>(m_bytes.at(0)));
-
     if (len >= 2) {
-        lines << intRow<quint16, qint16>(QStringLiteral("u16"), readU16(m_bytes, false), readU16(m_bytes, true));
+        Row r;
+        r.tag = QStringLiteral("int16");
+        r.hasBe = true;
+        r.uLe = QString::number(readU16(m_bytes, false));
+        r.sLe = QString::number(static_cast<qint16>(readU16(m_bytes, false)));
+        r.uBe = QString::number(readU16(m_bytes, true));
+        r.sBe = QString::number(static_cast<qint16>(readU16(m_bytes, true)));
+        rows.push_back(r);
     }
     if (len >= 4) {
-        lines << intRow<quint32, qint32>(QStringLiteral("u32"), readU32(m_bytes, false), readU32(m_bytes, true));
-        lines << QStringLiteral("f32 LE %1  BE %2")
-                     .arg(QString::number(readFloat(m_bytes, false), 'g', 6), QString::number(readFloat(m_bytes, true), 'g', 6));
+        Row r;
+        r.tag = QStringLiteral("int32");
+        r.hasBe = true;
+        r.uLe = QString::number(readU32(m_bytes, false));
+        r.sLe = QString::number(static_cast<qint32>(readU32(m_bytes, false)));
+        r.uBe = QString::number(readU32(m_bytes, true));
+        r.sBe = QString::number(static_cast<qint32>(readU32(m_bytes, true)));
+        rows.push_back(r);
+
+        Row f;
+        f.tag = QStringLiteral("f32");
+        f.isFloat = true;
+        f.hasBe = true;
+        f.fLe = QString::number(readFloat(m_bytes, false), 'g', 6);
+        f.fBe = QString::number(readFloat(m_bytes, true), 'g', 6);
+        rows.push_back(f);
     }
     if (len >= 8) {
-        lines << intRow<quint64, qint64>(QStringLiteral("u64"), readU64(m_bytes, false), readU64(m_bytes, true));
-        lines << QStringLiteral("f64 LE %1  BE %2")
-                     .arg(QString::number(readDouble(m_bytes, false), 'g', 10), QString::number(readDouble(m_bytes, true), 'g', 10));
+        Row r;
+        r.tag = QStringLiteral("int64");
+        r.hasBe = true;
+        r.uLe = QString::number(readU64(m_bytes, false));
+        r.sLe = QString::number(static_cast<qint64>(readU64(m_bytes, false)));
+        r.uBe = QString::number(readU64(m_bytes, true));
+        r.sBe = QString::number(static_cast<qint64>(readU64(m_bytes, true)));
+        rows.push_back(r);
+
+        Row f;
+        f.tag = QStringLiteral("f64");
+        f.isFloat = true;
+        f.hasBe = true;
+        f.fLe = QString::number(readDouble(m_bytes, false), 'g', 10);
+        f.fBe = QString::number(readDouble(m_bytes, true), 'g', 10);
+        rows.push_back(f);
+    }
+
+    // Widths for the "u <unsigned>  s <signed>" sub-columns, shared across LE/BE.
+    int uW = 0;
+    int sW = 0;
+    for (const Row &r : rows) {
+        if (r.isFloat) {
+            continue;
+        }
+        uW = qMax(uW, qMax(static_cast<int>(r.uLe.length()), static_cast<int>(r.uBe.length())));
+        sW = qMax(sW, qMax(static_cast<int>(r.sLe.length()), static_cast<int>(r.sBe.length())));
+    }
+    const auto intCell = [uW, sW](const QString &u, const QString &s) {
+        return QStringLiteral("u %1  s %2").arg(u.leftJustified(uW), s.leftJustified(sW));
+    };
+
+    const QString leHeader = QStringLiteral("Little-Endian");
+    const QString beHeader = QStringLiteral("Big-Endian");
+    const bool anyBe = len >= 2;
+
+    int tagW = 0;
+    int leW = anyBe ? static_cast<int>(leHeader.length()) : 0;
+    for (const Row &r : rows) {
+        tagW = qMax(tagW, static_cast<int>(r.tag.length()));
+        const QString leCell = r.isFloat ? r.fLe : intCell(r.uLe, r.sLe);
+        leW = qMax(leW, static_cast<int>(leCell.length()));
+    }
+
+    QStringList lines;
+    lines << QStringLiteral("▸ %1 byte%2").arg(len).arg(len == 1 ? QString() : QStringLiteral("s"));
+    if (anyBe) {
+        lines << QStringLiteral("%1  %2  %3").arg(QString(tagW, QLatin1Char(' ')), leHeader.leftJustified(leW), beHeader);
+    }
+    for (const Row &r : rows) {
+        const QString leCell = r.isFloat ? r.fLe : intCell(r.uLe, r.sLe);
+        QString line = r.tag.leftJustified(tagW) + QStringLiteral("  ") + (anyBe ? leCell.leftJustified(leW) : leCell);
+        if (r.hasBe) {
+            line += QStringLiteral("  ") + (r.isFloat ? r.fBe : intCell(r.uBe, r.sBe));
+        }
+        lines << line;
     }
 
     return lines.join(QLatin1Char('\n'));

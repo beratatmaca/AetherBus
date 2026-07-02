@@ -9,7 +9,6 @@
 #include <QTextDocument>
 #include <QSplitter>
 #include "gui/widgets/byte_inspector_panel.hpp"
-#include "core/common/format_codec.hpp"
 
 namespace aether {
 
@@ -336,28 +335,10 @@ void ConsolePanel::onSelectionChanged() {
         return;
     }
 
-    QString text = m_console->selectedText().trimmed();
-
-    // Remove all bracketed prefixes at the start (timestamps, IDs, direction tags)
-    while (text.startsWith(QLatin1Char('['))) {
-        int idx = text.indexOf(QLatin1Char(']'));
-        if (idx == -1)
-            break;
-        text = text.mid(idx + 1).trimmed();
-    }
-
-    if (text.isEmpty()) {
-        m_inspector->setBytes(QByteArray());
-        m_inspector->hide();
-        return;
-    }
-
-    QByteArray bytes;
-    // Try structured parses first, then fall back to raw ASCII/UTF-8 bytes.
-    if (!codec::parseHexString(text, bytes) && !codec::parseDecString(text, bytes) && !codec::parseBinString(text, bytes)) {
-        bytes = text.toUtf8();
-    }
-
+    // Map the selection straight to the underlying payload bytes, so the inspector
+    // reflects exactly what is highlighted (across one or many lines) rather than
+    // the rendered timestamps, column decorations, or ASCII gutter.
+    const QByteArray bytes = m_console->selectedBytes();
     m_inspector->setBytes(bytes);
     m_inspector->setVisible(!bytes.isEmpty());
 }

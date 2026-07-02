@@ -152,6 +152,11 @@ public slots:
 
     [[nodiscard]] QString selectedText() const;
 
+    /// Raw payload bytes covered by the current selection, mapped back from the
+    /// underlying per-line data (never the rendered timestamps/ASCII gutter), so
+    /// callers get exactly the bytes the user highlighted across one or more lines.
+    [[nodiscard]] QByteArray selectedBytes() const;
+
 signals:
     /// Emitted whenever the running byte totals change.
     void countsChanged(qint64 rx, qint64 tx, qint64 rxRate, qint64 txRate);
