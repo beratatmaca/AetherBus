@@ -36,6 +36,10 @@ public:
 signals:
     /// Request the hosting tab's label be updated.
     void sessionTitleChanged(const QString &title);
+
+    /// Status/error text for this session, mirrored into the main window's
+    /// always-visible status bar. @p isError marks messages that should persist.
+    void statusMessage(const QString &text, bool isError);
 };
 
 }  // namespace aether

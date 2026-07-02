@@ -198,6 +198,7 @@ QComboBox QAbstractItemView {
 /* Data Tables (Zone 1) */
 QTableView {
     background-color: #181818;
+    alternate-background-color: #1e1e1e;
     border: 1px solid #2c2c2c;
     gridline-color: #252525;
     selection-background-color: #0d47a1;

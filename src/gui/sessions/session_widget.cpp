@@ -40,6 +40,7 @@ SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new
     connect(m_configPanel, &ConfigPanel::startInterception, this, &SessionWidget::startInterception);
     connect(m_configPanel, &ConfigPanel::stopInterception, this, &SessionWidget::stopInterception);
     connect(m_configPanel, &ConfigPanel::rescanRequested, this, &SessionWidget::rescanDevices);
+    connect(m_configPanel, &ConfigPanel::statusChanged, this, &SessionWidget::statusMessage);
 
     connect(m_signalPanel, &SignalPanel::rtsToggled, this, [this](bool on) { (void)m_proxy->setRts(on); });
     connect(m_signalPanel, &SignalPanel::dtrToggled, this, [this](bool on) { (void)m_proxy->setDtr(on); });

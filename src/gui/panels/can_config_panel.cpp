@@ -12,6 +12,7 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QStyle>
+#include <QTextDocumentFragment>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QJsonDocument>
@@ -158,6 +159,10 @@ void CanConfigPanel::setRunningState(bool running) {
 
 void CanConfigPanel::setStatus(const QString &htmlText) {
     m_statusLabel->setText(htmlText);
+    // Error messages are the ones tagged with the error red; surface the plain
+    // text (and that flag) so the main window's status bar can mirror it.
+    const bool isError = htmlText.contains(QStringLiteral("#e57373"));
+    emit statusChanged(QTextDocumentFragment::fromHtml(htmlText).toPlainText(), isError);
 }
 
 void CanConfigPanel::populateInterfaces(const QStringList &ifaces) {

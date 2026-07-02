@@ -23,6 +23,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QTextBrowser>
+#include <QStatusBar>
+#include <QTimer>
 
 namespace aether {
 
@@ -202,6 +204,44 @@ void MainWindow::buildUi() {
     m_tabWidget->setCornerWidget(addTabButton, Qt::TopRightCorner);
 
     setCentralWidget(m_tabWidget);
+
+    // Always-visible status bar: mirrors the active session's status/errors so a
+    // transient message can't be missed in the sidebar.
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    statusBar()->addWidget(m_statusLabel, 1);
+
+    m_statusClearTimer = new QTimer(this);
+    m_statusClearTimer->setSingleShot(true);
+    connect(m_statusClearTimer, &QTimer::timeout, this, [this] { showStatus(QString(), false); });
+
+    // When the active tab changes, restore that session's last message.
+    connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int) {
+        const auto it = m_sessionStatus.constFind(m_tabWidget->currentWidget());
+        if (it != m_sessionStatus.constEnd()) {
+            showStatus(it->text, it->isError);
+        } else {
+            showStatus(QString(), false);
+        }
+    });
+}
+
+void MainWindow::showStatus(const QString &text, bool isError) {
+    if (text.isEmpty()) {
+        m_statusClearTimer->stop();
+        m_statusLabel->clear();
+        m_statusLabel->setStyleSheet(QString());
+        return;
+    }
+    if (isError) {
+        m_statusLabel->setStyleSheet(QStringLiteral("color:#e57373; font-weight:bold;"));
+        m_statusLabel->setText(QStringLiteral("⚠  ") + text);
+        m_statusClearTimer->stop();  // errors persist until the next message
+    } else {
+        m_statusLabel->setStyleSheet(QString());  // themed default colour
+        m_statusLabel->setText(text);
+        m_statusClearTimer->start(5000);  // info fades after a few seconds
+    }
 }
 
 void MainWindow::addNewSession() {
@@ -233,6 +273,13 @@ void MainWindow::addSession(SessionType type) {
         }
     });
 
+    connect(session, &SessionView::statusMessage, this, [this, session](const QString &text, bool isError) {
+        m_sessionStatus.insert(session, {text, isError});
+        if (m_tabWidget->currentWidget() == session) {
+            showStatus(text, isError);
+        }
+    });
+
     m_tabWidget->setCurrentIndex(index);
 }
 
@@ -257,6 +304,7 @@ void MainWindow::closeSessionTab(int index) {
         session->stopSession();
     }
 
+    m_sessionStatus.remove(session);
     m_tabWidget->removeTab(index);
     session->deleteLater();
 }

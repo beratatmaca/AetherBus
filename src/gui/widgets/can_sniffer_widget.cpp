@@ -2,6 +2,7 @@
 #include "core/common/stats_calculator.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QCursor>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QPushButton>
@@ -27,20 +28,30 @@ void CanSnifferWidget::buildUi() {
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(6);
 
-    // Controls row
+    // Controls row. Tag the buttons with the shared toolbar properties so the
+    // theme styles them like the console toolbar — in particular so checkable
+    // toggles show a highlighted "on" state via the QSS ":checked" rule.
+    const auto markToolbarButton = [](QPushButton *button, const char *kind) {
+        button->setProperty(kind, true);
+        button->setCursor(Qt::PointingHandCursor);
+    };
+
     auto *controlsLayout = new QHBoxLayout();
     m_clearBtn = new QPushButton(tr("Clear Sniffer"), this);
+    markToolbarButton(m_clearBtn, "toolbarAction");
     connect(m_clearBtn, &QPushButton::clicked, this, &CanSnifferWidget::clearSniffer);
     controlsLayout->addWidget(m_clearBtn);
 
     m_autoScrollBtn = new QPushButton(tr("Autoscroll"), this);
     m_autoScrollBtn->setCheckable(true);
     m_autoScrollBtn->setChecked(true);
+    markToolbarButton(m_autoScrollBtn, "toolbarToggle");
     m_autoScrollBtn->setToolTip(tr("Keep the most recently received frame in view"));
     controlsLayout->addWidget(m_autoScrollBtn);
 
     m_pauseBtn = new QPushButton(tr("Pause"), this);
     m_pauseBtn->setCheckable(true);
+    markToolbarButton(m_pauseBtn, "toolbarToggle");
     m_pauseBtn->setToolTip(tr("Freeze the table; frames keep accumulating and the view catches up on resume"));
     controlsLayout->addWidget(m_pauseBtn);
 
@@ -141,11 +152,18 @@ void CanSnifferWidget::refreshUi() {
             dataLabel->setText(formatDataHtml(id, s.lastPayload, now));
         }
 
-        // Color coding for stale rows: if last reception was > 3000 ms ago, gray it out.
-        qint64 elapsed = now - s.lastTimestampMs;
-        QColor textCol = (s.lastTimestampMs != -1 && elapsed > 3000) ? QColor(128, 128, 128) : palette().color(QPalette::WindowText);
+        // Gray out stale rows (>3 s since last reception). Fresh rows clear their
+        // explicit foreground so the themed stylesheet/palette text colour applies
+        // — otherwise the default palette's dark text is invisible on a dark table.
+        const qint64 elapsed = now - s.lastTimestampMs;
+        const bool stale = (s.lastTimestampMs != -1 && elapsed > 3000);
         for (int col = 0; col < 4; ++col) {
-            m_table->item(i, col)->setForeground(textCol);
+            QTableWidgetItem *cell = m_table->item(i, col);
+            if (stale) {
+                cell->setForeground(QColor(128, 128, 128));
+            } else {
+                cell->setData(Qt::ForegroundRole, QVariant());
+            }
         }
     }
 

@@ -45,6 +45,7 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     connect(m_configPanel, &CanConfigPanel::startCan, this, &CanSessionWidget::startCapture);
     connect(m_configPanel, &CanConfigPanel::stopCan, this, &CanSessionWidget::stopCapture);
     connect(m_configPanel, &CanConfigPanel::rescanRequested, this, &CanSessionWidget::rescan);
+    connect(m_configPanel, &CanConfigPanel::statusChanged, this, &CanSessionWidget::statusMessage);
 
     connect(m_backend, &CanBackend::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
     connect(m_backend, &CanBackend::chunkCaptured, m_decoderPanel, &CanDecoderPanel::processChunk);

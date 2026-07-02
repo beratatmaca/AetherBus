@@ -31,6 +31,9 @@ signals:
     void startCan(const CanConfig &cfg);
     void stopCan();
     void rescanRequested();
+    /// Emitted whenever the status text changes, as plain text plus an error flag,
+    /// so the host window can mirror it into the always-visible status bar.
+    void statusChanged(const QString &plainText, bool isError);
 
 private slots:
     void onStartButtonClicked();

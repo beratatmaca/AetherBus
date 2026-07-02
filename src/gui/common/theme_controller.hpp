@@ -37,6 +37,16 @@ public:
     /** @brief Serialise a mode to a stable string for persistence. */
     static QString modeToString(Mode mode);
 
+signals:
+    /**
+     * @brief Emitted after the theme is (re)applied.
+     * @param dark @c true when the newly applied theme is dark.
+     *
+     * Custom-painted widgets that cannot rely on the stylesheet can connect to
+     * this to repaint with theme-appropriate colours.
+     */
+    void themeChanged(bool dark);
+
 private:
     void apply();
     bool effectiveDark() const;
