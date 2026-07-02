@@ -7,9 +7,9 @@
 [![C++17](https://img.shields.io/badge/C++-17-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/compiler_support/17)
 [![Qt 6](https://img.shields.io/badge/Qt-6-green.svg?logo=qt)](https://www.qt.io/)
 
-AetherBus is a modern, lightweight, open-source serial-port interceptor and protocol sniffer for Linux.
+AetherBus is a modern, lightweight, open-source serial-port interceptor and protocol sniffer for Linux, macOS, and Windows.
 
-Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a kernel pseudo-terminal — letting an unmodified target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
+Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
 ## Screenshot
 
@@ -73,7 +73,9 @@ Pre-compiled packages are available on the [GitHub Releases Page](https://github
 * **Windows**: Download the `.msi` installer.
 * **macOS**: Download the `.dmg` package.
 
-> **Note:** Live serial interception relies on POSIX pseudo-terminals and is a Linux feature. On macOS and Windows the GUI and format tooling build and run, but the interception backend is compiled only on UNIX hosts.
+> **Platform notes on live interception:**
+> - **Linux & macOS** allocate a real pseudo-terminal, so the reported slave path (e.g. `/dev/pts/5` or `/dev/ttys004`) behaves exactly like a serial port — point any target application at it directly.
+> - **Windows** has no pseudo-terminal and no driver-free way to publish a real `COMx` device to third-party applications (that requires a signed kernel driver such as [com0com](https://com0com.sourceforge.net/)). AetherBus therefore opens and fully configures the physical COM port and exposes the application side as a **named pipe** (`\\.\pipe\aetherbus-*`). Capture, statistics, byte injection, and modem-line control all work; any client that can attach to the named pipe is proxied, but the virtual side is not automatically visible as a `COMx` port.
 
 ## The Console
 
@@ -93,10 +95,13 @@ The architecture separates the interception engine from the presentation layer: 
 **Core (`src/core/`)**
 
 * **`format_codec`**: A pure, side-effect-free conversion layer (bytes ⇄ HEX / ASCII / BINARY / DECIMAL) and the injection-field parsers.
-* **`PtyProxy`**: Opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop. UART bytes are tagged **Rx** and forwarded to the PTY master; target-app bytes are tagged **Tx** and forwarded to the UART — over non-blocking, per-direction write queues so one stalled side can't wedge the other. It mirrors slave-side line-setting changes onto the device, tracks byte/drop counters, and can capture to pcap, emitting every chunk to the GUI over thread-safe queued signals. Teardown is RAII-clean via a self-pipe wake and symlink unlink.
-* **`linux_baud`**: Arbitrary (non-standard) baud rates via the Linux `termios2` path, isolated from `<termios.h>`.
+* **`PtyProxy`**: The public, platform-neutral interception backend. It hands the GUI a single `open()` / `close()` / inject / capture / stats surface and dispatches to a per-platform implementation behind a pimpl, tagging UART bytes **Rx** and target-app bytes **Tx** over non-blocking, per-direction write queues so one stalled side can't wedge the other, mirroring line-setting changes onto the device, tracking byte/drop counters, and emitting every chunk to the GUI over thread-safe queued signals.
+  * **`PosixPtyProxy`** (Linux & macOS): opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop with RAII-clean teardown via a self-pipe wake and symlink unlink. `LinuxPtyProxy` and `MacPtyProxy` are thin subclasses that differ only in how a non-standard baud rate is applied.
+  * **`WindowsPtyProxy`**: opens and configures the COM port (`SetCommState` / `SetCommTimeouts`), exposes the application side as a named pipe, and multiplexes overlapped I/O on a single worker via `WaitForMultipleObjects` — the same Rx/Tx tagging, capture, stats, injection, and modem-line control as the POSIX path.
+* **`linux_baud` / `mac_baud`**: Arbitrary (non-standard) baud rates via the Linux `termios2` path and the macOS `IOSSIOSPEED` ioctl respectively, each isolated from `<termios.h>`.
 * **`stats_calculator`**: Throughput rates, line utilisation, and inter-packet gap statistics from the captured chunk stream.
-* **`capture_replay`**: Parses the `LINKTYPE_RTAC_SERIAL` pcap files `PtyProxy` writes and replays them as `CapturedChunk`s with the original timing.
+* **`pcap_writer`**: Shared, thread-safe writer for the `LINKTYPE_RTAC_SERIAL` capture format, used by every backend.
+* **`capture_replay`**: Parses the `LINKTYPE_RTAC_SERIAL` pcap files the backend writes and replays them as `CapturedChunk`s with the original timing.
 * **`signal_cleanup`**: Releases descriptors and symlinks on fatal signals so a crash can't leave `/dev/ttyUSB0` locked.
 
 **GUI (`src/gui/`)** — Qt 6 Widgets front end that only ever consumes `CapturedChunk` signals and never touches a raw descriptor:
