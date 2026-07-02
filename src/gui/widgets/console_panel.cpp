@@ -249,9 +249,7 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
             m_inspector->setBytes(QByteArray());
         }
     });
-    connect(m_console, &ConsoleView::selectionChars, this, [this] {
-        onSelectionChanged();
-    });
+    connect(m_console, &ConsoleView::selectionChars, this, [this] { onSelectionChanged(); });
 }
 
 ConsolePanel::~ConsolePanel() = default;
@@ -347,11 +345,12 @@ void ConsolePanel::onSelectionChanged() {
     }
 
     QString text = m_console->selectedText().trimmed();
-    
+
     // Remove all bracketed prefixes at the start (timestamps, IDs, direction tags)
     while (text.startsWith(QLatin1Char('['))) {
         int idx = text.indexOf(QLatin1Char(']'));
-        if (idx == -1) break;
+        if (idx == -1)
+            break;
         text = text.mid(idx + 1).trimmed();
     }
 

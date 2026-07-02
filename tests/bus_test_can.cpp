@@ -4,6 +4,8 @@
 #include "core/can/dbc_parser.hpp"
 #include "core/serial/serial_types.hpp"
 #include "core/common/stats_calculator.hpp"
+#include "gui/widgets/consoleview.hpp"
+#include "core/common/capture_replay.hpp"
 
 #include <QElapsedTimer>
 #include <QSignalSpy>
@@ -249,4 +251,81 @@ void BusTest::canDbcDecoding() {
     QCOMPARE(rpm, 3200.0);
     QCOMPARE(temp, 90.0);
     QCOMPARE(throttle, 80.0);
+}
+
+void BusTest::canBackendQueryBitrate() {
+    QCOMPARE(CanBackend::queryBitrate(QStringLiteral("invalid_interface_name")), -1);
+    QCOMPARE(CanBackend::queryBitrate(QString{}), -1);
+}
+
+void BusTest::canPcapCaptureAndReplay() {
+    const QString iface = findVcan();
+    if (iface.isEmpty()) {
+        QSKIP("no vcan interface present");
+    }
+
+    CanBackend backend;
+    CanConfig cfg;
+    cfg.iface = iface;
+    QVERIFY(backend.open(cfg));
+
+    QString path;
+    {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        path = tmp.fileName();
+    }
+    QVERIFY(backend.startCapture(path));
+    QVERIFY(backend.isCapturing());
+
+    QByteArray txPayload = QByteArray::fromHex("11223344");
+    QVERIFY(backend.sendFrame(0x100, FrameExtendedId, txPayload));
+
+    QThread::msleep(100);
+
+    backend.stopCapture();
+    backend.close();
+
+    QString error;
+    const auto chunks = aether::readRtacPcap(path, &error);
+    QVERIFY2(chunks.has_value(), qPrintable(error));
+    if (!chunks.has_value()) {
+        return;
+    }
+    const auto &chunkList = *chunks;
+    QVERIFY(chunkList.size() >= 1);
+    QCOMPARE(chunkList.at(0).dir, Direction::Tx);
+    QCOMPARE(chunkList.at(0).data, txPayload);
+    QVERIFY(chunkList.at(0).isFrame);
+    QCOMPARE(chunkList.at(0).frameId, 0x100U);
+    QVERIFY((chunkList.at(0).frameFlags & FrameExtendedId) != 0);
+}
+
+void BusTest::canRtrFrameLogging() {
+    QTemporaryFile logFile;
+    QVERIFY(logFile.open());
+    const QString logPath = logFile.fileName();
+    logFile.close();
+
+    aether::ConsoleView console;
+    console.setNewlineMode(aether::ConsoleView::NewlineMode::Frame, 0);
+    QVERIFY(console.startLogging(logPath));
+
+    CapturedChunk chunk;
+    chunk.timestampMs = 1234567890;
+    chunk.dir = Direction::Rx;
+    chunk.isFrame = true;
+    chunk.frameId = 0x123;
+    chunk.frameFlags = FrameRemote;
+    chunk.data = QByteArray();
+
+    console.appendChunk(chunk);
+    QTest::qWait(50);  // wait for ConsoleView flush timer (runs at 60 Hz / ~16ms)
+    console.stopLogging();
+
+    QFile file(logPath);
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    QString content = QString::fromUtf8(file.readAll());
+    QVERIFY(content.contains(QStringLiteral("123")));
+    QVERIFY(content.contains(QStringLiteral("R")));
 }

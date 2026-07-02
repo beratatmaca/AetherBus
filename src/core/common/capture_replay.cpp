@@ -62,10 +62,39 @@ std::optional<QVector<CapturedChunk>> readRtacPcap(const QString &path, QString 
             return fail(QStringLiteral("Truncated or corrupt record at byte offset %1.").arg(pos));
         }
 
+        const char event = blob.at(pos + kRtacEventOffset);
+        const bool isCan = (event == 0x11 || event == 0x12);
+
         CapturedChunk chunk;
         chunk.timestampMs = static_cast<qint64>(sec) * 1000 + static_cast<qint64>(usec) / 1000;
-        chunk.dir = blob.at(pos + kRtacEventOffset) == kRtacEventTxStart ? Direction::Tx : Direction::Rx;
-        chunk.data = blob.mid(pos + kRtacHeaderLen, static_cast<int>(inclLen) - kRtacHeaderLen);
+        chunk.dir = (event == kRtacEventTxStart || event == 0x11) ? Direction::Tx : Direction::Rx;
+
+        if (isCan) {
+            constexpr int kCanMetadataLen = 6;
+            if (inclLen < static_cast<quint32>(kRtacHeaderLen + kCanMetadataLen)) {
+                return fail(QStringLiteral("Truncated CAN record at byte offset %1.").arg(pos));
+            }
+            chunk.isFrame = true;
+
+            const auto readBe32 = [&](const QByteArray &b, int off) {
+                const auto val = [&](int i) { return static_cast<quint32>(static_cast<quint8>(b.at(off + i))); };
+                return (val(0) << 24) | (val(1) << 16) | (val(2) << 8) | val(3);
+            };
+            const auto readBe16 = [&](const QByteArray &b, int off) {
+                const auto val = [&](int i) { return static_cast<quint32>(static_cast<quint8>(b.at(off + i))); };
+                return (val(0) << 8) | val(1);
+            };
+
+            const int payloadPos = pos + kRtacHeaderLen;
+            chunk.frameId = readBe32(blob, payloadPos);
+            chunk.frameFlags = readBe16(blob, payloadPos + 4);
+            chunk.data = blob.mid(payloadPos + kCanMetadataLen, static_cast<int>(inclLen) - kRtacHeaderLen - kCanMetadataLen);
+        } else {
+            chunk.isFrame = false;
+            chunk.frameId = 0;
+            chunk.frameFlags = 0;
+            chunk.data = blob.mid(pos + kRtacHeaderLen, static_cast<int>(inclLen) - kRtacHeaderLen);
+        }
         chunks.append(chunk);
 
         pos += static_cast<int>(inclLen);

@@ -3,6 +3,7 @@
 #include "core/serial/serial_types.hpp"
 #include <QHash>
 #include <QVector>
+#include <QByteArray>
 
 namespace aether {
 
@@ -39,6 +40,7 @@ struct CanIdStat {
     StatValue gap;                ///< Inter-frame gap for this id (ms).
     quint16 lastFlags = 0;        ///< Flags of the most recent frame.
     int lastLen = 0;              ///< Payload length of the most recent frame.
+    QByteArray lastPayload;       ///< Raw payload of the most recent frame.
 };
 
 class StatsCalculator {

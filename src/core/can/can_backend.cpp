@@ -9,6 +9,8 @@
 #include <linux/can.h>
 #include <linux/can/error.h>
 #include <linux/can/raw.h>
+#include <linux/rtnetlink.h>
+#include <linux/can/netlink.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -80,9 +82,96 @@ QStringList CanBackend::listInterfaces() {
     return result;
 }
 
-int CanBackend::queryBitrate(const QString & /*iface*/) {
-    // Deferred to a later phase: reading the bit rate requires an RTNL/netlink
-    // query. Until then the connection info line omits it. Returns -1 = unknown.
+int CanBackend::queryBitrate(const QString &iface) {
+#if defined(__linux__)
+    int fd = ::socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (fd < 0) {
+        return -1;
+    }
+
+    struct timeval tv {};
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    unsigned int if_index = ::if_nametoindex(iface.toLocal8Bit().constData());
+    if (if_index == 0) {
+        ::close(fd);
+        return -1;
+    }
+
+    struct {
+        struct nlmsghdr hdr;
+        struct ifinfomsg ifi;
+    } req{};
+
+    req.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+    req.hdr.nlmsg_flags = NLM_F_REQUEST;
+    req.hdr.nlmsg_type = RTM_GETLINK;
+    req.ifi.ifi_family = AF_UNSPEC;
+    req.ifi.ifi_index = static_cast<int>(if_index);
+
+    struct sockaddr_nl sa {};
+    sa.nl_family = AF_NETLINK;
+
+    if (::sendto(fd, &req, req.hdr.nlmsg_len, 0, reinterpret_cast<struct sockaddr *>(&sa), sizeof(sa)) < 0) {
+        ::close(fd);
+        return -1;
+    }
+
+    alignas(NLMSG_ALIGNTO) char buf[8192];
+    ssize_t len = ::recv(fd, buf, sizeof(buf), 0);
+    ::close(fd);
+
+    if (len < 0) {
+        return -1;
+    }
+
+    for (struct nlmsghdr *nh = reinterpret_cast<struct nlmsghdr *>(buf); NLMSG_OK(nh, len); nh = NLMSG_NEXT(nh, len)) {
+        if (nh->nlmsg_type == NLMSG_DONE || nh->nlmsg_type == NLMSG_ERROR) {
+            break;
+        }
+        if (nh->nlmsg_type == RTM_NEWLINK) {
+            struct ifinfomsg *ifi = reinterpret_cast<struct ifinfomsg *>(NLMSG_DATA(nh));
+            int attr_len = nh->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
+            struct rtattr *rta = reinterpret_cast<struct rtattr *>(reinterpret_cast<char *>(ifi) + NLMSG_ALIGN(sizeof(struct ifinfomsg)));
+
+            for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+                if (rta->rta_type == IFLA_LINKINFO) {
+                    int nested_len = RTA_PAYLOAD(rta);
+                    struct rtattr *sub = reinterpret_cast<struct rtattr *>(RTA_DATA(rta));
+                    bool is_can = false;
+                    struct rtattr *info_data = nullptr;
+
+                    for (; RTA_OK(sub, nested_len); sub = RTA_NEXT(sub, nested_len)) {
+                        if (sub->rta_type == IFLA_INFO_KIND) {
+                            if (std::strcmp(reinterpret_cast<char *>(RTA_DATA(sub)), "can") == 0) {
+                                is_can = true;
+                            }
+                        } else if (sub->rta_type == IFLA_INFO_DATA) {
+                            info_data = sub;
+                        }
+                    }
+
+                    if (is_can && info_data) {
+                        int can_len = RTA_PAYLOAD(info_data);
+                        struct rtattr *can_attr = reinterpret_cast<struct rtattr *>(RTA_DATA(info_data));
+                        for (; RTA_OK(can_attr, can_len); can_attr = RTA_NEXT(can_attr, can_len)) {
+                            if (can_attr->rta_type == IFLA_CAN_BITTIMING) {
+                                if (RTA_PAYLOAD(can_attr) >= sizeof(struct can_bittiming)) {
+                                    struct can_bittiming *bt = reinterpret_cast<struct can_bittiming *>(RTA_DATA(can_attr));
+                                    return static_cast<int>(bt->bitrate);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+#else
+    Q_UNUSED(iface);
+#endif
     return -1;
 }
 
@@ -96,6 +185,106 @@ QString CanBackend::iface() const {
 
 CanBackend::Stats CanBackend::stats() const {
     return {m_rxFrames.load(), m_txFrames.load(), m_dropped.load()};
+}
+
+bool CanBackend::startCapture(const QString &path) {
+    std::lock_guard<std::mutex> lk(m_captureMutex);
+    auto file = std::make_unique<QFile>(path);
+    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        emit errorOccurred(tr("Cannot open capture file %1: %2").arg(path, file->errorString()));
+        return false;
+    }
+    // Write standard PCAP global header with link type RTAC_SERIAL (250)
+    QByteArray header;
+    header.append(static_cast<char>(0xd4));
+    header.append(static_cast<char>(0xc3));
+    header.append(static_cast<char>(0xb2));
+    header.append(static_cast<char>(0xa1));
+    header.append(static_cast<char>(0x02));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x04));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x04));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(250 & 0xFF));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+    header.append(static_cast<char>(0x00));
+
+    file->write(header);
+    m_captureFile = std::move(file);
+    return true;
+}
+
+void CanBackend::stopCapture() {
+    std::lock_guard<std::mutex> lk(m_captureMutex);
+    m_captureFile.reset();
+}
+
+bool CanBackend::isCapturing() const {
+    std::lock_guard<std::mutex> lk(m_captureMutex);
+    return m_captureFile != nullptr;
+}
+
+void CanBackend::writePcapPacket(qint64 timestampMs, Direction dir, quint32 id, quint16 flags, const QByteArray &payload) {
+    std::lock_guard<std::mutex> lk(m_captureMutex);
+    if (!m_captureFile) {
+        return;
+    }
+    const auto sec = static_cast<quint32>(timestampMs / 1000);
+    const auto usec = static_cast<quint32>((timestampMs % 1000) * 1000);
+
+    QByteArray canData;
+    const auto appendBe32 = [&](quint32 v) {
+        canData.append(static_cast<char>((v >> 24) & 0xFF));
+        canData.append(static_cast<char>((v >> 16) & 0xFF));
+        canData.append(static_cast<char>((v >> 8) & 0xFF));
+        canData.append(static_cast<char>(v & 0xFF));
+    };
+    const auto appendBe16 = [&](quint16 v) {
+        canData.append(static_cast<char>((v >> 8) & 0xFF));
+        canData.append(static_cast<char>(v & 0xFF));
+    };
+
+    appendBe32(id);
+    appendBe16(flags);
+    canData.append(payload);
+
+    constexpr int kRtacHeaderLen = 12;
+    const auto fill = static_cast<quint32>(kRtacHeaderLen + canData.size());
+
+    QByteArray record;
+    const auto appendLe32 = [&](quint32 v) {
+        record.append(static_cast<char>(v & 0xFF));
+        record.append(static_cast<char>((v >> 8) & 0xFF));
+        record.append(static_cast<char>((v >> 16) & 0xFF));
+        record.append(static_cast<char>((v >> 24) & 0xFF));
+    };
+
+    appendLe32(sec);
+    appendLe32(usec);
+    appendLe32(fill);
+    appendLe32(fill);
+
+    appendBe32(sec);
+    appendBe32(usec);
+    record.append(static_cast<char>(dir == Direction::Tx ? 0x11 : 0x12));
+    record.append(static_cast<char>(0x00));
+    record.append(static_cast<char>(0x00));
+    record.append(static_cast<char>(0x00));
+
+    record.append(canData);
+    m_captureFile->write(record);
 }
 
 void CanBackend::wakeLoop() const {
@@ -323,6 +512,7 @@ bool CanBackend::sendFrame(quint32 id, quint16 flags, const QByteArray &payload)
         chunk.data = payload;
     }
     m_txFrames.fetch_add(1);
+    writePcapPacket(chunk.timestampMs, Direction::Tx, id, flags, payload);
     emit chunkCaptured(chunk);
     return true;
 }
@@ -432,6 +622,7 @@ void CanBackend::runLoop() {
                 }
 
                 m_rxFrames.fetch_add(1);
+                writePcapPacket(chunk.timestampMs, Direction::Rx, chunk.frameId, chunk.frameFlags, chunk.data);
                 emit chunkCaptured(chunk);
             }
             if (deviceLost) {

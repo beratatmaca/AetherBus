@@ -43,6 +43,9 @@ private slots:
     void canBackendTransmitsFrame();
     void canBackendFdFrame();
     void canDbcDecoding();
+    void canBackendQueryBitrate();
+    void canPcapCaptureAndReplay();
+    void canRtrFrameLogging();
 
     // GUI Tests
     void guiConsoleView();

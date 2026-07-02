@@ -12,6 +12,11 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QStyle>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 namespace aether {
 
@@ -72,15 +77,51 @@ CanConfigPanel::CanConfigPanel(QWidget *parent) : QGroupBox(QStringLiteral("CAN 
     m_errorCheck->setToolTip(QStringLiteral("Subscribe to bus error frames (CAN_RAW_ERR_FILTER)"));
     form->addRow(m_errorCheck);
 
-    m_filterEdit = new QLineEdit(this);
-    m_filterEdit->setPlaceholderText(QStringLiteral("all frames — e.g. 123, 7DF/7FF, 18DAF110x"));
-    m_filterEdit->setToolTip(
-        QStringLiteral("Receive filters (comma/space separated). Blank = accept all.\n"
-                       "  ID           match id with default mask\n"
-                       "  ID/MASK      match id under an explicit hex mask\n"
-                       "  suffix 'x'   treat id as 29-bit extended (e.g. 18DAF110x)\n"
-                       "All values are hexadecimal."));
-    form->addRow(QStringLiteral("Filters"), m_filterEdit);
+    // Filters Section
+    m_filterTable = new QTableWidget(this);
+    m_filterTable->setColumnCount(5);
+    m_filterTable->setHorizontalHeaderLabels(
+        {QStringLiteral("Use"), QStringLiteral("ID (Hex)"), QStringLiteral("Mask (Hex)"), QStringLiteral("Ext"), QStringLiteral("Invert")});
+    m_filterTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_filterTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_filterTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_filterTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    m_filterTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    m_filterTable->verticalHeader()->setVisible(false);
+    m_filterTable->setFixedHeight(120);
+    m_filterTable->setToolTip(QStringLiteral("Dynamic receive filter rules. Blank ID/Mask or inactive rules are ignored."));
+
+    auto *filterButtonsLayout = new QHBoxLayout();
+    m_addFilterBtn = new QPushButton(QStringLiteral("+ Add"), this);
+    m_addFilterBtn->setToolTip(QStringLiteral("Add a new filter rule"));
+    connect(m_addFilterBtn, &QPushButton::clicked, this,
+            [this] { addFilterRow(true, QStringLiteral("000"), QStringLiteral("7FF"), false, false); });
+
+    m_removeFilterBtn = new QPushButton(QStringLiteral("- Del"), this);
+    m_removeFilterBtn->setToolTip(QStringLiteral("Remove selected filter rule"));
+    connect(m_removeFilterBtn, &QPushButton::clicked, this, [this] {
+        int r = m_filterTable->currentRow();
+        if (r >= 0) {
+            m_filterTable->removeRow(r);
+        }
+    });
+
+    m_clearFiltersBtn = new QPushButton(QStringLiteral("Clear"), this);
+    m_clearFiltersBtn->setToolTip(QStringLiteral("Remove all filter rules"));
+    connect(m_clearFiltersBtn, &QPushButton::clicked, this, [this] { m_filterTable->setRowCount(0); });
+
+    filterButtonsLayout->addWidget(m_addFilterBtn);
+    filterButtonsLayout->addWidget(m_removeFilterBtn);
+    filterButtonsLayout->addWidget(m_clearFiltersBtn);
+
+    auto *filterContainer = new QWidget(this);
+    auto *filterLayout = new QVBoxLayout(filterContainer);
+    filterLayout->setContentsMargins(0, 0, 0, 0);
+    filterLayout->setSpacing(2);
+    filterLayout->addWidget(m_filterTable);
+    filterLayout->addLayout(filterButtonsLayout);
+
+    form->addRow(QStringLiteral("Filters"), filterContainer);
 
     m_startButton = new QPushButton(QStringLiteral("Start Capture"), this);
     m_startButton->setToolTip(QStringLiteral("Open the CAN socket and begin capturing"));
@@ -97,7 +138,7 @@ CanConfigPanel::CanConfigPanel(QWidget *parent) : QGroupBox(QStringLiteral("CAN 
         if (!iface.isEmpty()) {
             m_ifaceBox->setCurrentText(iface);
         }
-        m_filterEdit->setText(settings.value(QStringLiteral("can/filters")).toString());
+        loadFiltersFromString(settings.value(QStringLiteral("can/filters")).toString());
     }
 }
 
@@ -106,7 +147,8 @@ CanConfigPanel::~CanConfigPanel() = default;
 void CanConfigPanel::setRunningState(bool running) {
     m_isRunning = running;
     m_startButton->setText(running ? QStringLiteral("Stop Capture") : QStringLiteral("Start Capture"));
-    const std::initializer_list<QWidget *> controls = {m_ifaceBox, m_fdCheck, m_loopbackCheck, m_recvOwnCheck, m_errorCheck, m_filterEdit};
+    const std::initializer_list<QWidget *> controls = {m_ifaceBox,    m_fdCheck,      m_loopbackCheck,   m_recvOwnCheck,   m_errorCheck,
+                                                       m_filterTable, m_addFilterBtn, m_removeFilterBtn, m_clearFiltersBtn};
     for (QWidget *w : controls) {
         if (w) {
             w->setEnabled(!running);
@@ -143,36 +185,37 @@ bool CanConfigPanel::buildConfig(CanConfig &out) {
     out.errorFrames = m_errorCheck->isChecked();
     out.filters.clear();
 
-    const QString spec = m_filterEdit->text().trimmed();
-    if (spec.isEmpty()) {
-        return true;
-    }
-
-    const QStringList tokens = spec.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts);
-    for (const QString &raw : tokens) {
-        CanFilter f;
-        QString idPart = raw;
-        QString maskPart;
-        if (const int slash = raw.indexOf(QLatin1Char('/')); slash >= 0) {
-            idPart = raw.left(slash);
-            maskPart = raw.mid(slash + 1);
+    for (int i = 0; i < m_filterTable->rowCount(); ++i) {
+        bool use = (m_filterTable->item(i, 0)->checkState() == Qt::Checked);
+        if (!use) {
+            continue;
         }
 
-        const bool extended = stripExtendedMarker(idPart);
+        QString idPart = m_filterTable->item(i, 1)->text().trimmed();
+        QString maskPart = m_filterTable->item(i, 2)->text().trimmed();
+        bool extended = (m_filterTable->item(i, 3)->checkState() == Qt::Checked);
+        bool invert = (m_filterTable->item(i, 4)->checkState() == Qt::Checked);
+
+        if (idPart.isEmpty()) {
+            setStatus(QStringLiteral("<span style='color:#e57373'>Empty filter ID at row %1</span>").arg(i + 1));
+            return false;
+        }
+
+        CanFilter f;
         bool okId = false;
         f.id = idPart.toUInt(&okId, 16);
         if (!okId) {
-            setStatus(QStringLiteral("<span style='color:#e57373'>Bad filter id '%1'</span>").arg(raw));
+            setStatus(QStringLiteral("<span style='color:#e57373'>Bad filter id '%1' at row %2</span>").arg(idPart).arg(i + 1));
             return false;
         }
         f.extended = extended;
+        f.invert = invert;
 
         if (!maskPart.isEmpty()) {
-            stripExtendedMarker(maskPart);
             bool okMask = false;
             f.mask = maskPart.toUInt(&okMask, 16);
             if (!okMask) {
-                setStatus(QStringLiteral("<span style='color:#e57373'>Bad filter mask '%1'</span>").arg(raw));
+                setStatus(QStringLiteral("<span style='color:#e57373'>Bad filter mask '%1' at row %2</span>").arg(maskPart).arg(i + 1));
                 return false;
             }
         } else {
@@ -201,10 +244,105 @@ void CanConfigPanel::onStartButtonClicked() {
     {
         QSettings settings;
         settings.setValue(QStringLiteral("can/iface"), cfg.iface);
-        settings.setValue(QStringLiteral("can/filters"), m_filterEdit->text().trimmed());
+        settings.setValue(QStringLiteral("can/filters"), saveFiltersToString());
     }
 
     emit startCan(cfg);
+}
+
+void CanConfigPanel::addFilterRow(bool use, const QString &idHex, const QString &maskHex, bool ext, bool invert) {
+    int row = m_filterTable->rowCount();
+    m_filterTable->insertRow(row);
+
+    auto *useItem = new QTableWidgetItem();
+    useItem->setCheckState(use ? Qt::Checked : Qt::Unchecked);
+    useItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    useItem->setTextAlignment(Qt::AlignCenter);
+    m_filterTable->setItem(row, 0, useItem);
+
+    auto *idItem = new QTableWidgetItem(idHex);
+    idItem->setTextAlignment(Qt::AlignCenter);
+    m_filterTable->setItem(row, 1, idItem);
+
+    auto *maskItem = new QTableWidgetItem(maskHex);
+    maskItem->setTextAlignment(Qt::AlignCenter);
+    m_filterTable->setItem(row, 2, maskItem);
+
+    auto *extItem = new QTableWidgetItem();
+    extItem->setCheckState(ext ? Qt::Checked : Qt::Unchecked);
+    extItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    extItem->setTextAlignment(Qt::AlignCenter);
+    m_filterTable->setItem(row, 3, extItem);
+
+    auto *invertItem = new QTableWidgetItem();
+    invertItem->setCheckState(invert ? Qt::Checked : Qt::Unchecked);
+    invertItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    invertItem->setTextAlignment(Qt::AlignCenter);
+    m_filterTable->setItem(row, 4, invertItem);
+}
+
+void CanConfigPanel::loadFiltersFromString(const QString &spec) {
+    m_filterTable->setRowCount(0);
+    if (spec.isEmpty()) {
+        return;
+    }
+
+    // Try parsing as JSON first
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(spec.toUtf8(), &err);
+    if (err.error == QJsonParseError::NoError && doc.isArray()) {
+        QJsonArray arr = doc.array();
+        for (int i = 0; i < arr.size(); ++i) {
+            QJsonObject obj = arr[i].toObject();
+            bool use = obj.value(QStringLiteral("use")).toBool(true);
+            QString id = obj.value(QStringLiteral("id")).toString();
+            QString mask = obj.value(QStringLiteral("mask")).toString();
+            bool ext = obj.value(QStringLiteral("ext")).toBool(false);
+            bool invert = obj.value(QStringLiteral("invert")).toBool(false);
+            addFilterRow(use, id, mask, ext, invert);
+        }
+        return;
+    }
+
+    // Fallback: legacy space/comma separated parsing
+    const QStringList tokens = spec.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts);
+    for (const QString &raw : tokens) {
+        QString idPart = raw;
+        QString maskPart;
+        if (const int slash = raw.indexOf(QLatin1Char('/')); slash >= 0) {
+            idPart = raw.left(slash);
+            maskPart = raw.mid(slash + 1);
+        }
+
+        const bool extended = idPart.endsWith(QLatin1Char('x'), Qt::CaseInsensitive) || idPart.endsWith(QLatin1Char('X'));
+        if (extended) {
+            idPart.chop(1);
+        }
+
+        if (maskPart.isEmpty()) {
+            maskPart = extended ? QStringLiteral("1FFFFFFF") : QStringLiteral("7FF");
+        } else {
+            if (maskPart.endsWith(QLatin1Char('x'), Qt::CaseInsensitive) || maskPart.endsWith(QLatin1Char('X'))) {
+                maskPart.chop(1);
+            }
+        }
+        addFilterRow(true, idPart, maskPart, extended, false);
+    }
+}
+
+QString CanConfigPanel::saveFiltersToString() const {
+    QJsonArray arr;
+    for (int i = 0; i < m_filterTable->rowCount(); ++i) {
+        QJsonObject obj;
+        obj[QStringLiteral("use")] = (m_filterTable->item(i, 0)->checkState() == Qt::Checked);
+        obj[QStringLiteral("id")] = m_filterTable->item(i, 1)->text().trimmed();
+        obj[QStringLiteral("mask")] = m_filterTable->item(i, 2)->text().trimmed();
+        obj[QStringLiteral("ext")] = (m_filterTable->item(i, 3)->checkState() == Qt::Checked);
+        obj[QStringLiteral("invert")] = (m_filterTable->item(i, 4)->checkState() == Qt::Checked);
+        arr.append(obj);
+    }
+    QJsonDocument doc(arr);
+    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 }
 
 }  // namespace aether

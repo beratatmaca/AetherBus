@@ -90,6 +90,7 @@ void StatsCalculator::addChunk(const CapturedChunk &chunk) {
         s.lastTimestampMs = chunk.timestampMs;
         s.lastFlags = chunk.frameFlags;
         s.lastLen = size;
+        s.lastPayload = chunk.data;
     }
 }
 

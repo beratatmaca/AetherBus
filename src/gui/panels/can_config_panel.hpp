@@ -8,6 +8,7 @@ class QLineEdit;
 class QPushButton;
 class QLabel;
 class QCheckBox;
+class QTableWidget;
 
 namespace aether {
 
@@ -39,12 +40,19 @@ private:
     /// malformed filter specification.
     bool buildConfig(CanConfig &out);
 
+    void addFilterRow(bool use, const QString &idHex, const QString &maskHex, bool ext, bool invert);
+    void loadFiltersFromString(const QString &spec);
+    [[nodiscard]] QString saveFiltersToString() const;
+
     QComboBox *m_ifaceBox = nullptr;
     QCheckBox *m_fdCheck = nullptr;
     QCheckBox *m_loopbackCheck = nullptr;
     QCheckBox *m_recvOwnCheck = nullptr;
     QCheckBox *m_errorCheck = nullptr;
-    QLineEdit *m_filterEdit = nullptr;
+    QTableWidget *m_filterTable = nullptr;
+    QPushButton *m_addFilterBtn = nullptr;
+    QPushButton *m_removeFilterBtn = nullptr;
+    QPushButton *m_clearFiltersBtn = nullptr;
     QPushButton *m_startButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     bool m_isRunning = false;

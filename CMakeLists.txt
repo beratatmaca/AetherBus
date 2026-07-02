@@ -157,6 +157,8 @@ add_library(aether_gui STATIC
     src/gui/widgets/throughput_chart.hpp
     src/gui/widgets/statspanel.cpp
     src/gui/widgets/statspanel.hpp
+    src/gui/widgets/can_sniffer_widget.cpp
+    src/gui/widgets/can_sniffer_widget.hpp
     src/gui/resources.qrc
 )
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)

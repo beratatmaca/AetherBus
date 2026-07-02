@@ -17,6 +17,7 @@
 #include "core/common/i_bus_backend.hpp"
 
 #include <QStringList>
+#include <QFile>
 
 #include <atomic>
 #include <cstdint>
@@ -57,6 +58,11 @@ public:
     };
     [[nodiscard]] Stats stats() const;
 
+    // --- PCAP Capture Support ---
+    bool startCapture(const QString &path);
+    void stopCapture();
+    [[nodiscard]] bool isCapturing() const;
+
     // --- Static helpers, safe to call on any platform ---
 
     /// @return true when SocketCAN is available on this build/platform.
@@ -90,6 +96,11 @@ private:
     std::atomic<std::uint64_t> m_rxFrames{0};
     std::atomic<std::uint64_t> m_txFrames{0};
     std::atomic<std::uint64_t> m_dropped{0};
+
+    // --- PCAP Capture ---
+    void writePcapPacket(qint64 timestampMs, Direction dir, quint32 id, quint16 flags, const QByteArray &payload);
+    mutable std::mutex m_captureMutex;
+    std::unique_ptr<QFile> m_captureFile;
 };
 
 }  // namespace aether

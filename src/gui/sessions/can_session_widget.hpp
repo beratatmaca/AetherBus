@@ -21,6 +21,7 @@ class ConsolePanel;
 class StatsPanel;
 class CanConfigPanel;
 class CanDecoderPanel;
+class CaptureReplayer;
 
 /// A SocketCAN session: candump-style frame log plus a cansend-style transmit
 /// bar, reusing the shared ConsoleView and StatsPanel. Kept separate from the
@@ -47,6 +48,10 @@ private slots:
     void transmit();
     void applyFormats();
     void updateCounts();
+    void toggleCapture();
+    void toggleReplay();
+    void onReplayFinished();
+    void toggleLogging(bool checked);
 
 private:
     void buildUi();
@@ -55,6 +60,7 @@ private:
     CanBackend *m_backend;
     ConsolePanel *m_consolePanel = nullptr;
     CanConfigPanel *m_configPanel = nullptr;
+    CaptureReplayer *m_replayer = nullptr;
     StatsPanel *m_statsPanel = nullptr;
     CanDecoderPanel *m_decoderPanel = nullptr;
 

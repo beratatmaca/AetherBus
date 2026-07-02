@@ -5,9 +5,12 @@
 #include "gui/panels/can_config_panel.hpp"
 #include "gui/widgets/consoleview.hpp"
 #include "gui/widgets/console_panel.hpp"
+#include "gui/widgets/can_sniffer_widget.hpp"
 #include "gui/panels/can_decoder_panel.hpp"
 #include "gui/widgets/statspanel.hpp"
+#include "core/common/capture_replay.hpp"
 
+#include <QTabWidget>
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
@@ -33,6 +36,12 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     buildUi();
     rescan();
 
+    m_replayer = new CaptureReplayer(this);
+    connect(m_replayer, &CaptureReplayer::chunkReplayed, m_consolePanel->console(), &ConsoleView::appendChunk);
+    connect(m_replayer, &CaptureReplayer::chunkReplayed, m_decoderPanel, &CanDecoderPanel::processChunk);
+    connect(m_replayer, &CaptureReplayer::chunkReplayed, this, &CanSessionWidget::onChunkCaptured);
+    connect(m_replayer, &CaptureReplayer::finished, this, &CanSessionWidget::onReplayFinished);
+
     connect(m_configPanel, &CanConfigPanel::startCan, this, &CanSessionWidget::startCapture);
     connect(m_configPanel, &CanConfigPanel::stopCan, this, &CanSessionWidget::stopCapture);
     connect(m_configPanel, &CanConfigPanel::rescanRequested, this, &CanSessionWidget::rescan);
@@ -44,6 +53,10 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     connect(m_backend, &CanBackend::stopped, this, &CanSessionWidget::onStopped);
     connect(m_backend, &CanBackend::errorOccurred, this, &CanSessionWidget::onError);
     connect(m_backend, &CanBackend::disconnected, this, &CanSessionWidget::onDisconnected);
+
+    connect(m_consolePanel, &ConsolePanel::logToggled, this, &CanSessionWidget::toggleLogging);
+    connect(m_consolePanel, &ConsolePanel::captureToggled, this, &CanSessionWidget::toggleCapture);
+    connect(m_consolePanel, &ConsolePanel::replayToggled, this, &CanSessionWidget::toggleReplay);
 
     m_statsTimer = new QTimer(this);
     m_statsTimer->setInterval(1000);
@@ -123,11 +136,20 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
 
-    m_consolePanel = new ConsolePanel(panel);
+    auto *tabWidget = new QTabWidget(panel);
+
+    m_consolePanel = new ConsolePanel(tabWidget);
     m_consolePanel->setSplitControlsVisible(false);
-    m_consolePanel->setExtraActionsVisible(false);
+    m_consolePanel->setExtraActionsVisible(true);
     m_consolePanel->setSelectionLabelVisible(false);
-    layout->addWidget(m_consolePanel, 1);
+
+    auto *snifferWidget = new CanSnifferWidget(tabWidget);
+    snifferWidget->setCalculator(&m_stats);
+
+    tabWidget->addTab(m_consolePanel, tr("Log View"));
+    tabWidget->addTab(snifferWidget, tr("Sniffer View"));
+
+    layout->addWidget(tabWidget, 1);
 
     // Save handling
     connect(m_consolePanel, &ConsolePanel::saveRequested, this, [this] {
@@ -201,6 +223,8 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
                 break;
             case 3:
                 m_txDataEdit->setPlaceholderText(QStringLiteral("payload binary, e.g. 01000001"));
+                break;
+            default:
                 break;
         }
     });
@@ -524,4 +548,80 @@ void CanSessionWidget::saveCurrentAsMacro() {
     rebuildMacroButtons();
 }
 
+void CanSessionWidget::toggleCapture() {
+    if (m_backend->isCapturing()) {
+        m_backend->stopCapture();
+        m_consolePanel->captureButton()->setChecked(false);
+        m_configPanel->setStatus(QStringLiteral("Capture stopped."));
+        return;
+    }
+    const QString path =
+        QFileDialog::getSaveFileName(this, QStringLiteral("Capture traffic to pcap"), QStringLiteral("aetherbus_can_capture.pcap"),
+                                     QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    if (path.isEmpty()) {
+        m_consolePanel->captureButton()->setChecked(false);
+        return;
+    }
+    if (!m_backend->startCapture(path)) {
+        m_consolePanel->captureButton()->setChecked(false);
+        return;
+    }
+    m_consolePanel->captureButton()->setChecked(true);
+    m_configPanel->setStatus(QStringLiteral("Capturing to %1").arg(path));
+}
+
+void CanSessionWidget::toggleReplay() {
+    if (m_replayer->isReplaying()) {
+        m_replayer->stop();
+        m_consolePanel->replayButton()->setChecked(false);
+        m_configPanel->setStatus(QStringLiteral("Replay stopped."));
+        return;
+    }
+    if (m_backend->isRunning()) {
+        m_consolePanel->replayButton()->setChecked(false);
+        onError(QStringLiteral("Stop SocketCAN capture before replaying a capture file."));
+        return;
+    }
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Open capture file for replay"), QString(),
+                                                      QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    if (path.isEmpty()) {
+        m_consolePanel->replayButton()->setChecked(false);
+        return;
+    }
+    QString error;
+    if (!m_replayer->load(path, &error)) {
+        m_consolePanel->replayButton()->setChecked(false);
+        onError(QStringLiteral("Could not open capture: %1").arg(error));
+        return;
+    }
+    m_consolePanel->console()->clearConsole();
+    m_consolePanel->replayButton()->setChecked(true);
+    m_configPanel->setStatus(QStringLiteral("Replaying %1 (%2 packets)…").arg(path).arg(m_replayer->chunkCount()));
+    m_replayer->start();
+}
+
+void CanSessionWidget::onReplayFinished() {
+    m_consolePanel->replayButton()->setChecked(false);
+    m_configPanel->setStatus(QStringLiteral("Replay complete (%1 packets).").arg(m_replayer->chunkCount()));
+}
+
+void CanSessionWidget::toggleLogging(bool checked) {
+    if (checked) {
+        const QString path =
+            QFileDialog::getSaveFileName(this, QStringLiteral("Log continuous traffic"), QStringLiteral("aetherbus_can.log"),
+                                         QStringLiteral("Log files (*.log);;Text files (*.txt);;All files (*)"));
+        if (path.isEmpty()) {
+            m_consolePanel->logButton()->setChecked(false);
+            return;
+        }
+        if (!m_consolePanel->console()->startLogging(path)) {
+            m_consolePanel->logButton()->setChecked(false);
+            return;
+        }
+        m_configPanel->setStatus(QStringLiteral("Logging to %1").arg(path));
+    } else {
+        m_consolePanel->console()->stopLogging();
+        m_configPanel->setStatus(QStringLiteral("Logging stopped."));
+    }
+}
 }  // namespace aether

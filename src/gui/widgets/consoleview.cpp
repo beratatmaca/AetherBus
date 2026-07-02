@@ -221,7 +221,7 @@ void ConsoleView::renderOpenLine() {
 }
 
 void ConsoleView::finalizeLine() {
-    if (m_logFile && !m_openLine.bytes.isEmpty()) {
+    if (m_logFile && (!m_openLine.bytes.isEmpty() || m_openLine.isFrame)) {
         m_logFile->write(lineToPlain(m_openLine).toUtf8());
         m_logFile->write("\n");
     }
