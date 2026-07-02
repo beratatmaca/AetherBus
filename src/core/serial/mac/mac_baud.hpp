@@ -11,15 +11,10 @@
 
 namespace aether {
 
-/**
- * @brief Apply an exact baud rate to an already-opened tty fd on macOS.
- *
- * Uses the @c IOSSIOSPEED ioctl, which must be applied after @c tcsetattr so it
- * is not overwritten by the standard-speed fields.
- * @param fd   An open tty file descriptor.
- * @param baud Desired baud rate in bits/second.
- * @return @c true on success; @c false on non-macOS builds or ioctl failure.
- */
+// macOS implementation of aether::setCustomBaud (declared and documented in
+// linux_baud.hpp). Applies the exact baud rate via the IOSSIOSPEED ioctl, which
+// must run after tcsetattr so the standard-speed fields do not overwrite it.
+// Only one platform's translation unit is compiled per build.
 bool setCustomBaud(int fd, int baud);
 
 }  // namespace aether

@@ -19,8 +19,9 @@ namespace aether {
  * Windows has no pseudo-terminal and no driver-free way to publish a real
  * @c COMx device to third-party applications (that requires a signed kernel
  * driver such as com0com). This proxy instead opens and configures the physical
- * COM port and exposes the "application" side as a named pipe
- * (@c \\.\pipe\aetherbus-*). Bytes read from the COM port are tagged
+ * COM port and exposes the "application" side as a named pipe (named
+ * @c aetherbus-* under the Windows named-pipe namespace). Bytes read from the
+ * COM port are tagged
  * @ref Direction::Rx and written to the pipe; bytes the connected client writes
  * to the pipe are tagged @ref Direction::Tx and written to the COM port. It is
  * fully functional for capture, statistics, injection and modem-line control,

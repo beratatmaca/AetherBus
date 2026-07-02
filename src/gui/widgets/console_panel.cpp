@@ -363,11 +363,7 @@ void ConsolePanel::onSelectionChanged() {
     bool ok = false;
 
     // Try parsing as Hex first.
-    if (codec::parseHexString(text, bytes)) {
-        ok = true;
-    } else if (codec::parseDecString(text, bytes)) {
-        ok = true;
-    } else if (codec::parseBinString(text, bytes)) {
+    if (codec::parseHexString(text, bytes) || codec::parseDecString(text, bytes) || codec::parseBinString(text, bytes)) {
         ok = true;
     } else {
         // Fallback: treat as raw ASCII/UTF-8 bytes

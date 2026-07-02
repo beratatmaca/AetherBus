@@ -127,19 +127,19 @@ int CanBackend::queryBitrate(const QString &iface) {
         return -1;
     }
 
-    for (struct nlmsghdr *nh = reinterpret_cast<struct nlmsghdr *>(buf); NLMSG_OK(nh, len); nh = NLMSG_NEXT(nh, len)) {
+    for (auto *nh = reinterpret_cast<struct nlmsghdr *>(buf); NLMSG_OK(nh, len); nh = NLMSG_NEXT(nh, len)) {
         if (nh->nlmsg_type == NLMSG_DONE || nh->nlmsg_type == NLMSG_ERROR) {
             break;
         }
         if (nh->nlmsg_type == RTM_NEWLINK) {
-            struct ifinfomsg *ifi = reinterpret_cast<struct ifinfomsg *>(NLMSG_DATA(nh));
+            auto *ifi = reinterpret_cast<struct ifinfomsg *>(NLMSG_DATA(nh));
             int attr_len = nh->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
-            struct rtattr *rta = reinterpret_cast<struct rtattr *>(reinterpret_cast<char *>(ifi) + NLMSG_ALIGN(sizeof(struct ifinfomsg)));
+            auto *rta = reinterpret_cast<struct rtattr *>(reinterpret_cast<char *>(ifi) + NLMSG_ALIGN(sizeof(struct ifinfomsg)));
 
             for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
                 if (rta->rta_type == IFLA_LINKINFO) {
                     int nested_len = RTA_PAYLOAD(rta);
-                    struct rtattr *sub = reinterpret_cast<struct rtattr *>(RTA_DATA(rta));
+                    auto *sub = reinterpret_cast<struct rtattr *>(RTA_DATA(rta));
                     bool is_can = false;
                     struct rtattr *info_data = nullptr;
 
@@ -155,11 +155,11 @@ int CanBackend::queryBitrate(const QString &iface) {
 
                     if (is_can && info_data) {
                         int can_len = RTA_PAYLOAD(info_data);
-                        struct rtattr *can_attr = reinterpret_cast<struct rtattr *>(RTA_DATA(info_data));
+                        auto *can_attr = reinterpret_cast<struct rtattr *>(RTA_DATA(info_data));
                         for (; RTA_OK(can_attr, can_len); can_attr = RTA_NEXT(can_attr, can_len)) {
                             if (can_attr->rta_type == IFLA_CAN_BITTIMING) {
                                 if (RTA_PAYLOAD(can_attr) >= sizeof(struct can_bittiming)) {
-                                    struct can_bittiming *bt = reinterpret_cast<struct can_bittiming *>(RTA_DATA(can_attr));
+                                    auto *bt = reinterpret_cast<struct can_bittiming *>(RTA_DATA(can_attr));
                                     return static_cast<int>(bt->bitrate);
                                 }
                             }

@@ -292,8 +292,8 @@ void CanConfigPanel::loadFiltersFromString(const QString &spec) {
     QJsonDocument doc = QJsonDocument::fromJson(spec.toUtf8(), &err);
     if (err.error == QJsonParseError::NoError && doc.isArray()) {
         QJsonArray arr = doc.array();
-        for (int i = 0; i < arr.size(); ++i) {
-            QJsonObject obj = arr[i].toObject();
+        for (auto &&i : arr) {
+            QJsonObject obj = i.toObject();
             bool use = obj.value(QStringLiteral("use")).toBool(true);
             QString id = obj.value(QStringLiteral("id")).toString();
             QString mask = obj.value(QStringLiteral("mask")).toString();
