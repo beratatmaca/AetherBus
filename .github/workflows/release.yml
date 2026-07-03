@@ -178,3 +178,57 @@ jobs:
             - **Commit:** ${{ needs.version.outputs.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-snap:
+    name: Build Snap Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # Full history so override-pull's `git rev-list --count HEAD`
+          # resolves the real build number instead of 1 (shallow clone).
+          fetch-depth: 0
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build
+
+      - name: Upload Snap Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherBus-Linux-Snap
+          path: ${{ steps.build.outputs.snap }}
+
+  publish-snap:
+    name: Publish to Snap Store
+    needs: [version, build-snap]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download Built Snap
+        uses: actions/download-artifact@v4
+        with:
+          name: AetherBus-Linux-Snap
+          path: .
+
+      - name: Locate snap file
+        id: snap
+        # action-publish passes `snap:` straight to `snapcraft upload` and does
+        # not expand globs, so resolve the concrete file name here.
+        run: |
+          file=$(ls -1 ./*.snap 2>/dev/null | head -n1)
+          if [ -z "$file" ]; then
+            echo "No .snap artifact found to publish." >&2
+            exit 1
+          fi
+          echo "path=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Snap
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap.outputs.path }}
+          release: ${{ needs.version.outputs.is_tag == 'true' && 'stable' || 'edge' }}
