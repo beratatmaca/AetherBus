@@ -231,4 +231,4 @@ jobs:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
           snap: ${{ steps.snap.outputs.path }}
-          release: ${{ needs.version.outputs.is_tag == 'true' && 'stable' || 'edge' }}
+          release: stable
