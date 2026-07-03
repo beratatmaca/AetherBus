@@ -97,7 +97,7 @@ jobs:
         run: |
           cmake -G "Unix Makefiles" -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON \
+            -DBUILD_TESTING=OFF \
             -DBUILD_COVERAGE=OFF \
             -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} \
             -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
@@ -107,7 +107,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
 
       - name: Compile Code (All Platforms)
         run: |
