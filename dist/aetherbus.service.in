@@ -4,9 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/aetherbus
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/aetherbus
 Restart=on-failure
 RestartSec=5s
+SupplementaryGroups=dialout
 
 [Install]
 WantedBy=graphical.target

@@ -226,23 +226,38 @@ QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
 }
 
 void SessionWidget::rescanDevices() {
+    QStringList systemPorts;
+    QStringList byIdPorts;
+
+#if defined(Q_OS_WIN)
+    QSettings comSettings(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\SERIALCOMM"), QSettings::NativeFormat);
+    for (const QString &key : comSettings.allKeys()) {
+        systemPorts.append(comSettings.value(key).toString());
+    }
+#elif defined(Q_OS_MAC)
+    QDir dev(QStringLiteral("/dev"));
+    const QStringList filters{QStringLiteral("cu.*"), QStringLiteral("tty.*")};
+    const auto flags = QDir::System | QDir::AllEntries | QDir::NoDotAndDotDot;
+    const QStringList found = dev.entryList(filters, flags, QDir::Name | QDir::LocaleAware);
+    for (const QString &name : found) {
+        systemPorts.append(QStringLiteral("/dev/") + name);
+    }
+#else
     QDir dev(QStringLiteral("/dev"));
     const QStringList filters{QStringLiteral("ttyUSB*"), QStringLiteral("ttyACM*"), QStringLiteral("ttyS*"), QStringLiteral("ttyAMA*")};
     const auto flags = QDir::System | QDir::AllEntries | QDir::NoDotAndDotDot;
     const QStringList found = dev.entryList(filters, flags, QDir::Name | QDir::LocaleAware);
-
-    QStringList systemPorts;
     for (const QString &name : found) {
         systemPorts.append(QStringLiteral("/dev/") + name);
     }
 
-    QStringList byIdPorts;
     QDir byId(QStringLiteral("/dev/serial/by-id"));
     if (byId.exists()) {
         for (const QString &name : byId.entryList(QDir::System | QDir::NoDotAndDotDot)) {
             byIdPorts.append(byId.filePath(name));
         }
     }
+#endif
 
     m_configPanel->populateDevices(systemPorts, byIdPorts);
     m_configPanel->setStatus(QStringLiteral("Device list refreshed."));

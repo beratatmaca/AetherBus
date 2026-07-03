@@ -166,7 +166,13 @@ void ConfigPanel::populateDevices(const QStringList &systemPorts, const QStringL
     }
 
     if (m_deviceBox->count() == 0) {
+#if defined(Q_OS_WIN)
+        m_deviceBox->addItem(QStringLiteral("COM3"));
+#elif defined(Q_OS_MAC)
+        m_deviceBox->addItem(QStringLiteral("/dev/tty.usbserial"));
+#else
         m_deviceBox->addItem(QStringLiteral("/dev/ttyUSB0"));
+#endif
     }
 
     // Restore recently-used ports from QSettings.

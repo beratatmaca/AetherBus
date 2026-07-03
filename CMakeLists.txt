@@ -210,6 +210,9 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DevTools.cmake)
 include(GNUInstallDirs)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(AETHER_SYSTEMD_UNIT_DIR "/lib/systemd/system" CACHE PATH
+        "Install location for the aetherbus.service systemd unit file")
+
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/dist/aetherbus.service.in
         ${CMAKE_CURRENT_BINARY_DIR}/aetherbus.service
@@ -226,7 +229,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         FILES_MATCHING PATTERN "*.h"
     )
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/aetherbus.service
-        DESTINATION /lib/systemd/system
+        DESTINATION ${AETHER_SYSTEMD_UNIT_DIR}
     )
 elseif(WIN32)
     install(TARGETS aetherbus RUNTIME DESTINATION bin)
