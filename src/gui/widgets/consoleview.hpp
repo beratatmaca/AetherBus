@@ -1,4 +1,4 @@
-// HTerm-style high-throughput console — custom-paint implementation.
+// High-throughput console — custom-paint implementation.
 //
 // Architecture
 // ============

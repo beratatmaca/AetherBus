@@ -1,6 +1,6 @@
 /**
  * @file format_codec.hpp
- * @brief Pure byte <-> text conversions for the HTerm-style multi-format view.
+ * @brief Pure byte <-> text conversions for the multi-format console view.
  *
  * Every function here is free of I/O and global state so it can be exercised
  * directly by the unit tests. The GUI layers formatting on top of the raw bytes

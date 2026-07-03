@@ -7,9 +7,9 @@
 [![C++17](https://img.shields.io/badge/C++-17-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/compiler_support/17)
 [![Qt 6](https://img.shields.io/badge/Qt-6-green.svg?logo=qt)](https://www.qt.io/)
 
-AetherBus is a modern, lightweight, open-source serial-port interceptor and protocol sniffer for Linux, macOS, and Windows.
+AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux, macOS, and Windows.
 
-Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. Think `interceptty` wired to an `HTerm`-style diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
+Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID sniffer table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. Think `interceptty` wired to a diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
 ## Screenshot
 
@@ -33,22 +33,38 @@ AetherBus sits transparently between your application and the hardware. It opens
                                                  │  CapturedChunk queue
                                                  ▼
                                   ┌──────────────────────────┐
-                                  │   Qt6 HTerm-style View   │
+                                  │          Qt6 View        │
                                   │  HEX / ASCII / BIN / DEC │
                                   │   + byte injection panel │
                                   └──────────────────────────┘
 ```
 
+A parallel SocketCAN backend implements the same capture/lifecycle interface (`IBusBackend`) for CAN sessions, so the console, stats, and macro machinery are shared between serial and CAN — see [Technical Architecture](#technical-architecture).
+
 ## Features
+
+**Serial interception**
 
 * **Transparent interception** — proxies a real UART through a kernel PTY; the target app connects to a virtual port and never knows it is being watched.
 * **Live line-setting mirroring** — when the target app reconfigures baud/parity/framing on the virtual port, AetherBus catches the change and applies it to the physical device automatically.
-* **HTerm-style console** — simultaneous HEX / ASCII / BINARY / DECIMAL columns, colour-coded by direction, batch-rendered at 60 Hz with a rolling history so high-baud streams stay responsive.
 * **Byte injection** — send crafted HEX / ASCII / DEC / BIN sequences (optional CR/LF endings, one-shot or repeating) to either the device or the application side, plus reusable macros and send history.
+* **Signal control** — drive RTS/DTR, send a serial BREAK, and watch the CTS/DSR/DCD/RI modem lines update live.
+
+**SocketCAN bus analysis** (Linux only)
+
+* **Independent CAN session type** — `candump`/`cansend`-equivalent capture and transmit over `PF_CAN`/`SOCK_RAW`, classic and CAN-FD, alongside serial sessions in their own tabs.
+* **Live per-ID sniffer table** — one row per CAN ID (DLC, frame count, last-received time, hex payload) with changed-byte highlighting and stale-row graying, throttled to 5 Hz.
+* **Structured filter table** — add/remove ID + mask rules with extended-ID and invert flags, instead of hand-typed filter strings.
+* **DBC signal decoding** — load a `.dbc` file (or define custom rules) to see live decoded signal values in a dedicated decoder panel.
+* **Read-only bitrate reporting** — queries the configured interface bitrate via netlink; bus configuration itself stays external (`ip link set ...`), no in-app privilege escalation.
+
+**Shared console & tooling**
+
+* **Console** — simultaneous HEX / ASCII / BINARY / DECIMAL columns, colour-coded by direction, batch-rendered at 60 Hz with a rolling history so high-baud streams stay responsive; CAN sessions render a `candump`-style frame header instead.
 * **pcap capture & replay** — record traffic to a `LINKTYPE_RTAC_SERIAL` pcap that opens directly in Wireshark, and replay a capture back through the console offline with the original inter-packet timing.
 * **Live statistics** — per-direction byte counts, throughput rates and chart, line utilisation, and inter-packet gap timing, plus dropped-byte accounting when a peer stops draining.
-* **Signal control** — drive RTS/DTR, send a serial BREAK, and watch the CTS/DSR/DCD/RI modem lines update live.
-* **Multi-session tabs** — intercept several links at once, each in its own tab.
+* **Byte inspector** — decodes exactly the bytes you select in the console into Int8–64 / Float / Double / Hex / Binary / ASCII, little- and big-endian.
+* **Multi-session tabs** — run several serial and/or CAN sessions at once, each fully independent.
 * **Robust backend** — non-blocking per-direction write queues (a stalled peer can't wedge the other direction), RAII-clean teardown, and no silent write loss.
 
 ## Installation
@@ -86,27 +102,46 @@ Captured traffic streams into a colour-coded, monospaced viewport, rendered side
 [14:23:01.012 Rx]  06 3F 21          |  .?!
 ```
 
-Toggle the display between **HEX**, **ASCII**, **BINARY**, and **DECIMAL** at any time — the columns render side by side and can be combined. The view is batch-rendered at 60 Hz and capped to a rolling history so even 921600-baud streams stay responsive, with autoscroll, pause, timestamp toggle, and in-buffer search. Alongside the console, a stats panel shows live throughput, utilisation, and gap timing, and you can arm a **Capture…** to a pcap file or **Replay…** a previous capture back through the same view. A premium dark theme ships in [`assets/theme.qss`](assets/theme.qss) and is loaded at startup.
+A CAN session renders the same console with a `candump`-style header instead of raw framing:
+
+```text
+[14:23:01.004 Tx]  123   [8]  DE AD BE EF 00 11 22 33
+[14:23:01.012 Rx]  7DF   [3]  02 01 00
+```
+
+Toggle the display between **HEX**, **ASCII**, **BINARY**, and **DECIMAL** at any time — the columns render side by side and can be combined. The view is batch-rendered at 60 Hz and capped to a rolling history so even 921600-baud streams stay responsive, with autoscroll, pause, timestamp toggle, and in-buffer search. Alongside the console, a stats panel shows live throughput, utilisation, and gap timing, and you can arm a **Capture…** to a pcap file or **Replay…** a previous capture back through the same view. `ThemeController` switches between `assets/theme-light.qss` and `assets/theme-dark.qss` (System / Light / Dark, selectable from the View menu), keeping both the stylesheet and the Qt palette in sync.
 
 ## Technical Architecture
 
-The architecture separates the interception engine from the presentation layer: the backend (`aether_core`) compiles as a static library with **zero graphical dependencies** and is unit-tested in isolation.
+The architecture separates the interception engine from the presentation layer: the backend (`aether_core`) compiles as a static library with **zero graphical dependencies** and is unit-tested in isolation. Serial and CAN are two independent transports behind a shared interface, so the GUI never depends on a concrete backend.
 
-**Core (`src/core/`)**
+**Core — common (`src/core/common/`)**
 
+* **`i_bus_backend`**: `IBusBackend`, the transport-neutral capture/lifecycle interface (`chunkCaptured` / `started` / `stopped` / `errorOccurred` / `disconnected`, `close()` / `isRunning()`) that both `PtyProxy` and `CanBackend` implement.
 * **`format_codec`**: A pure, side-effect-free conversion layer (bytes ⇄ HEX / ASCII / BINARY / DECIMAL) and the injection-field parsers.
-* **`PtyProxy`**: The public, platform-neutral interception backend. It hands the GUI a single `open()` / `close()` / inject / capture / stats surface and dispatches to a per-platform implementation behind a pimpl, tagging UART bytes **Rx** and target-app bytes **Tx** over non-blocking, per-direction write queues so one stalled side can't wedge the other, mirroring line-setting changes onto the device, tracking byte/drop counters, and emitting every chunk to the GUI over thread-safe queued signals.
-  * **`PosixPtyProxy`** (Linux & macOS): opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop with RAII-clean teardown via a self-pipe wake and symlink unlink. `LinuxPtyProxy` and `MacPtyProxy` are thin subclasses that differ only in how a non-standard baud rate is applied.
-  * **`WindowsPtyProxy`**: opens and configures the COM port (`SetCommState` / `SetCommTimeouts`), exposes the application side as a named pipe, and multiplexes overlapped I/O on a single worker via `WaitForMultipleObjects` — the same Rx/Tx tagging, capture, stats, injection, and modem-line control as the POSIX path.
-* **`linux_baud` / `mac_baud`**: Arbitrary (non-standard) baud rates via the Linux `termios2` path and the macOS `IOSSIOSPEED` ioctl respectively, each isolated from `<termios.h>`.
-* **`stats_calculator`**: Throughput rates, line utilisation, and inter-packet gap statistics from the captured chunk stream.
+* **`stats_calculator`**: Throughput rates, line utilisation, and inter-packet gap statistics from the captured chunk stream, plus per-CAN-ID stats.
 * **`pcap_writer`**: Shared, thread-safe writer for the `LINKTYPE_RTAC_SERIAL` capture format, used by every backend.
 * **`capture_replay`**: Parses the `LINKTYPE_RTAC_SERIAL` pcap files the backend writes and replays them as `CapturedChunk`s with the original timing.
 * **`signal_cleanup`**: Releases descriptors and symlinks on fatal signals so a crash can't leave `/dev/ttyUSB0` locked.
 
+**Core — serial (`src/core/serial/`)**
+
+* **`PtyProxy`**: The public, platform-neutral interception backend. It hands the GUI a single `open()` / `close()` / inject / capture / stats surface and dispatches to a per-platform implementation behind a pimpl, tagging UART bytes **Rx** and target-app bytes **Tx** over non-blocking, per-direction write queues so one stalled side can't wedge the other, mirroring line-setting changes onto the device, tracking byte/drop counters, and emitting every chunk to the GUI over thread-safe queued signals.
+  * **`PosixPtyProxy`** (`serial/posix/`, base for Linux & macOS): opens the physical UART in raw mode via `termios`, allocates a master/slave pseudo-terminal pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), and runs a background `poll()` multiplexing loop with RAII-clean teardown via a self-pipe wake and symlink unlink. `LinuxPtyProxy` (`serial/linux/`) and `MacPtyProxy` (`serial/mac/`) are thin subclasses that differ only in how a non-standard baud rate is applied.
+  * **`WindowsPtyProxy`** (`serial/win/`): opens and configures the COM port (`SetCommState` / `SetCommTimeouts`), exposes the application side as a named pipe, and multiplexes overlapped I/O on a single worker via `WaitForMultipleObjects` — the same Rx/Tx tagging, capture, stats, injection, and modem-line control as the POSIX path.
+* **`linux_baud` / `mac_baud`**: Arbitrary (non-standard) baud rates via the Linux `termios2` path and the macOS `IOSSIOSPEED` ioctl respectively, each isolated from `<termios.h>`.
+
+**Core — CAN (`src/core/can/`, Linux/SocketCAN only; safe no-op stubs elsewhere)**
+
+* **`CanBackend`**: `IBusBackend` implementation over `PF_CAN`/`SOCK_RAW` sockets — classic and CAN-FD frames, a `poll()` worker mirroring the serial proxy's loop, per-socket ID/mask filters, loopback/recv-own/error-frame options, interface discovery (`/sys/class/net`, no root/shell), and read-only bitrate querying via RTNL netlink (`RTM_GETLINK` → `IFLA_CAN_BITTIMING`).
+* **`dbc_parser`**: Parses CAN DBC database files into signal definitions for the decoder panel.
+
 **GUI (`src/gui/`)** — Qt 6 Widgets front end that only ever consumes `CapturedChunk` signals and never touches a raw descriptor:
 
-* **`MainWindow`** hosts multiple **`SessionWidget`** tabs. Each session owns one `PtyProxy` and composes dedicated panels — **`ConfigPanel`** (device & line settings), **`SignalPanel`** (RTS/DTR/BREAK + modem-line LEDs), **`InjectionPanel`** (byte injection), **`StatsPanel`** + **`ThroughputChart`** (live metrics), **`MacroBar`** (macros & history) — around the **`ConsoleView`** (rendering + search), themed by **`ThemeController`**.
+* **`MainWindow`** hosts multiple session tabs behind the abstract **`SessionView`** (`gui/sessions/`), so serial and CAN sessions are managed polymorphically.
+* **`SessionWidget`** (serial, `gui/sessions/`) owns one `PtyProxy` and composes **`ConfigPanel`** (device & line settings), **`SignalPanel`** (RTS/DTR/BREAK + modem-line LEDs), **`InjectionPanel`** (byte injection), **`StatsPanel`** + **`ThroughputChart`** (live metrics), and **`MacroBar`** (macros & history), all in `gui/panels/` / `gui/widgets/`.
+* **`CanSessionWidget`** (CAN, `gui/sessions/`) owns one `CanBackend` and pairs **`CanConfigPanel`** (interface, filters, FD/loopback/recv-own/error toggles) with a cansend-style transmit bar, plus a **`CanSnifferWidget`** (per-ID table) and **`CanDecoderPanel`** (DBC-driven live signal values) alongside the shared log view.
+* Both session types render through the same **`ConsoleView`** / **`ConsolePanel`** (rendering, search, byte selection) and **`ByteInspectorPanel`** (decodes the selected bytes into common data types), themed by **`ThemeController`**.
 
 ---
 
@@ -183,18 +218,18 @@ cmake -B build -DAETHER_BUILD_NUMBER=42 -DAETHER_GIT_SHA=1a2b3c4
 
 The release pipeline ([`release.yml`](.github/workflows/release.yml)) computes the version once and shares it with every build job and the release page:
 
-* **Push to `main`** → packages are built for Linux/macOS/Windows and published to the rolling **`latest`** pre-release, whose name and notes show the current incrementing version (e.g. *AetherBus v0.1.0.42 (latest main)*).
-* **Push a `vX.Y.Z` tag** → a normal (non-pre-release) GitHub Release named after the tag. To cut one, set `VERSION` to `X.Y.Z`, commit, then:
+* **Push to `main`** → packages are built for Linux/macOS/Windows and published to the rolling **`latest`** pre-release, whose name and notes show the current incrementing version (e.g. *AetherBus v1.0.2.87 (latest main)*). The Snap package is built and published straight to the **`stable`** channel on every push, so `main` is expected to stay release-ready at all times.
+* **Push a `vX.Y.Z` tag** → a normal (non-pre-release) GitHub Release named after the tag, and the same Snap build is published to `stable` under that version. To cut one, set `VERSION` to `X.Y.Z`, commit, then:
 
   ```bash
-  git tag v0.2.0 && git push origin v0.2.0
+  git tag v1.1.0 && git push origin v1.1.0
   ```
 
 ---
 
 ## Usage Reference
 
-Launch AetherBus and intercept a live serial link in four steps:
+Launch AetherBus and intercept a live serial link in five steps:
 
 1. **Select the device.** Pick the physical port (e.g. `/dev/ttyUSB0`) from the scanned list and set the line parameters — baud rate, data bits, parity, and stop bits — to match the hardware.
 2. **Start interception.** Click **Start Interception**. AetherBus opens the UART, spins up the proxy loop, and reports the kernel-assigned virtual port (e.g. `/dev/pts/5`) in the status bar. Optionally provide a stable symlink (e.g. `./ttyUSB0_sniffed`) so the target app always finds the same path.
@@ -213,6 +248,17 @@ minicom -D /dev/pts/5
 ```
 
 Every command minicom sends and every reply the modem returns is now mirrored, timestamped, and decoded in the AetherBus console.
+
+### Example: sniffing a SocketCAN bus
+
+```bash
+# Bring up a virtual CAN interface for local testing (skip on real hardware).
+sudo modprobe vcan
+sudo ip link add dev vcan0 type vcan
+sudo ip link set up vcan0
+```
+
+In AetherBus: **File → New CAN Session**, pick `vcan0`, and **Start Capture**. Traffic appears in the log view immediately; switch to the **Sniffer View** tab for a live per-ID table, add ID/mask rules in the filter table to narrow what's shown, load a `.dbc` file in the decoder panel to see named signal values, and use the transmit bar (ID + EFF/RTR/FD/BRS + payload) to send frames directly — no arm step required.
 
 ---
 
