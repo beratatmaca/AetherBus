@@ -1,6 +1,7 @@
 #include "core/serial/posix/posix_pty_proxy.hpp"
 #include "core/common/signal_cleanup.hpp"
 
+#include <QByteArray>
 #include <QDateTime>
 
 #include <array>
@@ -18,6 +19,23 @@
 namespace aether {
 
 namespace {
+
+// EACCES on the device node almost always means "wrong group / snap
+// confinement", not "run me as root" — sudo strips the caller's X11/Wayland
+// session, which is why running the whole GUI as root fails separately. Point
+// the user at the actual fix instead.
+QString accessDeniedHint() {
+    const QByteArray snapName = qgetenv("SNAP_NAME");
+    if (!snapName.isEmpty()) {
+        return PtyProxy::tr(
+                   " This snap needs its serial-port interface connected once: run "
+                   "'sudo snap connect %1:serial-port' in a terminal, then retry.")
+            .arg(QString::fromLocal8Bit(snapName));
+    }
+    return PtyProxy::tr(
+        " Add your user to the 'dialout' group instead of running as root: "
+        "'sudo usermod -aG dialout $USER', then log out and back in.");
+}
 
 bool baudToSpeed(int baud, speed_t &speed) {
     switch (baud) {
@@ -119,7 +137,12 @@ bool PosixPtyProxy::open(const SerialConfig &config) {
 
     m_uartFd = ::open(config.device.toLocal8Bit().constData(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (m_uartFd < 0) {
-        emit q_ptr->errorOccurred(PtyProxy::tr("Cannot open %1: %2").arg(config.device, QString::fromLocal8Bit(strerror(errno))));
+        const int openErrno = errno;
+        QString message = PtyProxy::tr("Cannot open %1: %2").arg(config.device, QString::fromLocal8Bit(strerror(openErrno)));
+        if (openErrno == EACCES) {
+            message += accessDeniedHint();
+        }
+        emit q_ptr->errorOccurred(message);
         return false;
     }
     if (!configureTermios(config)) {

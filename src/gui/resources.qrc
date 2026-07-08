@@ -3,5 +3,7 @@
     <qresource prefix="/aetherbus">
         <file alias="icon.ico">../../assets/icon.ico</file>
         <file alias="icon.png">../../assets/icon.png</file>
+        <file alias="theme-dark.qss">../../assets/theme-dark.qss</file>
+        <file alias="theme-light.qss">../../assets/theme-light.qss</file>
     </qresource>
 </RCC>

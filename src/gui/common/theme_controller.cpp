@@ -15,7 +15,14 @@ namespace aether {
 namespace {
 
 QString loadThemeStylesheet(bool dark) {
-    const QString filename = dark ? QStringLiteral("/assets/theme-dark.qss") : QStringLiteral("/assets/theme-light.qss");
+    const QString basename = dark ? QStringLiteral("theme-dark.qss") : QStringLiteral("theme-light.qss");
+
+    QFile resource(QStringLiteral(":/aetherbus/") + basename);
+    if (resource.open(QFile::ReadOnly | QFile::Text)) {
+        return QString::fromUtf8(resource.readAll());
+    }
+
+    const QString filename = QStringLiteral("/assets/") + basename;
     const QStringList candidates = {
         QCoreApplication::applicationDirPath() + filename,
         QCoreApplication::applicationDirPath() + QStringLiteral("/..") + filename,
