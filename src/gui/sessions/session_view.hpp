@@ -18,6 +18,7 @@ namespace aether {
 enum class SessionType : std::uint8_t {
     Serial,  ///< UART interception via the PTY proxy.
     Can,     ///< SocketCAN receive/transmit.
+    Ethernet, ///< Raw Ethernet packet capture/crafting.
 };
 
 class SessionView : public QWidget {

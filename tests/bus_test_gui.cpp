@@ -3,10 +3,12 @@
 #include "gui/widgets/macrobar.hpp"
 #include "gui/common/theme_controller.hpp"
 #include "gui/mainwindow.hpp"
+#include "gui/panels/packet_constructor_panel.hpp"
+#include "core/ethernet/ethernet_backend.hpp"
+#include <QSignalSpy>
 
 #include <QComboBox>
 #include <QTabWidget>
-#include <QSignalSpy>
 #include <QtTest/QtTest>
 
 using namespace aether;
@@ -142,4 +144,32 @@ void BusTest::guiMainWindow() {
     // Simulate adding session
     QMetaObject::invokeMethod(&mainWin, "addNewSession");
     QCOMPARE(tabWidget->count(), 2);
+}
+
+void BusTest::ethernetBackendAndParsing() {
+    // 1. Verify interfaces listing (libpcap works)
+    QStringList interfaces = EthernetBackend::listInterfaces();
+    qDebug() << "Found interfaces:" << interfaces;
+
+    // 2. Test Packet Constructor Panel building a raw packet
+    PacketConstructorPanel constructor;
+    QSignalSpy spy(&constructor, &PacketConstructorPanel::packetReady);
+    QVERIFY(spy.isValid());
+
+    // Trigger packet construction
+    QMetaObject::invokeMethod(&constructor, "onSendClicked");
+
+    QCOMPARE(spy.count(), 1);
+    QByteArray pkt = spy.first().at(0).toByteArray();
+
+    // Verify packet header lengths (Ethernet II (14) + IP (20) + UDP (8) + payload (4) = 46 bytes)
+    QCOMPARE(pkt.size(), 46);
+
+    // Verify Ethernet header fields
+    QCOMPARE(pkt.mid(0, 6), QByteArray::fromHex("FFFFFFFFFFFF"));  // Dest MAC
+    QCOMPARE(pkt.mid(6, 6), QByteArray::fromHex("001122334455"));  // Src MAC
+    QCOMPARE(pkt.mid(12, 2), QByteArray::fromHex("0800"));         // EtherType (IPv4)
+
+    // Verify IP protocol (UDP = 17)
+    QCOMPARE(static_cast<uint8_t>(pkt[23]), 17);
 }

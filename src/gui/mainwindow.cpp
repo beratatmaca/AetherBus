@@ -2,6 +2,9 @@
 
 #include "gui/sessions/can_session_widget.hpp"
 #include "gui/sessions/session_widget.hpp"
+#ifdef AETHER_HAVE_ETHERNET
+#include "gui/sessions/ethernet_session_widget.hpp"
+#endif
 #include "gui/common/theme_controller.hpp"
 #include "aether/version.h"
 
@@ -46,6 +49,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QAction *newCanSessionAct = fileMenu->addAction(tr("New &CAN Session"));
     connect(newCanSessionAct, &QAction::triggered, this, &MainWindow::addNewCanSession);
+
+#ifdef AETHER_HAVE_ETHERNET
+    QAction *newEthernetSessionAct = fileMenu->addAction(tr("New &Ethernet Session"));
+    connect(newEthernetSessionAct, &QAction::triggered, this, &MainWindow::addNewEthernetSession);
+#endif
 
     QAction *closeSessionAct = fileMenu->addAction(tr("&Close Session"));
     closeSessionAct->setShortcut(QKeySequence::Close);
@@ -200,6 +208,9 @@ void MainWindow::buildUi() {
     auto *addMenu = new QMenu(addTabButton);
     addMenu->addAction(tr("Serial Session"), this, &MainWindow::addNewSession);
     addMenu->addAction(tr("CAN Session"), this, &MainWindow::addNewCanSession);
+#ifdef AETHER_HAVE_ETHERNET
+    addMenu->addAction(tr("Ethernet Session"), this, &MainWindow::addNewEthernetSession);
+#endif
     addTabButton->setMenu(addMenu);
     m_tabWidget->setCornerWidget(addTabButton, Qt::TopRightCorner);
 
@@ -252,6 +263,12 @@ void MainWindow::addNewCanSession() {
     addSession(SessionType::Can);
 }
 
+#ifdef AETHER_HAVE_ETHERNET
+void MainWindow::addNewEthernetSession() {
+    addSession(SessionType::Ethernet);
+}
+#endif
+
 void MainWindow::addSession(SessionType type) {
     SessionView *session = nullptr;
     QString title;
@@ -259,9 +276,14 @@ void MainWindow::addSession(SessionType type) {
     if (type == SessionType::Can) {
         session = new CanSessionWidget(this);
         title = QStringLiteral("CAN Session %1").arg(count);
+#ifdef AETHER_HAVE_ETHERNET
+    } else if (type == SessionType::Ethernet) {
+        session = new EthernetSessionWidget(this);
+        title = QStringLiteral("Ethernet Session %1").arg(count);
+#endif
     } else {
         session = new SessionWidget(this);
-        title = QStringLiteral("Session %1").arg(count);
+        title = QStringLiteral("Serial Session %1").arg(count);
     }
 
     const int index = m_tabWidget->addTab(session, title);

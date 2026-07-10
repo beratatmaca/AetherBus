@@ -26,8 +26,6 @@ if(BUILD_COVERAGE)
     endif()
 endif()
 
-# Sanitizer instrumentation. Accepts: address, undefined, address+undefined,
-# or thread. Applied to all targets, so configure must run before any target.
 set(AETHER_SANITIZER "" CACHE STRING
     "Sanitizer(s) to enable: address, undefined, address+undefined, thread")
 if(AETHER_SANITIZER)
@@ -77,8 +75,6 @@ if(APPLE)
     endif()
 endif()
 
-# Core interception backend. The POSIX PTY proxy is UNIX-only; on other
-# platforms the library still builds with the pure codec + value types.
 set(AETHER_CORE_SOURCES
     src/core/serial/serial_types.hpp
     src/core/can/can_types.hpp
@@ -125,8 +121,23 @@ else() # Default to Linux
         src/core/serial/linux_baud.hpp
     )
 endif()
+
+if(NOT WIN32)
+    find_library(PCAP_LIB pcap)
+endif()
+if(PCAP_LIB)
+    list(APPEND AETHER_CORE_SOURCES
+        src/core/ethernet/ethernet_backend.cpp
+        src/core/ethernet/ethernet_backend.hpp
+    )
+endif()
+
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
 target_link_libraries(aether_core PUBLIC Qt6::Core)
+if(PCAP_LIB)
+    target_link_libraries(aether_core PUBLIC ${PCAP_LIB})
+    target_compile_definitions(aether_core PUBLIC AETHER_HAVE_ETHERNET)
+endif()
 # macOS custom-baud support (IOSSIOSPEED) lives in <IOKit/serial/ioss.h>.
 if(APPLE)
     target_link_libraries(aether_core PUBLIC "-framework IOKit" "-framework CoreFoundation")
@@ -173,7 +184,17 @@ add_library(aether_gui STATIC
     src/gui/widgets/can_sniffer_widget.hpp
     src/gui/resources.qrc
 )
-target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets)
+if(PCAP_LIB)
+    target_sources(aether_gui PRIVATE
+        src/gui/sessions/ethernet_session_widget.cpp
+        src/gui/sessions/ethernet_session_widget.hpp
+        src/gui/sessions/ethernet_packet_model.cpp
+        src/gui/sessions/ethernet_packet_model.hpp
+        src/gui/panels/packet_constructor_panel.cpp
+        src/gui/panels/packet_constructor_panel.hpp
+    )
+endif()
+target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets Qt6::Network)
 
 if(APPLE)
     add_executable(aetherbus MACOSX_BUNDLE src/main.cpp)

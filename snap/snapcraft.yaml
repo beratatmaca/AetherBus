@@ -3,24 +3,25 @@ title: AetherBus
 base: core24
 adopt-info: aetherbus
 icon: snap/gui/icon.png
-summary: Transparent serial-port interceptor and SocketCAN bus analyzer
+summary: Unified serial interceptor, SocketCAN analyzer, and Ethernet packet sniffer
 description: |
-  AetherBus is a lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux. It transparently proxies a physical UART through a kernel pseudo-terminal, allowing unmodified target applications to communicate with the device while AetherBus captures, decodes, and injects bytes in real time. An independent SocketCAN session provides a built-in CAN bus analyzer within a dedicated tab.
+  AetherBus is a lightweight, open-source diagnostic application combining a serial-port interceptor, SocketCAN analyzer, and Ethernet packet sniffer into a unified Linux dashboard.
+
+  It transparently proxies a physical UART through a kernel pseudo-terminal, allowing unmodified applications to talk to target hardware while capturing, decoding, and injecting traffic in real time. Independent native session tabs provide specialized SocketCAN analysis and low-level Ethernet packet interception.
 
   Key Features:
-  * Transparent Interception: Opens the real device and exposes a virtual port (pseudo-terminal) for the target application to connect to, mirroring all traffic.
-  * Directional Capture: Multiplexed loop tags each chunk as Rx (device) or Tx (application) with millisecond timestamps.
-  * Live Console: Side-by-side HEX, ASCII, BINARY, and DECIMAL views, color-coded by direction and optimized for high-baud streams.
-  * Live Byte Injection: Inject crafted hex byte sequences directly to either the device or the application side of the link.
-  * SocketCAN Bus Analysis: Includes a live per-ID sniffer table, structured ID/mask filters, CAN-FD, and DBC-driven signal decoding.
+  * Transparent UART Interception: Maps a physical device to a virtual pseudo-terminal link, capturing bidirectional serial data streams with millisecond precision.
+  * Multi-View Live Console: Displays data in side-by-side HEX, ASCII, BINARY, and DECIMAL layouts, optimized for high-bandwidth data rendering.
+  * SocketCAN Session: Provides an independent CAN bus analyzer with real-time per-ID sniffer tables, ID/mask filtering, CAN-FD capability, and DBC-driven signal decoding.
+  * Ethernet Session: Captures raw network traffic directly at the data-link layer, displaying frame structures, addresses, and payload contents.
+  * Live Traffic Injection: Supports manual injection of raw byte sequences, frames, or packets directly into active serial, CAN, or Ethernet links.
 
   Use Cases:
-  * Reverse-engineering serial protocols
-  * Debugging embedded firmware links
-  * Man-in-the-middle diagnostics of UART traffic
-  * Linux SocketCAN bus analysis and capture
+  * Reverse-engineering embedded fieldbus and network protocols.
+  * Debugging serial, CAN, and Ethernet communication links in real time.
+  * Analyzing data-link layer interactions and executing man-in-the-middle diagnostics.
 
-  Note: This snap is built with classic confinement to allow direct access to serial ports and network interfaces (SocketCAN) without requiring manual interface connection commands.
+  Note: This snap is built with classic confinement to allow direct access to serial ports, raw USB, and network interfaces (SocketCAN) without requiring manual interface connection commands.
 license: MIT
 contact: https://github.com/beratatmaca/AetherBus/issues
 issues: https://github.com/beratatmaca/AetherBus/issues
@@ -37,25 +38,26 @@ layout:
 apps:
   aetherbus:
     command: usr/local/bin/aetherbus
-    extensions: [ kde-neon-6 ]
     environment:
-      # The kde-neon-6 extension's desktop-launch script force-exports
-      # QT_QPA_PLATFORM=wayland-egl on Wayland sessions, overriding the value
-      # below, unless DISABLE_WAYLAND is set. Without this the app segfaults
-      # on Wayland hosts where wayland-egl fails to load. See the launcher's
-      # `if [[ -n "$XDG_RUNTIME_DIR" && -z "$DISABLE_WAYLAND" ]]` gate.
+      # Manually bootstrap Qt6 environment for classic confinement
+      LD_LIBRARY_PATH: $SNAP/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+      QT_PLUGIN_PATH: $SNAP/usr/lib/x86_64-linux-gnu/qt6/plugins
+      QT_QPA_PLATFORM_PLUGIN_PATH: $SNAP/usr/lib/x86_64-linux-gnu/qt6/plugins/platforms
       DISABLE_WAYLAND: "1"
       QT_QPA_PLATFORM: "xcb"
     plugs:
       # Required for SocketCAN (which uses AF_CAN network sockets)
       - network
       - network-bind
+      - network-control
+      - network-observe
       - serial-port
       - raw-usb
 
 parts:
   aetherbus:
     plugin: cmake
+    build-attributes: [enable-patchelf]
     source: .
     cmake-parameters:
       - -DCMAKE_BUILD_TYPE=Release
@@ -71,6 +73,8 @@ parts:
       - libqt6gui6t64
       - libqt6widgets6t64
       - qt6-wayland
+      - qt6-qpa-plugins
+      - libxkbcommon0
       - libxcb-cursor0
       - libgl1
       - libegl1

@@ -53,4 +53,7 @@ private slots:
     void guiMacroBar();
     void guiThemeController();
     void guiMainWindow();
+
+    // Ethernet Tests
+    void ethernetBackendAndParsing();
 };

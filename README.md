@@ -8,19 +8,21 @@
 [![Qt 6](https://img.shields.io/badge/Qt-6-green.svg?logo=qt)](https://www.qt.io/)
 [![aetherbus](https://snapcraft.io/aetherbus/badge.svg)](https://snapcraft.io/aetherbus)
 
-AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux, macOS, and Windows.
+AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, SocketCAN bus analyzer, and Ethernet packet sniffer/crafter for Linux, macOS, and Windows.
 
-Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID sniffer table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. Think `interceptty` wired to a diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
+Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID sniffer table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. A third session type adds a Wireshark-style Ethernet/IP sniffer: live `libpcap` capture with BPF filters, a packet list / protocol tree / hex dump layout, and a packet constructor for crafting and replaying UDP/ICMP traffic. Think `interceptty` wired to a diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
 ## Previews
 
 ### Dark Theme
+
 <p align="center">
   <img src="assets/serial_session_dark.jpg" alt="Serial Interceptor Dark Theme" width="49%">
   <img src="assets/socketcan_session_dark.jpg" alt="SocketCAN Analyzer Dark Theme" width="49%">
 </p>
 
 ### Light Theme
+
 <p align="center">
   <img src="assets/serial_session_light.jpg" alt="Serial Interceptor Light Theme" width="49%">
   <img src="assets/socketcan_session_light.jpg" alt="SocketCAN Analyzer Light Theme" width="49%">
@@ -50,7 +52,7 @@ AetherBus sits transparently between your application and the hardware. It opens
                                   └──────────────────────────┘
 ```
 
-A parallel SocketCAN backend implements the same capture/lifecycle interface (`IBusBackend`) for CAN sessions, so the console, stats, and macro machinery are shared between serial and CAN — see [Technical Architecture](#technical-architecture).
+Parallel SocketCAN and Ethernet backends implement the same capture/lifecycle interface (`IBusBackend`), so stats and macro machinery are shared across all three session types (serial/CAN also share the console; Ethernet renders through its own Wireshark-style packet-list/tree/hex-dump view instead) — see [Technical Architecture](#technical-architecture).
 
 ## Features
 
@@ -69,13 +71,21 @@ A parallel SocketCAN backend implements the same capture/lifecycle interface (`I
 * **DBC signal decoding** — load a `.dbc` file (or define custom rules) to see live decoded signal values in a dedicated decoder panel.
 * **Read-only bitrate reporting** — queries the configured interface bitrate via netlink; bus configuration itself stays external (`ip link set ...`), no in-app privilege escalation.
 
+**Ethernet packet sniffing & crafting**
+
+* **Independent Ethernet session type** — live `libpcap` capture with an optional BPF filter (e.g. `port 80`, `udp`), in its own tab alongside serial and CAN sessions. Only built where `libpcap` is available (Linux/macOS); the build no longer hard-fails without it.
+* **Wireshark-style 3-pane view** — a colour-coded (Rx/Tx) packet list on top, an expandable Ethernet/IPv4/UDP protocol tree, and a synchronized hex/ASCII dump below, all resizable/collapsible via the splitter.
+* **Packet constructor** — hand-craft an Ethernet II / IPv4 frame (source/destination MAC and IP, TTL, protocol) with a UDP or correctly-checksummed ICMP Echo Request payload (HEX or ASCII), send it once or on a repeating interval.
+* **Quick-send macros** — save the current packet fields as a named, one-click macro (persisted across restarts), matching the CAN session's macro bar.
+* **PCAP save & replay** — save a capture to a standard Wireshark-compatible `.pcap` file, or replay one back onto the interface paced by its original inter-packet timing.
+
 **Shared console & tooling**
 
 * **Console** — simultaneous HEX / ASCII / BINARY / DECIMAL columns, colour-coded by direction, batch-rendered at 60 Hz with a rolling history so high-baud streams stay responsive; CAN sessions render a `candump`-style frame header instead.
 * **pcap capture & replay** — record traffic to a `LINKTYPE_RTAC_SERIAL` pcap that opens directly in Wireshark, and replay a capture back through the console offline with the original inter-packet timing.
 * **Live statistics** — per-direction byte counts, throughput rates and chart, line utilisation, and inter-packet gap timing, plus dropped-byte accounting when a peer stops draining.
 * **Byte inspector** — decodes exactly the bytes you select in the console into Int8–64 / Float / Double / Hex / Binary / ASCII, little- and big-endian.
-* **Multi-session tabs** — run several serial and/or CAN sessions at once, each fully independent.
+* **Multi-session tabs** — run several serial, CAN, and/or Ethernet sessions at once, each fully independent.
 * **Robust backend** — non-blocking per-direction write queues (a stalled peer can't wedge the other direction), RAII-clean teardown, and no silent write loss.
 
 ## Installation
@@ -99,8 +109,9 @@ Pre-compiled packages are available on the [GitHub Releases Page](https://github
 * **macOS**: Download the `.dmg` package.
 
 > **Platform notes on live interception:**
-> - **Linux & macOS** allocate a real pseudo-terminal, so the reported slave path (e.g. `/dev/pts/5` or `/dev/ttys004`) behaves exactly like a serial port — point any target application at it directly.
-> - **Windows** has no pseudo-terminal and no driver-free way to publish a real `COMx` device to third-party applications (that requires a signed kernel driver such as [com0com](https://com0com.sourceforge.net/)). AetherBus therefore opens and fully configures the physical COM port and exposes the application side as a **named pipe** (`\\.\pipe\aetherbus-*`). Capture, statistics, byte injection, and modem-line control all work; any client that can attach to the named pipe is proxied, but the virtual side is not automatically visible as a `COMx` port.
+>
+> * **Linux & macOS** allocate a real pseudo-terminal, so the reported slave path (e.g. `/dev/pts/5` or `/dev/ttys004`) behaves exactly like a serial port — point any target application at it directly.
+> * **Windows** has no pseudo-terminal and no driver-free way to publish a real `COMx` device to third-party applications (that requires a signed kernel driver such as [com0com](https://com0com.sourceforge.net/)). AetherBus therefore opens and fully configures the physical COM port and exposes the application side as a **named pipe** (`\\.\pipe\aetherbus-*`). Capture, statistics, byte injection, and modem-line control all work; any client that can attach to the named pipe is proxied, but the virtual side is not automatically visible as a `COMx` port.
 
 ## The Console
 
@@ -126,7 +137,7 @@ The architecture separates the interception engine from the presentation layer: 
 
 **Core — common (`src/core/common/`)**
 
-* **`i_bus_backend`**: `IBusBackend`, the transport-neutral capture/lifecycle interface (`chunkCaptured` / `started` / `stopped` / `errorOccurred` / `disconnected`, `close()` / `isRunning()`) that both `PtyProxy` and `CanBackend` implement.
+* **`i_bus_backend`**: `IBusBackend`, the transport-neutral capture/lifecycle interface (`chunkCaptured` / `started` / `stopped` / `errorOccurred` / `disconnected`, `close()` / `isRunning()`) that `PtyProxy`, `CanBackend`, and `EthernetBackend` all implement (Ethernet deliberately doesn't emit `chunkCaptured` — see below).
 * **`format_codec`**: A pure, side-effect-free conversion layer (bytes ⇄ HEX / ASCII / BINARY / DECIMAL) and the injection-field parsers.
 * **`stats_calculator`**: Throughput rates, line utilisation, and inter-packet gap statistics from the captured chunk stream, plus per-CAN-ID stats.
 * **`pcap_writer`**: Shared, thread-safe writer for the `LINKTYPE_RTAC_SERIAL` capture format, used by every backend.
@@ -145,12 +156,17 @@ The architecture separates the interception engine from the presentation layer: 
 * **`CanBackend`**: `IBusBackend` implementation over `PF_CAN`/`SOCK_RAW` sockets — classic and CAN-FD frames, a `poll()` worker mirroring the serial proxy's loop, per-socket ID/mask filters, loopback/recv-own/error-frame options, interface discovery (`/sys/class/net`, no root/shell), and read-only bitrate querying via RTNL netlink (`RTM_GETLINK` → `IFLA_CAN_BITTIMING`).
 * **`dbc_parser`**: Parses CAN DBC database files into signal definitions for the decoder panel.
 
+**Core — Ethernet (`src/core/ethernet/`, built only where `libpcap` is available)**
+
+* **`EthernetBackend`**: `IBusBackend` implementation over `libpcap` — live capture with an optional BPF filter, raw packet injection (`pcap_sendpacket`), and interface discovery (`pcap_findalldevs`). Unlike `PtyProxy`/`CanBackend`, it deliberately does **not** emit `chunkCaptured` per packet: the capture thread buffers chunks behind a mutex and the GUI drains them on a 30 Hz timer, batching UI updates the way a high-throughput Ethernet link requires (a per-packet signal would overwhelm the UI thread at realistic packet rates). Captured frames are classified Rx/Tx by comparing each frame's source MAC against the interface's own address (resolved once at `open()`); a small "recently sent" ring de-duplicates a locally-injected packet's own echo from the capture loop against the immediate synthetic Tx record `sendPacket()` already produced.
+
 **GUI (`src/gui/`)** — Qt 6 Widgets front end that only ever consumes `CapturedChunk` signals and never touches a raw descriptor:
 
-* **`MainWindow`** hosts multiple session tabs behind the abstract **`SessionView`** (`gui/sessions/`), so serial and CAN sessions are managed polymorphically.
+* **`MainWindow`** hosts multiple session tabs behind the abstract **`SessionView`** (`gui/sessions/`), so serial, CAN, and Ethernet sessions are managed polymorphically.
 * **`SessionWidget`** (serial, `gui/sessions/`) owns one `PtyProxy` and composes **`ConfigPanel`** (device & line settings), **`SignalPanel`** (RTS/DTR/BREAK + modem-line LEDs), **`InjectionPanel`** (byte injection), **`StatsPanel`** + **`ThroughputChart`** (live metrics), and **`MacroBar`** (macros & history), all in `gui/panels/` / `gui/widgets/`.
 * **`CanSessionWidget`** (CAN, `gui/sessions/`) owns one `CanBackend` and pairs **`CanConfigPanel`** (interface, filters, FD/loopback/recv-own/error toggles) with a cansend-style transmit bar, plus a **`CanSnifferWidget`** (per-ID table) and **`CanDecoderPanel`** (DBC-driven live signal values) alongside the shared log view.
-* Both session types render through the same **`ConsoleView`** / **`ConsolePanel`** (rendering, search, byte selection) and **`ByteInspectorPanel`** (decodes the selected bytes into common data types), themed by **`ThemeController`**.
+* **`EthernetSessionWidget`** (Ethernet, `gui/sessions/`) owns one `EthernetBackend` and renders its packet list through **`EthernetPacketModel`** — a `QAbstractTableModel` over a `std::deque` ring buffer (capped like `ConsoleView`'s line ceiling, O(1) eviction, Rx/Tx colour via `Qt::ForegroundRole`) — paired with a protocol-tree/hex-dump decoder pane and **`PacketConstructorPanel`** (packet crafting, quick-send macros, PCAP save/replay).
+* All session types render shared metrics through **`StatsPanel`** + **`ThroughputChart`**; serial/CAN additionally share **`ConsoleView`** / **`ConsolePanel`** (rendering, search, byte selection) and **`ByteInspectorPanel`** (decodes the selected bytes into common data types) — Ethernet's Wireshark-style packet-list/tree/hex-dump layout is a deliberately separate presentation, not a fit for `ConsoleView`'s single-stream model. Every session is themed by **`ThemeController`**.
 
 ---
 
@@ -163,6 +179,7 @@ To build AetherBus, you will need:
 * **CMake** (v3.16 or higher)
 * **Qt6 SDK** (the `Core`, `Widgets`, and `Network` modules; `Test` is also needed to build the test suite)
 * **C++17 compliant compiler** (GCC 10+, Clang 12+, or MSVC 2019+)
+* **`libpcap`** (development headers, e.g. `libpcap-dev` on Debian/Ubuntu) — optional; enables the Ethernet session. Available on Linux and macOS out of the box; the Windows build skips Ethernet support entirely rather than failing (no `libpcap`-compatible package in the MinGW toolchain).
 
 ### Build Instructions
 
@@ -268,6 +285,22 @@ sudo ip link set up vcan0
 ```
 
 In AetherBus: **File → New CAN Session**, pick `vcan0`, and **Start Capture**. Traffic appears in the log view immediately; switch to the **Sniffer View** tab for a live per-ID table, add ID/mask rules in the filter table to narrow what's shown, load a `.dbc` file in the decoder panel to see named signal values, and use the transmit bar (ID + EFF/RTR/FD/BRS + payload) to send frames directly — no arm step required.
+
+### Example: sniffing and crafting Ethernet traffic
+
+In AetherBus: **File → New Ethernet Session**, pick a network interface, optionally set a BPF filter (e.g. `port 80`), and **Start Capture** (see [Elevated Privileges](#elevated-privileges--raw-packet-capture-linux-capabilities) below — raw capture needs `CAP_NET_RAW`). Traffic appears in the packet list immediately, colour-coded Rx (cyan) / Tx (orange); click a row (or use the arrow keys) to expand its Ethernet/IPv4/UDP fields in the protocol tree and see the matching bytes in the hex dump below.
+
+To craft and send your own traffic, fill in the Packet Constructor fields (source/destination MAC and IP, TTL, protocol, payload) and click **Send Packet** — or check **Periodic** to repeat it on an interval. Save frequently-used packets as one-click **macros**, or **Save PCAP…** the capture and **Play PCAP…** it back later, paced by the original inter-packet timing.
+
+### Elevated Privileges & Raw Packet Capture (Linux Capabilities)
+
+Running raw packet captures (`AF_PACKET`) on Ethernet interfaces or raw SocketCAN interactions requires administrative network permissions. Rather than running the entire graphical AetherBus application as root (via `sudo`, which is discouraged for security reasons), you can grant the required network capability to the compiled binary using:
+
+```bash
+sudo setcap cap_net_raw,cap_net_admin=eip build/aetherbus
+```
+
+This allows AetherBus to bind to raw network interfaces and perform PCAP sniffing while running under a standard, unprivileged user account.
 
 ---
 

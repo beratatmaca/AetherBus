@@ -24,6 +24,9 @@ public:
 private slots:
     void addNewSession();     ///< New serial session (Ctrl+N).
     void addNewCanSession();  ///< New SocketCAN session.
+#ifdef AETHER_HAVE_ETHERNET
+    void addNewEthernetSession(); ///< New Ethernet/IP session.
+#endif
     void closeSessionTab(int index);
     void closeCurrentSession();
     void showAboutQt();
