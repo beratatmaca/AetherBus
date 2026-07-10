@@ -54,6 +54,21 @@ private slots:
     void guiThemeController();
     void guiMainWindow();
 
-    // Ethernet Tests
+    // Ethernet pcap parsing (core-only; no libpcap dependency, always built)
+    void ethernetPcapRoundTrip();
+    void ethernetPcapRejectsBadMagic();
+    void ethernetPcapRejectsWrongLinkType();
+    void ethernetPcapRejectsTruncatedRecord();
+
+#ifdef AETHER_HAVE_ETHERNET
+    // Ethernet Tests (backend + GUI; only built where libpcap is available)
     void ethernetBackendAndParsing();
+    void ethernetPacketConstructorIcmp();
+    void ethernetPacketConstructorTcpWarns();
+    void ethernetPacketConstructorInvalidMacBlocksSend();
+    void ethernetPacketModelBasics();
+    void ethernetPacketModelEvictsOldest();
+    void ethernetPacketConstructorMacroRoundTrip();
+    void ethernetBackendOpenInvalidInterfaceFails();
+#endif
 };

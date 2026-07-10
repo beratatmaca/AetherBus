@@ -1,4 +1,5 @@
 #include "gui/sessions/ethernet_session_widget.hpp"
+#include "core/ethernet/ethernet_pcap.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -14,71 +15,8 @@
 #include <QDataStream>
 #include <QFontDatabase>
 #include <QScrollBar>
-#include <optional>
 
 namespace aether {
-
-namespace {
-
-constexpr int kPcapGlobalHeaderLen = 24;
-constexpr int kPcapRecordHeaderLen = 16;
-constexpr quint32 kPcapMagic = 0xa1b2c3d4U;
-constexpr quint32 kPcapLinkTypeEthernet = 1;
-
-quint32 readLe32(const QByteArray &blob, int off) {
-    return static_cast<quint32>(static_cast<quint8>(blob[off])) | (static_cast<quint32>(static_cast<quint8>(blob[off + 1])) << 8) |
-           (static_cast<quint32>(static_cast<quint8>(blob[off + 2])) << 16) |
-           (static_cast<quint32>(static_cast<quint8>(blob[off + 3])) << 24);
-}
-
-std::optional<QVector<CapturedChunk>> readEthernetPcapFile(const QString &path, QString *error) {
-    const auto fail = [&](const QString &reason) -> std::optional<QVector<CapturedChunk>> {
-        if (error) {
-            *error = reason;
-        }
-        return std::nullopt;
-    };
-
-    QFile file(path);
-    if (!file.open(QFile::ReadOnly)) {
-        return fail(EthernetSessionWidget::tr("Cannot open %1: %2").arg(path, file.errorString()));
-    }
-    const QByteArray blob = file.readAll();
-    if (blob.size() < kPcapGlobalHeaderLen) {
-        return fail(EthernetSessionWidget::tr("File is too small to be a pcap capture."));
-    }
-    if (readLe32(blob, 0) != kPcapMagic) {
-        return fail(EthernetSessionWidget::tr("Not a little-endian classic pcap file (pcapng is not supported yet)."));
-    }
-    if (readLe32(blob, 20) != kPcapLinkTypeEthernet) {
-        return fail(EthernetSessionWidget::tr("Unsupported link type; expected Ethernet (LINKTYPE_ETHERNET=1)."));
-    }
-
-    QVector<CapturedChunk> chunks;
-    int pos = kPcapGlobalHeaderLen;
-    while (pos + kPcapRecordHeaderLen <= blob.size()) {
-        const quint32 sec = readLe32(blob, pos);
-        const quint32 usec = readLe32(blob, pos + 4);
-        const quint32 inclLen = readLe32(blob, pos + 8);
-        pos += kPcapRecordHeaderLen;
-
-        if (pos + static_cast<int>(inclLen) > blob.size()) {
-            return fail(EthernetSessionWidget::tr("Truncated record at byte offset %1.").arg(pos));
-        }
-
-        CapturedChunk chunk;
-        chunk.timestampMs = static_cast<qint64>(sec) * 1000 + static_cast<qint64>(usec) / 1000;
-        chunk.data = blob.mid(pos, static_cast<int>(inclLen));
-        chunk.dir = Direction::Tx;
-        chunk.isFrame = false;
-        chunks.append(chunk);
-
-        pos += static_cast<int>(inclLen);
-    }
-    return chunks;
-}
-
-}  // namespace
 
 // Helper to format raw bytes into a nice Wireshark-like hex/ascii dump
 QString formatHexDump(const QByteArray &data) {
@@ -440,7 +378,7 @@ void EthernetSessionWidget::onPlayPcapRequested(const QString &filePath) {
     }
 
     QString error;
-    auto parsed = readEthernetPcapFile(filePath, &error);
+    auto parsed = readEthernetPcap(filePath, &error);
     if (!parsed) {
         QMessageBox::warning(this, tr("Play PCAP"), tr("Could not load %1: %2").arg(filePath, error));
         m_constructor->resetPlaybackButton();

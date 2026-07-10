@@ -70,10 +70,12 @@ void PacketConstructorPanel::buildUi() {
     // Layer 2
     grid->addWidget(new QLabel(tr("Src MAC:")), 0, 0);
     m_srcMacEdit = new QLineEdit(QStringLiteral("00:11:22:33:44:55"), this);
+    m_srcMacEdit->setObjectName(QStringLiteral("srcMacEdit"));
     grid->addWidget(m_srcMacEdit, 0, 1);
 
     grid->addWidget(new QLabel(tr("Dest MAC:")), 0, 2);
     m_destMacEdit = new QLineEdit(QStringLiteral("FF:FF:FF:FF:FF:FF"), this);
+    m_destMacEdit->setObjectName(QStringLiteral("destMacEdit"));
     grid->addWidget(m_destMacEdit, 0, 3);
 
     // Layer 3
@@ -93,6 +95,7 @@ void PacketConstructorPanel::buildUi() {
 
     grid->addWidget(new QLabel(tr("Protocol:")), 2, 2);
     m_ipProtoBox = new QComboBox(this);
+    m_ipProtoBox->setObjectName(QStringLiteral("protocolCombo"));
     m_ipProtoBox->addItem(QStringLiteral("UDP (17)"), 17);
     m_ipProtoBox->addItem(QStringLiteral("TCP (6)"), 6);
     m_ipProtoBox->addItem(QStringLiteral("ICMP (1)"), 1);
@@ -148,6 +151,7 @@ void PacketConstructorPanel::buildUi() {
     macroRow->addStretch(1);
 
     auto *saveMacroBtn = new QPushButton(tr("★ Save as macro"), this);
+    saveMacroBtn->setObjectName(QStringLiteral("saveMacroButton"));
     saveMacroBtn->setToolTip(tr("Save the current packet fields as a quick-send macro"));
     markToolbarButton(saveMacroBtn, "toolbarAction");
     connect(saveMacroBtn, &QPushButton::clicked, this, &PacketConstructorPanel::saveCurrentAsMacro);
@@ -384,6 +388,7 @@ void PacketConstructorPanel::rebuildMacroButtons() {
     for (int i = 0; i < m_macros.size(); ++i) {
         const auto &macro = m_macros.at(i);
         auto *btn = new QPushButton(macro.name, m_macroContainer);
+        btn->setObjectName(macro.name);
         btn->setProperty("toolbarAction", true);
         btn->setCursor(Qt::PointingHandCursor);
 

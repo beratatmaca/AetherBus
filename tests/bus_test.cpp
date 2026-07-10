@@ -2,8 +2,40 @@
 #include "core/common/format_codec.hpp"
 #include "core/common/stats_calculator.hpp"
 #include "core/serial/serial_types.hpp"
+#include "core/ethernet/ethernet_pcap.hpp"
+
+#include <QDataStream>
+#include <QTemporaryFile>
 
 using namespace aether;
+
+namespace {
+
+/// Build a minimal classic (non-pcapng) pcap byte blob: a 24-byte global
+/// header (magic 0xa1b2c3d4, given @p linkType) followed by one 16-byte
+/// record header + raw bytes per entry in @p frames.
+QByteArray buildClassicPcap(const QVector<QByteArray> &frames, quint32 linkType = 1) {
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setByteOrder(QDataStream::LittleEndian);
+    out << static_cast<quint32>(0xa1b2c3d4);
+    out << static_cast<quint16>(2);
+    out << static_cast<quint16>(4);
+    out << static_cast<qint32>(0);
+    out << static_cast<quint32>(0);
+    out << static_cast<quint32>(65535);
+    out << linkType;
+    for (const QByteArray &frame : frames) {
+        out << static_cast<quint32>(5);       // ts_sec
+        out << static_cast<quint32>(500000);  // ts_usec
+        out << static_cast<quint32>(frame.size());
+        out << static_cast<quint32>(frame.size());
+        out.writeRawData(frame.constData(), static_cast<int>(frame.size()));
+    }
+    return blob;
+}
+
+}  // namespace
 
 void BusTest::initTestCase() {
     // Lifecycle setup if needed
@@ -158,6 +190,73 @@ void BusTest::statsCalculatorBasics() {
     // Rx utilization: 6 / 960 * 100 = 0.625 %
     // Tx utilization: 7 / 960 * 100 = 0.729 %
     QCOMPARE(calc.rxBaudUtilization(), 0.625);
+}
+
+void BusTest::ethernetPcapRoundTrip() {
+    const QByteArray frame1 = QByteArray::fromHex("AABBCCDDEEFF112233445566080045000014");
+    const QByteArray frame2 = QByteArray::fromHex("112233445566AABBCCDDEEFF0806000108000604");
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    file.write(buildClassicPcap({frame1, frame2}));
+    file.close();
+
+    QString error;
+    auto parsed = readEthernetPcap(file.fileName(), &error);
+    QVERIFY2(parsed.has_value(), qPrintable(error));
+    if (!parsed.has_value()) {
+        return;  // explicit guard so static analysis sees the optional is checked
+    }
+    QCOMPARE(parsed->size(), 2);
+
+    QCOMPARE((*parsed)[0].data, frame1);
+    QCOMPARE((*parsed)[0].dir, Direction::Tx);
+    QCOMPARE((*parsed)[0].timestampMs, static_cast<qint64>(5 * 1000 + 500000 / 1000));
+    QCOMPARE((*parsed)[1].data, frame2);
+}
+
+void BusTest::ethernetPcapRejectsBadMagic() {
+    QByteArray blob = buildClassicPcap({QByteArray::fromHex("AABBCCDDEEFF")});
+    blob[0] = static_cast<char>(0x00);  // corrupt the magic number
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    file.write(blob);
+    file.close();
+
+    QString error;
+    auto parsed = readEthernetPcap(file.fileName(), &error);
+    QVERIFY(!parsed.has_value());
+    QVERIFY(!error.isEmpty());
+}
+
+void BusTest::ethernetPcapRejectsWrongLinkType() {
+    QByteArray blob = buildClassicPcap({QByteArray::fromHex("AABBCCDDEEFF")}, /*linkType=*/101);  // LINKTYPE_RAW
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    file.write(blob);
+    file.close();
+
+    QString error;
+    auto parsed = readEthernetPcap(file.fileName(), &error);
+    QVERIFY(!parsed.has_value());
+    QVERIFY(error.contains(QStringLiteral("link type")));
+}
+
+void BusTest::ethernetPcapRejectsTruncatedRecord() {
+    QByteArray blob = buildClassicPcap({QByteArray::fromHex("AABBCCDDEEFF1122334455660800")});
+    blob.chop(4);  // truncate mid-payload; the record header still claims the full length
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    file.write(blob);
+    file.close();
+
+    QString error;
+    auto parsed = readEthernetPcap(file.fileName(), &error);
+    QVERIFY(!parsed.has_value());
+    QVERIFY(error.contains(QStringLiteral("Truncated")));
 }
 
 QTEST_MAIN(BusTest)

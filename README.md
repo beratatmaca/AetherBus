@@ -97,8 +97,19 @@ AetherBus is distributed for Linux through the Snap Store and GitHub Releases.
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/aetherbus)
 
 ```bash
-sudo snap install aetherbus --classic
+sudo snap install aetherbus
 ```
+
+The snap uses **strict confinement** (not `--classic`). A handful of interfaces that grant hardware/network access aren't auto-connected by snapd and need one manual step after install:
+
+```bash
+sudo snap connect aetherbus:serial-port
+sudo snap connect aetherbus:raw-usb
+sudo snap connect aetherbus:network-control
+sudo snap connect aetherbus:network-observe
+```
+
+`network` and `network-bind` (used by the SocketCAN session) auto-connect and need no action.
 
 ### GitHub Releases (Linux, macOS, Windows)
 

@@ -96,6 +96,8 @@ set(AETHER_CORE_SOURCES
     src/core/can/can_backend.hpp
     src/core/can/dbc_parser.cpp
     src/core/can/dbc_parser.hpp
+    src/core/ethernet/ethernet_pcap.cpp
+    src/core/ethernet/ethernet_pcap.hpp
 )
 if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
@@ -222,6 +224,9 @@ if(BUILD_TESTING)
         tests/bus_test_gui.cpp
         tests/bus_test_can.cpp
     )
+    if(PCAP_LIB)
+        target_sources(bus_test PRIVATE tests/bus_test_ethernet.cpp)
+    endif()
     target_link_libraries(bus_test PRIVATE aether_gui Qt6::Widgets Qt6::Core Qt6::Test)
     add_test(NAME bus_test COMMAND bus_test)
 endif()

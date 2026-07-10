@@ -22,7 +22,7 @@ EthernetBackend::~EthernetBackend() {
 bool EthernetBackend::open(const EthernetConfig &config) {
     close();
 
-    char errbuf[PCAP_ERRBUF_SIZE];
+    std::array<char, PCAP_ERRBUF_SIZE> errbuf;
     m_interfaceName = config.interfaceName;
 
     // Open interface in live capture mode
@@ -30,7 +30,7 @@ bool EthernetBackend::open(const EthernetConfig &config) {
                                   65535,  // Snapshot length (capture full packets)
                                   config.promiscuous ? 1 : 0,
                                   100,  // Read timeout in ms
-                                  errbuf);
+                                  errbuf.data());
 
     if (!m_pcapHandle) {
         emit errorOccurred(tr("pcap_open_live failed: %1").arg(QString::fromLocal8Bit(errbuf)));
@@ -138,7 +138,7 @@ bool EthernetBackend::resolveLocalMac(const QString &ifaceName, std::array<unsig
         return false;
     }
 
-    struct ifreq ifr{};
+    struct ifreq ifr {};
     strncpy(ifr.ifr_name, ifaceName.toLocal8Bit().constData(), IFNAMSIZ - 1);
 
     bool ok = ioctl(fd, SIOCGIFHWADDR, &ifr) == 0;
@@ -157,9 +157,9 @@ bool EthernetBackend::resolveLocalMac(const QString &ifaceName, std::array<unsig
 QStringList EthernetBackend::listInterfaces() {
     QStringList names;
     pcap_if_t *alldevs;
-    char errbuf[PCAP_ERRBUF_SIZE];
+    std::array<char, PCAP_ERRBUF_SIZE> errbuf;
 
-    if (pcap_findalldevs(&alldevs, errbuf) == 0) {
+    if (pcap_findalldevs(&alldevs, errbuf.data()) == 0) {
         pcap_if_t *d = alldevs;
         while (d) {
             names.append(QString::fromLocal8Bit(d->name));
