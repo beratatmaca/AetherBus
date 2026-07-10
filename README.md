@@ -6,14 +6,25 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++17](https://img.shields.io/badge/C++-17-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/compiler_support/17)
 [![Qt 6](https://img.shields.io/badge/Qt-6-green.svg?logo=qt)](https://www.qt.io/)
+[![aetherbus](https://snapcraft.io/aetherbus/badge.svg)](https://snapcraft.io/aetherbus)
 
 AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux, macOS, and Windows.
 
 Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID sniffer table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. Think `interceptty` wired to a diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
 
-## Screenshot
+## Previews
 
-![AetherBus connected to the simulator, showing live Rx and Tx serial traffic](assets/aetherbus-main-window.png)
+### Dark Theme
+<p align="center">
+  <img src="assets/serial_session_dark.jpg" alt="Serial Interceptor Dark Theme" width="49%">
+  <img src="assets/socketcan_session_dark.jpg" alt="SocketCAN Analyzer Dark Theme" width="49%">
+</p>
+
+### Light Theme
+<p align="center">
+  <img src="assets/serial_session_light.jpg" alt="Serial Interceptor Light Theme" width="49%">
+  <img src="assets/socketcan_session_light.jpg" alt="SocketCAN Analyzer Light Theme" width="49%">
+</p>
 
 ## How It Works
 
@@ -76,9 +87,7 @@ AetherBus is distributed for Linux through the Snap Store and GitHub Releases.
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/aetherbus)
 
 ```bash
-sudo snap install aetherbus
-sudo snap connect aetherbus:serial-port   # grant access to /dev/tty* devices
-sudo snap connect aetherbus:raw-usb       # grant access to USB-serial adapters
+sudo snap install aetherbus --classic
 ```
 
 ### GitHub Releases (Linux, macOS, Windows)

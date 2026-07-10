@@ -5,18 +5,22 @@ adopt-info: aetherbus
 icon: snap/gui/icon.png
 summary: Transparent serial-port interceptor and SocketCAN bus analyzer
 description: |
-  AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux, built on Qt 6 and C++17.
-
-  It transparently proxies a physical UART through a kernel pseudo-terminal, so an unmodified target application keeps talking to the device while AetherBus captures, decodes, and injects every byte in real time — like interceptty wired to a live diagnostic console. An independent SocketCAN session type adds a candump/cansend-equivalent CAN bus analyzer in its own tab, alongside serial sessions.
+  AetherBus is a lightweight, open-source serial-port interceptor, protocol sniffer, and SocketCAN bus analyzer for Linux. It transparently proxies a physical UART through a kernel pseudo-terminal, allowing unmodified target applications to communicate with the device while AetherBus captures, decodes, and injects bytes in real time. An independent SocketCAN session provides a built-in CAN bus analyzer within a dedicated tab.
 
   Key Features:
-  - **Transparent Interception**: Opens the real device and exposes a virtual port (pseudo-terminal) the target application connects to instead, mirroring all traffic.
-  - **Directional Capture**: A POSIX poll() multiplexing loop tags every chunk as Rx (from the device) or Tx (from the application), timestamped to the millisecond.
-  - **Live Console**: Side-by-side HEX / ASCII / BINARY / DECIMAL views, colour-coded by direction, batch-rendered at 60 Hz for high-baud streams.
-  - **Live Byte Injection**: Send crafted hex byte sequences directly to either the device or the application side of the link.
-  - **SocketCAN Bus Analysis**: A candump/cansend-equivalent CAN session with a live per-ID sniffer table, structured ID/mask filters, CAN-FD, and DBC-driven signal decoding.
+  * Transparent Interception: Opens the real device and exposes a virtual port (pseudo-terminal) for the target application to connect to, mirroring all traffic.
+  * Directional Capture: Multiplexed loop tags each chunk as Rx (device) or Tx (application) with millisecond timestamps.
+  * Live Console: Side-by-side HEX, ASCII, BINARY, and DECIMAL views, color-coded by direction and optimized for high-baud streams.
+  * Live Byte Injection: Inject crafted hex byte sequences directly to either the device or the application side of the link.
+  * SocketCAN Bus Analysis: Includes a live per-ID sniffer table, structured ID/mask filters, CAN-FD, and DBC-driven signal decoding.
 
-  Perfect for: reverse-engineering serial protocols, debugging embedded firmware links, man-in-the-middle diagnostics of UART traffic, and SocketCAN bus analysis.
+  Use Cases:
+  * Reverse-engineering serial protocols
+  * Debugging embedded firmware links
+  * Man-in-the-middle diagnostics of UART traffic
+  * Linux SocketCAN bus analysis and capture
+
+  Note: This snap is built with classic confinement to allow direct access to serial ports and network interfaces (SocketCAN) without requiring manual interface connection commands.
 license: MIT
 contact: https://github.com/beratatmaca/AetherBus/issues
 issues: https://github.com/beratatmaca/AetherBus/issues
@@ -24,7 +28,7 @@ website: https://github.com/beratatmaca/AetherBus
 source-code: https://github.com/beratatmaca/AetherBus
 
 grade: stable
-confinement: strict
+confinement: classic
 
 layout:
   /usr/lib/x86_64-linux-gnu/libproxy:
@@ -43,8 +47,9 @@ apps:
       DISABLE_WAYLAND: "1"
       QT_QPA_PLATFORM: "xcb"
     plugs:
-      # No network interfaces are requested: AetherBus is a local serial tool.
-      # Re-add `network` / `network-bind` only when a network backend ships.
+      # Required for SocketCAN (which uses AF_CAN network sockets)
+      - network
+      - network-bind
       - serial-port
       - raw-usb
 
