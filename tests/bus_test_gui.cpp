@@ -54,6 +54,18 @@ void BusTest::guiConsoleView() {
     QVERIFY(view.toPlainText().contains("58 59 5A  |  XYZ"));
 }
 
+void BusTest::guiConsoleViewEmptyClickDoesNotAssert() {
+    // Regression test: posFromPoint() used to compute qBound(0, x, m_lines.size() - 1)
+    // == qBound(0, x, -1) before checking for the empty-lines case, tripping Qt's
+    // "!(P(max) < P(min))" assertion (aborting the whole app) on any click/drag
+    // over an empty console — e.g. right at startup or right after Clear Log.
+    ConsoleView view;
+    view.resize(200, 200);
+
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(10, 10));
+    // Reaching here without aborting is the test.
+}
+
 void BusTest::guiSearchModes() {
     ConsoleView view;
     view.setNewlineMode(ConsoleView::NewlineMode::PerChunk, 0);
