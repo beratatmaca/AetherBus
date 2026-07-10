@@ -104,13 +104,13 @@ void ConsoleView::highlightSearchText(const QString &text) {
 }
 
 CursorPos ConsoleView::posFromPoint(QPoint pt) const {
-    const int vOff = verticalScrollBar()->value();
-    const int hOff = horizontalScrollBar()->value();
-    const int li = qBound(0, (pt.y() + vOff) / m_lineH, m_lines.size() - 1);
-
     if (m_lines.isEmpty()) {
         return CursorPos{0, 0};
     }
+
+    const int vOff = verticalScrollBar()->value();
+    const int hOff = horizontalScrollBar()->value();
+    const int li = qBound(0, (pt.y() + vOff) / m_lineH, m_lines.size() - 1);
 
     // Compute character offset within the line text.
     const int xInLine = pt.x() + hOff - kLeftPad;
