@@ -226,15 +226,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect();
     QSize preferredSize(1650, 950);
-    int minWidth = 1450;
-    int minHeight = 850;
+    m_baseMinWidth = 1450;
+    m_baseMinHeight = 850;
     if (available.isValid()) {
-        minWidth = qMin(1450, available.width() - 80);
-        minHeight = qMin(850, available.height() - 80);
-        preferredSize.setWidth(qMin(preferredSize.width(), qMax(minWidth, available.width() - 80)));
-        preferredSize.setHeight(qMin(preferredSize.height(), qMax(minHeight, available.height() - 80)));
+        m_baseMinWidth = qMin(1450, available.width() - 80);
+        m_baseMinHeight = qMin(850, available.height() - 80);
+        preferredSize.setWidth(qMin(preferredSize.width(), qMax(m_baseMinWidth, available.width() - 80)));
+        preferredSize.setHeight(qMin(preferredSize.height(), qMax(m_baseMinHeight, available.height() - 80)));
     }
-    setMinimumSize(minWidth, minHeight);
+    setMinimumSize(m_baseMinWidth, m_baseMinHeight);
     const QByteArray savedGeometry = settings.value(QStringLiteral("window/geometry")).toByteArray();
     if (savedGeometry.isEmpty() || !restoreGeometry(savedGeometry)) {
         resize(preferredSize);
@@ -530,13 +530,17 @@ QWidget *MainWindow::wrapForTile(SessionView *session) {
     return container;
 }
 
-QSplitter *MainWindow::buildGridSplitter(const QList<SessionView *> &sessions) {
-    const int n = static_cast<int>(sessions.size());
-
+int MainWindow::gridColumnCount(int n) {
     int cols = 1;
     while (cols * cols < n) {
         ++cols;
     }
+    return cols;
+}
+
+QSplitter *MainWindow::buildGridSplitter(const QList<SessionView *> &sessions) {
+    const int n = static_cast<int>(sessions.size());
+    const int cols = gridColumnCount(n);
 
     const int base = n / cols;
     const int extra = n % cols;
@@ -597,6 +601,44 @@ void MainWindow::tileWorkspace() {
     m_splitter = buildGridSplitter(m_sessions);
     m_stack->addWidget(m_splitter);
     m_stack->setCurrentWidget(m_splitter);
+    updateMinimumSizeForTiling();
+}
+
+void MainWindow::updateMinimumSizeForTiling() {
+    if (!m_tiledMode || m_sessions.isEmpty()) {
+        setMinimumSize(m_baseMinWidth, m_baseMinHeight);
+        return;
+    }
+
+    const int n = static_cast<int>(m_sessions.size());
+    const int cols = gridColumnCount(n);
+    const int rows = (n + cols - 1) / cols;
+
+    // Header row wrapForTile() adds above every tile (title + close button).
+    constexpr int kTileHeaderHeight = 28;
+
+    int tileMinWidth = 0;
+    int tileMinHeight = 0;
+    for (const auto &session : m_sessions) {
+        if (!session) {
+            continue;
+        }
+        const QSize hint = session->minimumSizeHint();
+        tileMinWidth = qMax(tileMinWidth, hint.width());
+        tileMinHeight = qMax(tileMinHeight, hint.height());
+    }
+    tileMinHeight += kTileHeaderHeight;
+
+    int wantWidth = cols * tileMinWidth;
+    int wantHeight = rows * tileMinHeight;
+
+    const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect();
+    if (available.isValid()) {
+        wantWidth = qMin(wantWidth, available.width() - 80);
+        wantHeight = qMin(wantHeight, available.height() - 80);
+    }
+
+    setMinimumSize(qMax(m_baseMinWidth, wantWidth), qMax(m_baseMinHeight, wantHeight));
 }
 
 void MainWindow::resetWorkspaceLayout() {
@@ -623,6 +665,7 @@ void MainWindow::resetWorkspaceLayout() {
     }
 
     m_stack->setCurrentWidget(m_tabWidget);
+    updateMinimumSizeForTiling();
 }
 
 void MainWindow::onTabCloseRequested(int index) {

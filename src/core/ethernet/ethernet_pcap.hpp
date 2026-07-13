@@ -9,10 +9,14 @@
 
 #include "core/serial/serial_types.hpp"
 
+#include <QByteArray>
 #include <QString>
 #include <QVector>
 
+#include <memory>
 #include <optional>
+
+class QFile;
 
 namespace aether {
 
@@ -32,5 +36,47 @@ namespace aether {
  *         link type other than Ethernet).
  */
 std::optional<QVector<CapturedChunk>> readEthernetPcap(const QString &path, QString *error = nullptr);
+
+/**
+ * @brief Incrementally writes a classic LINKTYPE_ETHERNET pcap file.
+ *
+ * Same on-disk layout @ref readEthernetPcap parses back, factored out so both
+ * a one-shot "Save PCAP…" export and a continuously-streaming "Capture"
+ * toggle can share one implementation instead of duplicating the byte layout.
+ * Mirrors the shape of @ref aether::PcapWriter (the serial/CAN capture
+ * writer), but for Ethernet's plain-Ethernet-frame format.
+ */
+class EthernetPcapWriter {
+public:
+    EthernetPcapWriter();
+    ~EthernetPcapWriter();
+
+    EthernetPcapWriter(const EthernetPcapWriter &) = delete;
+    EthernetPcapWriter &operator=(const EthernetPcapWriter &) = delete;
+
+    /**
+     * @brief Open @p path for writing and emit the pcap global header.
+     * @param path  Destination file (truncated if it exists).
+     * @param error Optional out-param populated with a reason on failure.
+     * @return @c true on success.
+     */
+    bool open(const QString &path, QString *error = nullptr);
+
+    /** @brief Close the file if open (no-op otherwise). */
+    void close();
+
+    /** @brief Whether a capture file is currently open. */
+    [[nodiscard]] bool isOpen() const;
+
+    /**
+     * @brief Append one Ethernet frame record.
+     * @param timestampMs Wall-clock capture time (ms since epoch).
+     * @param data        Raw frame bytes.
+     */
+    void writePacket(qint64 timestampMs, const QByteArray &data);
+
+private:
+    std::unique_ptr<QFile> m_file;
+};
 
 }  // namespace aether

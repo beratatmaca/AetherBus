@@ -1,5 +1,6 @@
 #include "gui/sessions/ethernet_session_widget.hpp"
 #include "core/ethernet/ethernet_pcap.hpp"
+#include "core/common/format_codec.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -11,8 +12,6 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QFileDialog>
-#include <QFile>
-#include <QDataStream>
 #include <QFontDatabase>
 #include <QScrollBar>
 #include <QSettings>
@@ -22,26 +21,33 @@
 
 namespace aether {
 
-// Helper to format raw bytes into a nice Wireshark-like hex/ascii dump
-QString formatHexDump(const QByteArray &data) {
+// Helper to format raw bytes into a Wireshark-like dump, with the same
+// HEX/DEC/BIN/ASCII layers the Serial/CAN console toolbar offers (built on
+// the same aether::codec primitives it uses) so columns line up row-to-row
+// even when the last row is short.
+QString formatHexDump(const QByteArray &data, bool showHex, bool showDec, bool showBin, bool showAscii) {
+    static constexpr int kHexColWidth = 16 * 2 + 15;
+    static constexpr int kDecColWidth = 16 * 3 + 15;
+    static constexpr int kBinColWidth = 16 * 8 + 15;
+
     QString html = QStringLiteral("<pre style='font-family: monospace; line-height: 1.2;'>");
     for (int i = 0; i < data.size(); i += 16) {
-        // Offset
+        const QByteArray row = data.mid(i, 16);
         html += QStringLiteral("%1  ").arg(i, 4, 16, QChar('0')).toUpper();
 
-        // Hex bytes
-        QString hexPart;
-        QString asciiPart;
-        for (int j = 0; j < 16; ++j) {
-            if (i + j < data.size()) {
-                auto byte = static_cast<uint8_t>(data[i + j]);
-                hexPart += QStringLiteral("%1 ").arg(byte, 2, 16, QChar('0')).toUpper();
-                asciiPart += (byte >= 32 && byte <= 126) ? static_cast<char>(byte) : '.';
-            } else {
-                hexPart += QStringLiteral("   ");
-            }
+        if (showHex) {
+            html += codec::toHex(row).leftJustified(kHexColWidth) + QStringLiteral("  ");
         }
-        html += hexPart + QStringLiteral("  |  ") + asciiPart.toHtmlEscaped() + QStringLiteral("\n");
+        if (showDec) {
+            html += codec::toDecimal(row).leftJustified(kDecColWidth) + QStringLiteral("  ");
+        }
+        if (showBin) {
+            html += codec::toBinary(row).leftJustified(kBinColWidth) + QStringLiteral("  ");
+        }
+        if (showAscii) {
+            html += QStringLiteral("|  ") + codec::toAscii(row).toHtmlEscaped();
+        }
+        html += QStringLiteral("\n");
     }
     html += QStringLiteral("</pre>");
     return html;
@@ -61,6 +67,10 @@ EthernetSessionWidget::EthernetSessionWidget(QWidget *parent) : SessionView(pare
     m_pcapPlayTimer->setSingleShot(true);
     connect(m_pcapPlayTimer, &QTimer::timeout, this, &EthernetSessionWidget::onReplayTick);
 
+    m_offlineReplayTimer = new QTimer(this);
+    m_offlineReplayTimer->setSingleShot(true);
+    connect(m_offlineReplayTimer, &QTimer::timeout, this, &EthernetSessionWidget::onOfflineReplayTick);
+
     m_statsTimer = new QTimer(this);
     m_statsTimer->setInterval(1000);
     connect(m_statsTimer, &QTimer::timeout, this, [this] { m_stats.rollRates(); });
@@ -72,6 +82,8 @@ EthernetSessionWidget::EthernetSessionWidget(QWidget *parent) : SessionView(pare
 
 EthernetSessionWidget::~EthernetSessionWidget() {
     m_backend->close();
+    m_captureWriter.close();
+    m_offlineReplayTimer->stop();
 }
 
 bool EthernetSessionWidget::isRunning() const {
@@ -86,7 +98,9 @@ void EthernetSessionWidget::buildUi() {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);
 
-    auto *mainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_mainSplitter = new CollapsibleSplitter(Qt::Horizontal, this);
+    m_mainSplitter->setObjectName(QStringLiteral("mainSplitter"));
+    auto *mainSplitter = m_mainSplitter;
 
     // Left Column: Config, Stats, and Constructor stacked vertically
     auto *leftColumn = new QWidget(this);
@@ -140,6 +154,9 @@ void EthernetSessionWidget::buildUi() {
 
     // Right Column container widget
     auto *rightColumn = new QWidget(this);
+    // Keeps the toolbar's button row from wrapping/clipping when this session
+    // is squeezed into a tile in a multi-session tiled grid.
+    rightColumn->setMinimumWidth(420);
     auto *rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(6);
@@ -153,17 +170,80 @@ void EthernetSessionWidget::buildUi() {
     controlsRow->setSpacing(6);
 
     auto *saveBtn = new QPushButton(tr("Save PCAP…"), rightColumn);
+    saveBtn->setObjectName(QStringLiteral("savePcapButton"));
     markToolbarButton(saveBtn, "toolbarAction");
     connect(saveBtn, &QPushButton::clicked, this, &EthernetSessionWidget::onSavePcap);
     controlsRow->addWidget(saveBtn);
 
-    auto *clearBtn = new QPushButton(tr("Clear Log"), rightColumn);
+    auto *clearBtn = new QPushButton(tr("Clear"), rightColumn);
+    clearBtn->setObjectName(QStringLiteral("clearButton"));
     markToolbarButton(clearBtn, "toolbarAction");
     connect(clearBtn, &QPushButton::clicked, this, &EthernetSessionWidget::onClearLog);
     controlsRow->addWidget(clearBtn);
 
+    m_captureBtn = new QPushButton(tr("Capture"), rightColumn);
+    m_captureBtn->setObjectName(QStringLiteral("captureButton"));
+    m_captureBtn->setCheckable(true);
+    markToolbarButton(m_captureBtn, "toolbarToggle");
+    m_captureBtn->setToolTip(tr("Record raw traffic to a pcap file"));
+    connect(m_captureBtn, &QPushButton::clicked, this, &EthernetSessionWidget::toggleFileCapture);
+    controlsRow->addWidget(m_captureBtn);
+
+    m_replayBtn = new QPushButton(tr("Replay"), rightColumn);
+    m_replayBtn->setObjectName(QStringLiteral("replayButton"));
+    m_replayBtn->setCheckable(true);
+    markToolbarButton(m_replayBtn, "toolbarToggle");
+    m_replayBtn->setToolTip(tr("Open and replay a captured pcap file"));
+    connect(m_replayBtn, &QPushButton::clicked, this, &EthernetSessionWidget::toggleOfflineReplay);
+    controlsRow->addWidget(m_replayBtn);
+
+    m_pauseBtn = new QPushButton(tr("Pause"), rightColumn);
+    m_pauseBtn->setObjectName(QStringLiteral("pauseButton"));
+    m_pauseBtn->setCheckable(true);
+    markToolbarButton(m_pauseBtn, "toolbarToggle");
+    m_pauseBtn->setToolTip(tr("Freeze the table; frames keep accumulating and the view catches up on resume"));
+    connect(m_pauseBtn, &QPushButton::toggled, this, [this](bool paused) {
+        if (paused) {
+            return;
+        }
+        const QVector<CapturedChunk> pending = m_pausedChunks;
+        m_pausedChunks.clear();
+        for (const auto &chunk : pending) {
+            appendToPacketList(chunk);
+        }
+    });
+    controlsRow->addWidget(m_pauseBtn);
+
     controlsRow->addStretch(1);
     rightLayout->addLayout(controlsRow);
+
+    // Format-view row for the hex dump pane, mirroring the Serial/CAN console
+    // toolbar's HEX/DEC/BIN/ASCII format toggles (same labels/tooltips).
+    const auto makeFormatToggle = [&](const QString &objectName, const QString &text, const QString &tooltip,
+                                       bool checkedByDefault) {
+        auto *button = new QPushButton(text, rightColumn);
+        button->setObjectName(objectName);
+        button->setCheckable(true);
+        button->setChecked(checkedByDefault);
+        markToolbarButton(button, "toolbarToggle");
+        button->setToolTip(tooltip);
+        connect(button, &QPushButton::toggled, this, &EthernetSessionWidget::renderSelectedHexDump);
+        return button;
+    };
+
+    auto *formatRow = new QHBoxLayout();
+    formatRow->setSpacing(6);
+    formatRow->addWidget(new QLabel(tr("Hex dump:"), rightColumn));
+    m_hexCheck = makeFormatToggle(QStringLiteral("hexCheck"), tr("HEX"), tr("Show hexadecimal bytes"), true);
+    formatRow->addWidget(m_hexCheck);
+    m_decCheck = makeFormatToggle(QStringLiteral("decCheck"), tr("DEC"), tr("Show decimal byte values"), false);
+    formatRow->addWidget(m_decCheck);
+    m_binCheck = makeFormatToggle(QStringLiteral("binCheck"), tr("BIN"), tr("Show binary byte values"), false);
+    formatRow->addWidget(m_binCheck);
+    m_asciiCheck = makeFormatToggle(QStringLiteral("asciiCheck"), tr("ASCII"), tr("Show ASCII gutter"), true);
+    formatRow->addWidget(m_asciiCheck);
+    formatRow->addStretch(1);
+    rightLayout->addLayout(formatRow);
 
     // Right Column Splitter: Wireshark-Style packet list and decoders
     auto *rightSplitter = new QSplitter(Qt::Vertical, rightColumn);
@@ -182,7 +262,8 @@ void EthernetSessionWidget::buildUi() {
     rightSplitter->addWidget(m_packetList);
 
     // Decoders split (Bottom)
-    m_decodersSplitter = new QSplitter(Qt::Vertical, rightSplitter);
+    m_decodersSplitter = new CollapsibleSplitter(Qt::Vertical, rightSplitter);
+    m_decodersSplitter->setObjectName(QStringLiteral("decodersSplitter"));
 
     // Packet Details Tree (Bottom Left)
     m_detailTree = new QTreeWidget(m_decodersSplitter);
@@ -196,6 +277,7 @@ void EthernetSessionWidget::buildUi() {
     hexFont.setPointSize(10);
     m_hexDump->setFont(hexFont);
     m_decodersSplitter->addWidget(m_hexDump);
+    m_decodersSplitter->setPaneCollapsible(0);
 
     rightSplitter->addWidget(m_decodersSplitter);
     rightSplitter->setStretchFactor(0, 2);
@@ -214,6 +296,7 @@ void EthernetSessionWidget::buildUi() {
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
     mainSplitter->setSizes({340, 1100});
+    m_mainSplitter->setPaneCollapsible(0);
 
     outer->addWidget(mainSplitter);
 }
@@ -221,6 +304,11 @@ void EthernetSessionWidget::buildUi() {
 void EthernetSessionWidget::startCapture() {
     if (m_backend->isRunning()) {
         stopCapture();
+        return;
+    }
+
+    if (m_offlineReplayTimer->isActive() || !m_offlineReplayChunks.isEmpty()) {
+        emit statusMessage(tr("Stop the offline replay before starting a live capture."), true);
         return;
     }
 
@@ -256,6 +344,8 @@ void EthernetSessionWidget::rescanInterfaces() {
 void EthernetSessionWidget::saveSettings(QSettings &settings) const {
     settings.setValue(QStringLiteral("interface"), m_interfaceBox->currentText());
     settings.setValue(QStringLiteral("bpfFilter"), m_filterEdit->text());
+    settings.setValue(QStringLiteral("layout/mainSplitterState"), m_mainSplitter->saveState());
+    settings.setValue(QStringLiteral("layout/decodersSplitterState"), m_decodersSplitter->saveState());
 }
 
 void EthernetSessionWidget::loadSettings(const QSettings &settings) {
@@ -267,6 +357,8 @@ void EthernetSessionWidget::loadSettings(const QSettings &settings) {
         m_interfaceBox->setCurrentText(iface);
     }
     m_filterEdit->setText(settings.value(QStringLiteral("bpfFilter")).toString());
+    m_mainSplitter->restoreState(settings.value(QStringLiteral("layout/mainSplitterState")).toByteArray());
+    m_decodersSplitter->restoreState(settings.value(QStringLiteral("layout/decodersSplitterState")).toByteArray());
 }
 
 void EthernetSessionWidget::onStarted(const QString &info) {
@@ -305,8 +397,25 @@ void EthernetSessionWidget::onThrottleTimeout() {
 }
 
 void EthernetSessionWidget::processCapturedPacket(const aether::CapturedChunk &chunk) {
+    // Counted (and captured-to-disk) immediately even while paused, matching
+    // ConsoleView::setPaused's "counted but not rendered until resumed"
+    // semantics — Pause only freezes the visible list, not the stats or the
+    // continuous file capture below.
     m_stats.addChunk(chunk);
 
+    if (m_captureWriter.isOpen()) {
+        m_captureWriter.writePacket(chunk.timestampMs, chunk.data);
+    }
+
+    if (m_pauseBtn->isChecked()) {
+        m_pausedChunks.append(chunk);
+        return;
+    }
+
+    appendToPacketList(chunk);
+}
+
+void EthernetSessionWidget::appendToPacketList(const aether::CapturedChunk &chunk) {
     QScrollBar *vbar = m_packetList->verticalScrollBar();
     const bool wasAtBottom = vbar->value() == vbar->maximum();
 
@@ -335,8 +444,17 @@ void EthernetSessionWidget::onPacketSelected(const QModelIndex &current, const Q
     parsePacket(data, root);
     m_detailTree->expandAll();
 
-    // Render hex dump
-    m_hexDump->setHtml(formatHexDump(data));
+    renderSelectedHexDump();
+}
+
+void EthernetSessionWidget::renderSelectedHexDump() {
+    const QModelIndex current = m_packetList->selectionModel()->currentIndex();
+    if (!current.isValid() || current.row() < 0 || current.row() >= m_packetModel->packetCount())
+        return;
+
+    const QByteArray &data = m_packetModel->chunkAt(current.row()).data;
+    m_hexDump->setHtml(
+        formatHexDump(data, m_hexCheck->isChecked(), m_decCheck->isChecked(), m_binCheck->isChecked(), m_asciiCheck->isChecked()));
 }
 
 void EthernetSessionWidget::parsePacket(const QByteArray &data, QTreeWidgetItem *root) {
@@ -469,6 +587,104 @@ void EthernetSessionWidget::onClearLog() {
     m_stats.reset();
 }
 
+void EthernetSessionWidget::toggleFileCapture() {
+    if (m_captureWriter.isOpen()) {
+        m_captureWriter.close();
+        m_captureBtn->setChecked(false);
+        emit statusMessage(tr("Capture stopped."), false);
+        return;
+    }
+
+    const QString path = QFileDialog::getSaveFileName(this, tr("Capture traffic to pcap"),
+                                                       QStringLiteral("aetherbus_ethernet_capture.pcap"),
+                                                       QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    if (path.isEmpty()) {
+        m_captureBtn->setChecked(false);
+        return;
+    }
+
+    QString error;
+    if (!m_captureWriter.open(path, &error)) {
+        m_captureBtn->setChecked(false);
+        emit statusMessage(tr("Could not open capture file: %1").arg(error), true);
+        return;
+    }
+
+    m_captureBtn->setChecked(true);
+    emit statusMessage(tr("Capturing to %1").arg(path), false);
+}
+
+void EthernetSessionWidget::toggleOfflineReplay() {
+    if (m_offlineReplayTimer->isActive() || !m_offlineReplayChunks.isEmpty()) {
+        m_offlineReplayTimer->stop();
+        m_offlineReplayChunks.clear();
+        m_offlineReplayIndex = 0;
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Replay stopped."), false);
+        return;
+    }
+
+    // Offline analysis only; refuse while a live capture owns the packet list.
+    if (m_backend->isRunning()) {
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Stop the live capture before replaying a capture file."), true);
+        return;
+    }
+
+    const QString path = QFileDialog::getOpenFileName(this, tr("Open capture file for replay"), QString(),
+                                                       QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    if (path.isEmpty()) {
+        m_replayBtn->setChecked(false);
+        return;
+    }
+
+    QString error;
+    auto parsed = readEthernetPcap(path, &error);
+    if (!parsed) {
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Could not open capture: %1").arg(error), true);
+        return;
+    }
+
+    onClearLog();
+    m_offlineReplayChunks = *parsed;
+    m_offlineReplayIndex = 0;
+    if (m_offlineReplayChunks.isEmpty()) {
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Capture file has no packets."), false);
+        return;
+    }
+
+    m_replayBtn->setChecked(true);
+    emit statusMessage(tr("Replaying %1 (%2 packets)…").arg(path).arg(m_offlineReplayChunks.size()), false);
+    onOfflineReplayTick();
+}
+
+void EthernetSessionWidget::onOfflineReplayTick() {
+    if (m_offlineReplayIndex >= m_offlineReplayChunks.size()) {
+        m_offlineReplayChunks.clear();
+        m_offlineReplayIndex = 0;
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Replay finished."), false);
+        return;
+    }
+
+    const CapturedChunk chunk = m_offlineReplayChunks[m_offlineReplayIndex];
+    processCapturedPacket(chunk);
+    ++m_offlineReplayIndex;
+
+    if (m_offlineReplayIndex < m_offlineReplayChunks.size()) {
+        qint64 gap = m_offlineReplayChunks[m_offlineReplayIndex].timestampMs - chunk.timestampMs;
+        gap = qBound<qint64>(0, gap, static_cast<qint64>(kMaxReplayGapMs));
+        m_offlineReplayTimer->start(static_cast<int>(gap));
+    } else {
+        m_offlineReplayChunks.clear();
+        m_offlineReplayIndex = 0;
+        m_replayBtn->setChecked(false);
+        emit statusMessage(tr("Replay finished."), false);
+    }
+}
+
 void EthernetSessionWidget::onSavePcap() {
     if (m_packetModel->packetCount() == 0) {
         QMessageBox::information(this, tr("Save PCAP"), tr("No packets captured to save."));
@@ -480,42 +696,20 @@ void EthernetSessionWidget::onSavePcap() {
     if (path.isEmpty())
         return;
 
-    QFile file(path);
-    if (!file.open(QFile::WriteOnly)) {
-        QMessageBox::critical(this, tr("Save PCAP"), tr("Could not open file %1 for writing.").arg(path));
+    QString error;
+    EthernetPcapWriter writer;
+    if (!writer.open(path, &error)) {
+        QMessageBox::critical(this, tr("Save PCAP"), tr("Could not open file %1 for writing: %2").arg(path, error));
         return;
     }
 
-    // Write standard PCAP global header (24 bytes)
-    QDataStream out(&file);
-    out.setByteOrder(QDataStream::LittleEndian);
-
-    out << static_cast<quint32>(0xa1b2c3d4);  // Magic number
-    out << static_cast<quint16>(2);           // Version major
-    out << static_cast<quint16>(4);           // Version minor
-    out << static_cast<qint32>(0);            // GMT to local correction
-    out << static_cast<quint32>(0);           // Accuracy of timestamps
-    out << static_cast<quint32>(65535);       // Max length of captured packets
-    out << static_cast<quint32>(1);           // Data link type (LINKTYPE_ETHERNET = 1)
-
-    // Write packets
     const int packetCount = m_packetModel->packetCount();
     for (int i = 0; i < packetCount; ++i) {
         const CapturedChunk &chunk = m_packetModel->chunkAt(i);
-
-        auto sec = static_cast<quint32>(chunk.timestampMs / 1000);
-        auto usec = static_cast<quint32>((chunk.timestampMs % 1000) * 1000);
-        auto len = static_cast<quint32>(chunk.data.size());
-
-        out << sec;
-        out << usec;
-        out << len;  // Saved size
-        out << len;  // Original size
-
-        file.write(chunk.data);
+        writer.writePacket(chunk.timestampMs, chunk.data);
     }
+    writer.close();
 
-    file.close();
     QMessageBox::information(this, tr("Save PCAP"), tr("Successfully saved %1 packets to %2.").arg(packetCount).arg(path));
 }
 

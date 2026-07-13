@@ -62,6 +62,18 @@ private:
     /// (cols = ceil(sqrt(n)), extra rows assigned to the first columns).
     QSplitter *buildGridSplitter(const QList<SessionView *> &sessions);
 
+    /// Number of grid columns for @p n tiles (ceil(sqrt(n))), shared by
+    /// @ref buildGridSplitter and @ref updateMinimumSizeForTiling so the two
+    /// never drift apart.
+    static int gridColumnCount(int n);
+
+    /// Re-derive the window's enforced minimum size from the current tiling
+    /// state: the fixed startup minimum while tabbed/untiled, or enough room
+    /// for every tile's own @c minimumSizeHint() arranged in the current
+    /// grid while tiled — so a window that isn't fullscreen never squeezes
+    /// tile content below what it actually needs.
+    void updateMinimumSizeForTiling();
+
     /// Wrap a session in a thin header (title + close button) for tiled mode,
     /// where there's no tab bar to provide a close affordance otherwise.
     QWidget *wrapForTile(SessionView *session);
@@ -82,6 +94,8 @@ private:
     QPointer<QSplitter> m_splitter;
     QList<SessionView *> m_sessions;
     bool m_tiledMode = false;
+    int m_baseMinWidth = 0;
+    int m_baseMinHeight = 0;
 
     ThemeController *m_theme = nullptr;
     QLabel *m_statusLabel = nullptr;

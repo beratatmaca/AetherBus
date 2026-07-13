@@ -20,8 +20,10 @@ private slots:
 #endif
     void mainWindowWorkspacePersistenceRoundTrip();
     void mainWindowTileGridShape();
+    void mainWindowTiledMinimumSizeScales();
     void mainWindowTileCloseButtonWorks();
     void mainWindowSessionCloseDestroysWidget();
+    void collapsibleSplitterTogglesPane();
     void welcomeTutorialDontShowPersistsOnToggle();
     void themeControllerStylesheetParses();
 
@@ -74,6 +76,7 @@ private slots:
     void ethernetPcapRejectsBadMagic();
     void ethernetPcapRejectsWrongLinkType();
     void ethernetPcapRejectsTruncatedRecord();
+    void ethernetPcapWriterRoundTrip();
 
 #ifdef AETHER_HAVE_ETHERNET
     // Ethernet Tests (backend + GUI; only built where libpcap is available)

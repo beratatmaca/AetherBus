@@ -188,6 +188,8 @@ add_library(aether_gui STATIC
     src/gui/widgets/statspanel.hpp
     src/gui/widgets/can_sniffer_widget.cpp
     src/gui/widgets/can_sniffer_widget.hpp
+    src/gui/widgets/collapsible_splitter.cpp
+    src/gui/widgets/collapsible_splitter.hpp
     src/gui/resources.qrc
 )
 if(PCAP_INCLUDE_DIR AND PCAP_LIB)

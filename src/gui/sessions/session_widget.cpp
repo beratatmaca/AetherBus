@@ -7,6 +7,7 @@
 #include "gui/widgets/console_panel.hpp"
 #include "gui/widgets/macrobar.hpp"
 #include "gui/widgets/statspanel.hpp"
+#include "gui/widgets/collapsible_splitter.hpp"
 #include "gui/panels/config_panel.hpp"
 #include "gui/panels/signal_panel.hpp"
 #include "gui/panels/injection_panel.hpp"
@@ -147,17 +148,21 @@ void SessionWidget::stopSession() {
 
 void SessionWidget::saveSettings(QSettings &settings) const {
     m_configPanel->saveSettings(settings);
+    settings.setValue(QStringLiteral("layout/mainSplitterState"), m_mainSplitter->saveState());
 }
 
 void SessionWidget::loadSettings(const QSettings &settings) {
     m_configPanel->loadSettings(settings);
+    m_mainSplitter->restoreState(settings.value(QStringLiteral("layout/mainSplitterState")).toByteArray());
 }
 
 void SessionWidget::buildUi() {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);
 
-    auto *mainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_mainSplitter = new CollapsibleSplitter(Qt::Horizontal, this);
+    m_mainSplitter->setObjectName(QStringLiteral("mainSplitter"));
+    auto *mainSplitter = m_mainSplitter;
 
     // Left column: config, signal lines and stats stacked tightly in a plain
     // layout (no inner splitter), so the panels stay compact at the top rather
@@ -184,6 +189,7 @@ void SessionWidget::buildUi() {
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
     mainSplitter->setSizes({340, 1100});
+    m_mainSplitter->setPaneCollapsible(0);
 
     outer->addWidget(mainSplitter);
 }
@@ -208,6 +214,9 @@ void SessionWidget::stopInterception() {
 
 QWidget *SessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
+    // Keeps the toolbar's button row from wrapping/clipping when this session
+    // is squeezed into a tile in a multi-session tiled grid.
+    panel->setMinimumWidth(420);
     auto *layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);

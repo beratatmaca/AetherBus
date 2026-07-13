@@ -1,6 +1,7 @@
 #include "bus_test.hpp"
 #include "gui/widgets/consoleview.hpp"
 #include "gui/widgets/macrobar.hpp"
+#include "gui/widgets/collapsible_splitter.hpp"
 #include "gui/common/theme_controller.hpp"
 #include "gui/mainwindow.hpp"
 #include "gui/panels/config_panel.hpp"
@@ -13,6 +14,8 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QPushButton>
 #include <QSettings>
 #include <QSplitter>
@@ -352,6 +355,61 @@ void BusTest::mainWindowTileGridShape() {
     }
 }
 
+void BusTest::mainWindowTiledMinimumSizeScales() {
+    // Regression guard: the tiled workspace used to enforce one fixed
+    // minimum window size regardless of how many sessions were tiled, so a
+    // non-fullscreen window could squeeze several tiles below what their own
+    // content actually needs. The minimum should now be derived from the
+    // tile grid and each session's own minimumSizeHint(), and relax back
+    // down once untiled.
+    //
+    // This mirrors MainWindow::updateMinimumSizeForTiling()'s formula
+    // exactly (rather than just asserting the size "grew") because the
+    // offscreen test platform's virtual screen is tiny (800x800 — smaller
+    // than even the base minimum), so everything clamps down to fit it
+    // regardless of tile count; a raw growth comparison isn't reliably
+    // observable in this harness, but the formula's correctness is.
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
+    MainWindow w;  // starts with exactly 1 default Serial session
+    const QSize baseMin = w.minimumSize();
+
+    QMetaObject::invokeMethod(&w, "addNewCanSession");
+    QMetaObject::invokeMethod(&w, "addNewSession");
+    QMetaObject::invokeMethod(&w, "addNewCanSession");
+    const auto sessions = w.findChildren<SessionView *>();
+    const int n = static_cast<int>(sessions.count());
+    QCOMPARE(n, 4);
+    QMetaObject::invokeMethod(&w, "tileWorkspace");
+
+    int cols = 1;
+    while (cols * cols < n) {
+        ++cols;
+    }
+    const int rows = (n + cols - 1) / cols;
+    int tileMinWidth = 0;
+    int tileMinHeight = 0;
+    for (SessionView *session : sessions) {
+        const QSize hint = session->minimumSizeHint();
+        tileMinWidth = qMax(tileMinWidth, hint.width());
+        tileMinHeight = qMax(tileMinHeight, hint.height());
+    }
+    tileMinHeight += 28;  // wrapForTile()'s header row (title + close button)
+
+    int wantWidth = cols * tileMinWidth;
+    int wantHeight = rows * tileMinHeight;
+    const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect();
+    if (available.isValid()) {
+        wantWidth = qMin(wantWidth, available.width() - 80);
+        wantHeight = qMin(wantHeight, available.height() - 80);
+    }
+    const QSize expected(qMax(baseMin.width(), wantWidth), qMax(baseMin.height(), wantHeight));
+
+    QCOMPARE(w.minimumSize(), expected);
+
+    QMetaObject::invokeMethod(&w, "resetWorkspaceLayout");
+    QCOMPARE(w.minimumSize(), baseMin);
+}
+
 void BusTest::mainWindowSessionCloseDestroysWidget() {
     // Regression test: session widgets never had Qt::WA_DeleteOnClose set, so
     // close() (from the tab 'X' or Ctrl+W) only ever hid them — nothing was
@@ -385,4 +443,41 @@ void BusTest::mainWindowTileCloseButtonWorks() {
     QTest::qWait(10);  // let the scheduled deleteLater() actually run
 
     QCOMPARE(w.findChildren<SessionView *>().count(), 1);
+}
+
+void BusTest::collapsibleSplitterTogglesPane() {
+    // Regression/behavior guard: a plain click (not a drag) on a collapsible
+    // handle should toggle its neighboring pane between 0 and its last
+    // on-screen size, without disturbing normal drag-to-resize elsewhere.
+    CollapsibleSplitter splitter(Qt::Horizontal);
+    auto *left = new QWidget(&splitter);
+    auto *right = new QWidget(&splitter);
+    splitter.addWidget(left);
+    splitter.addWidget(right);
+    splitter.resize(400, 300);
+    splitter.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&splitter));
+    splitter.setSizes({150, 250});
+    splitter.setPaneCollapsible(0);
+
+    // Qt normalizes requested sizes against the handle's own width, so it
+    // won't necessarily settle on exactly {150, 250} — capture whatever it
+    // actually produced and assert the round-trip reproduces *that*, rather
+    // than asserting an exact literal that depends on this platform's handle
+    // width.
+    const int expandedWidth = splitter.sizes()[0];
+    QVERIFY(expandedWidth > 0);
+    QVERIFY(!splitter.isPaneCollapsed(0));
+
+    QSplitterHandle *handle = splitter.handle(1);
+    QVERIFY(handle != nullptr);
+    const QPoint center(handle->width() / 2, handle->height() / 2);
+
+    QTest::mouseClick(handle, Qt::LeftButton, Qt::NoModifier, center);
+    QVERIFY(splitter.isPaneCollapsed(0));
+    QCOMPARE(splitter.sizes()[0], 0);
+
+    QTest::mouseClick(handle, Qt::LeftButton, Qt::NoModifier, center);
+    QVERIFY(!splitter.isPaneCollapsed(0));
+    QCOMPARE(splitter.sizes()[0], expandedWidth);
 }

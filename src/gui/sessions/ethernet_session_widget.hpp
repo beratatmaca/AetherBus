@@ -2,11 +2,13 @@
 
 #include "core/ethernet/ethernet_backend.hpp"
 #include "core/ethernet/ethernet_types.hpp"
+#include "core/ethernet/ethernet_pcap.hpp"
 #include "core/common/stats_calculator.hpp"
 #include "gui/widgets/statspanel.hpp"
 #include "gui/sessions/session_view.hpp"
 #include "gui/sessions/ethernet_packet_model.hpp"
 #include "gui/panels/packet_constructor_panel.hpp"
+#include "gui/widgets/collapsible_splitter.hpp"
 
 #include <QWidget>
 #include <QTableView>
@@ -56,10 +58,20 @@ private slots:
     void onSavePcap();
     void onClearLog();
 
+    // Continuous save-to-disk, independent of the in-memory packet list.
+    void toggleFileCapture();
+
+    // Offline load-and-browse of a saved pcap file (distinct from "Play
+    // PCAP…", which injects frames onto the wire).
+    void toggleOfflineReplay();
+    void onOfflineReplayTick();
+
 private:
     void buildUi();
     void processCapturedPacket(const aether::CapturedChunk &chunk);
+    void appendToPacketList(const aether::CapturedChunk &chunk);
     void parsePacket(const QByteArray &data, QTreeWidgetItem *root);
+    void renderSelectedHexDump();
 
     EthernetBackend *m_backend = nullptr;
     PacketConstructorPanel *m_constructor = nullptr;
@@ -74,7 +86,23 @@ private:
     EthernetPacketModel *m_packetModel = nullptr;
     QTreeWidget *m_detailTree = nullptr;
     QTextEdit *m_hexDump = nullptr;
-    QSplitter *m_decodersSplitter = nullptr;
+    CollapsibleSplitter *m_decodersSplitter = nullptr;
+
+    // Toolbar controls shared in spirit with the Serial/CAN console toolbar.
+    QPushButton *m_pauseBtn = nullptr;
+    QPushButton *m_captureBtn = nullptr;
+    QPushButton *m_replayBtn = nullptr;
+    QPushButton *m_hexCheck = nullptr;
+    QPushButton *m_decCheck = nullptr;
+    QPushButton *m_binCheck = nullptr;
+    QPushButton *m_asciiCheck = nullptr;
+
+    // Packets received while paused; flushed into the model on resume.
+    QVector<CapturedChunk> m_pausedChunks;
+
+    // Continuous "Capture" toggle: streams every packet to disk as it
+    // arrives, independent of the in-memory model's 10,000-row cap.
+    EthernetPcapWriter m_captureWriter;
 
     QTimer *m_pcapPlayTimer = nullptr;
     QTimer *m_throttleTimer = nullptr;
@@ -85,8 +113,15 @@ private:
     int m_replayIndex = 0;
     static constexpr int kMaxReplayGapMs = 2000;
 
+    // Offline "Replay" (view-only, distinct from the on-wire replay above).
+    QTimer *m_offlineReplayTimer = nullptr;
+    QVector<CapturedChunk> m_offlineReplayChunks;
+    int m_offlineReplayIndex = 0;
+
     StatsCalculator m_stats;
     StatsPanel *m_statsPanel = nullptr;
+
+    CollapsibleSplitter *m_mainSplitter = nullptr;
 };
 
 } // namespace aether

@@ -8,6 +8,7 @@
 #include "gui/widgets/can_sniffer_widget.hpp"
 #include "gui/panels/can_decoder_panel.hpp"
 #include "gui/widgets/statspanel.hpp"
+#include "gui/widgets/collapsible_splitter.hpp"
 #include "core/common/capture_replay.hpp"
 
 #include <QTabWidget>
@@ -98,17 +99,21 @@ void CanSessionWidget::stopSession() {
 
 void CanSessionWidget::saveSettings(QSettings &settings) const {
     m_configPanel->saveSettings(settings);
+    settings.setValue(QStringLiteral("layout/mainSplitterState"), m_mainSplitter->saveState());
 }
 
 void CanSessionWidget::loadSettings(const QSettings &settings) {
     m_configPanel->loadSettings(settings);
+    m_mainSplitter->restoreState(settings.value(QStringLiteral("layout/mainSplitterState")).toByteArray());
 }
 
 void CanSessionWidget::buildUi() {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);
 
-    auto *mainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_mainSplitter = new CollapsibleSplitter(Qt::Horizontal, this);
+    m_mainSplitter->setObjectName(QStringLiteral("mainSplitter"));
+    auto *mainSplitter = m_mainSplitter;
 
     auto *leftColumn = new QWidget(mainSplitter);
     leftColumn->setMinimumWidth(320);
@@ -135,12 +140,17 @@ void CanSessionWidget::buildUi() {
     mainSplitter->setStretchFactor(1, 1);
     mainSplitter->setStretchFactor(2, 0);
     mainSplitter->setSizes({340, 760, 340});
+    m_mainSplitter->setPaneCollapsible(0);
+    m_mainSplitter->setPaneCollapsible(2);
 
     outer->addWidget(mainSplitter);
 }
 
 QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     auto *panel = new QWidget(parent);
+    // Keeps the transmit bar and toolbar from wrapping/clipping when this
+    // session is squeezed into a tile in a multi-session tiled grid.
+    panel->setMinimumWidth(420);
     auto *layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);

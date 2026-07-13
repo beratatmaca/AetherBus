@@ -1,5 +1,6 @@
 #include "core/ethernet/ethernet_pcap.hpp"
 
+#include <QDataStream>
 #include <QFile>
 
 namespace aether {
@@ -64,6 +65,65 @@ std::optional<QVector<CapturedChunk>> readEthernetPcap(const QString &path, QStr
         pos += static_cast<int>(inclLen);
     }
     return chunks;
+}
+
+EthernetPcapWriter::EthernetPcapWriter() = default;
+
+EthernetPcapWriter::~EthernetPcapWriter() {
+    close();
+}
+
+bool EthernetPcapWriter::open(const QString &path, QString *error) {
+    close();
+
+    auto file = std::make_unique<QFile>(path);
+    if (!file->open(QFile::WriteOnly)) {
+        if (error) {
+            *error = file->errorString();
+        }
+        return false;
+    }
+
+    QDataStream out(file.get());
+    out.setByteOrder(QDataStream::LittleEndian);
+    out << kPcapMagic;
+    out << static_cast<quint16>(2);      // version major
+    out << static_cast<quint16>(4);      // version minor
+    out << static_cast<qint32>(0);       // GMT to local correction
+    out << static_cast<quint32>(0);      // accuracy of timestamps
+    out << static_cast<quint32>(65535);  // max length of captured packets
+    out << kPcapLinkTypeEthernet;
+
+    m_file = std::move(file);
+    return true;
+}
+
+void EthernetPcapWriter::close() {
+    if (m_file) {
+        m_file->close();
+        m_file.reset();
+    }
+}
+
+bool EthernetPcapWriter::isOpen() const {
+    return m_file != nullptr;
+}
+
+void EthernetPcapWriter::writePacket(qint64 timestampMs, const QByteArray &data) {
+    if (!m_file) {
+        return;
+    }
+
+    QDataStream out(m_file.get());
+    out.setByteOrder(QDataStream::LittleEndian);
+    const auto sec = static_cast<quint32>(timestampMs / 1000);
+    const auto usec = static_cast<quint32>((timestampMs % 1000) * 1000);
+    const auto len = static_cast<quint32>(data.size());
+    out << sec;
+    out << usec;
+    out << len;  // saved size
+    out << len;  // original size
+    m_file->write(data);
 }
 
 }  // namespace aether

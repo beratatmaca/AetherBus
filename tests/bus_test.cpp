@@ -279,4 +279,36 @@ void BusTest::ethernetPcapRejectsTruncatedRecord() {
     QVERIFY(error.contains(QStringLiteral("Truncated")));
 }
 
+void BusTest::ethernetPcapWriterRoundTrip() {
+    const QByteArray frame1 = QByteArray::fromHex("AABBCCDDEEFF112233445566080045000014");
+    const QByteArray frame2 = QByteArray::fromHex("112233445566AABBCCDDEEFF0806000108000604");
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    const QString path = file.fileName();
+    file.close();
+
+    EthernetPcapWriter writer;
+    QVERIFY(!writer.isOpen());
+    QString error;
+    QVERIFY2(writer.open(path, &error), qPrintable(error));
+    QVERIFY(writer.isOpen());
+
+    writer.writePacket(5500, frame1);
+    writer.writePacket(6000, frame2);
+    writer.close();
+    QVERIFY(!writer.isOpen());
+
+    auto parsed = readEthernetPcap(path, &error);
+    QVERIFY2(parsed.has_value(), qPrintable(error));
+    if (!parsed.has_value()) {
+        return;  // explicit guard so static analysis sees the optional is checked
+    }
+    QCOMPARE(parsed->size(), 2);
+    QCOMPARE((*parsed)[0].data, frame1);
+    QCOMPARE((*parsed)[0].timestampMs, static_cast<qint64>(5500));
+    QCOMPARE((*parsed)[1].data, frame2);
+    QCOMPARE((*parsed)[1].timestampMs, static_cast<qint64>(6000));
+}
+
 QTEST_MAIN(BusTest)

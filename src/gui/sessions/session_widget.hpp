@@ -23,6 +23,7 @@ class CaptureReplayer;
 class ConfigPanel;
 class SignalPanel;
 class InjectionPanel;
+class CollapsibleSplitter;
 
 class SessionWidget : public SessionView {
     Q_OBJECT
@@ -87,6 +88,8 @@ private:
     StatsCalculator m_stats;
     QTimer *m_statsTimer = nullptr;
     StatsPanel *m_statsPanel = nullptr;
+
+    CollapsibleSplitter *m_mainSplitter = nullptr;
 };
 
 }  // namespace aether
