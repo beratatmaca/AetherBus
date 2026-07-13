@@ -3,13 +3,144 @@
 #include "gui/widgets/macrobar.hpp"
 #include "gui/common/theme_controller.hpp"
 #include "gui/mainwindow.hpp"
+#include "gui/panels/config_panel.hpp"
+#include "gui/panels/can_config_panel.hpp"
+#include "gui/dialogs/welcome_tutorial_dialog.hpp"
+#include "gui/sessions/session_view.hpp"
 #include <QSignalSpy>
 
+#include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDockWidget>
+#include <QPushButton>
+#include <QSettings>
+#include <QSplitter>
 #include <QtTest/QtTest>
 
 using namespace aether;
+
+namespace {
+bool g_stylesheetParseWarningSeen = false;
+
+void stylesheetWarningCatcher(QtMsgType type, const QMessageLogContext &, const QString &msg) {
+    if (type == QtWarningMsg && msg.contains(QStringLiteral("Could not parse application stylesheet"))) {
+        g_stylesheetParseWarningSeen = true;
+    }
+}
+}  // namespace
+
+void BusTest::serialConfigSettingsRoundTrip() {
+    QSettings in;
+    in.beginGroup(QStringLiteral("test_serial_in"));
+    in.setValue(QStringLiteral("device"), QStringLiteral("/dev/ttyTEST0"));
+    in.setValue(QStringLiteral("baud"), 57600);
+    in.setValue(QStringLiteral("dataBits"), 7);
+    in.setValue(QStringLiteral("parity"), 1);  // Parity::Even
+    in.setValue(QStringLiteral("stopBits"), 2);
+    in.setValue(QStringLiteral("flow"), 1);  // FlowControl::RtsCts
+    in.setValue(QStringLiteral("symlink"), QStringLiteral("/tmp/aether_test_symlink"));
+    in.setValue(QStringLiteral("directMode"), false);
+    in.endGroup();
+
+    ConfigPanel panel;
+    in.beginGroup(QStringLiteral("test_serial_in"));
+    panel.loadSettings(in);
+    in.endGroup();
+
+    QSettings out;
+    out.beginGroup(QStringLiteral("test_serial_out"));
+    panel.saveSettings(out);
+    out.endGroup();
+
+    out.beginGroup(QStringLiteral("test_serial_out"));
+    QCOMPARE(out.value(QStringLiteral("device")).toString(), QStringLiteral("/dev/ttyTEST0"));
+    QCOMPARE(out.value(QStringLiteral("baud")).toInt(), 57600);
+    QCOMPARE(out.value(QStringLiteral("dataBits")).toInt(), 7);
+    QCOMPARE(out.value(QStringLiteral("parity")).toInt(), 1);
+    QCOMPARE(out.value(QStringLiteral("stopBits")).toInt(), 2);
+    QCOMPARE(out.value(QStringLiteral("flow")).toInt(), 1);
+    QCOMPARE(out.value(QStringLiteral("symlink")).toString(), QStringLiteral("/tmp/aether_test_symlink"));
+    QCOMPARE(out.value(QStringLiteral("directMode")).toBool(), false);
+    out.endGroup();
+}
+
+void BusTest::canConfigSettingsRoundTrip() {
+    // Regression test: fdMode/loopback/receiveOwn/errorFrames used to be
+    // dropped entirely — only iface/filters were ever persisted.
+    QSettings in;
+    in.beginGroup(QStringLiteral("test_can_in"));
+    in.setValue(QStringLiteral("iface"), QStringLiteral("vcan7"));
+    in.setValue(QStringLiteral("fdMode"), false);
+    in.setValue(QStringLiteral("loopback"), false);
+    in.setValue(QStringLiteral("receiveOwn"), true);
+    in.setValue(QStringLiteral("errorFrames"), false);
+    in.setValue(QStringLiteral("filters"), QString());
+    in.endGroup();
+
+    CanConfigPanel panel;
+    in.beginGroup(QStringLiteral("test_can_in"));
+    panel.loadSettings(in);
+    in.endGroup();
+
+    QSettings out;
+    out.beginGroup(QStringLiteral("test_can_out"));
+    panel.saveSettings(out);
+    out.endGroup();
+
+    out.beginGroup(QStringLiteral("test_can_out"));
+    QCOMPARE(out.value(QStringLiteral("iface")).toString(), QStringLiteral("vcan7"));
+    QCOMPARE(out.value(QStringLiteral("fdMode")).toBool(), false);
+    QCOMPARE(out.value(QStringLiteral("loopback")).toBool(), false);
+    QCOMPARE(out.value(QStringLiteral("receiveOwn")).toBool(), true);
+    QCOMPARE(out.value(QStringLiteral("errorFrames")).toBool(), false);
+    out.endGroup();
+}
+
+void BusTest::welcomeTutorialDontShowPersistsOnToggle() {
+    // Regression test: the preference used to be written only inside
+    // finishTutorial(), which never ran if the dialog was closed via the
+    // window's X button or Escape (QDialog::reject()) instead of "Finish".
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/show_tutorial"), true);
+
+    auto *dlg = new WelcomeTutorialDialog();
+    auto *check = dlg->findChild<QCheckBox *>();
+    QVERIFY(check != nullptr);
+
+    check->setChecked(true);
+    QCOMPARE(settings.value(QStringLiteral("ui/show_tutorial"), true).toBool(), false);
+
+    dlg->reject();  // simulates the X button / Escape, not "Finish"
+    QCOMPARE(settings.value(QStringLiteral("ui/show_tutorial"), true).toBool(), false);
+
+    delete dlg;
+}
+
+void BusTest::themeControllerStylesheetParses() {
+    // Regression test: this exact category of bug ("Could not parse
+    // application stylesheet") has shipped three separate times per
+    // CHANGELOG.md history. Catch it at the source instead of by inspection.
+    ThemeController theme(qApp);
+
+    QWidget probe;
+    probe.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&probe));
+
+    QtMessageHandler previous = qInstallMessageHandler(stylesheetWarningCatcher);
+
+    g_stylesheetParseWarningSeen = false;
+    theme.setMode(ThemeController::Mode::Dark);
+    QCoreApplication::processEvents();
+    QVERIFY2(!g_stylesheetParseWarningSeen, "Dark theme stylesheet failed to parse");
+
+    g_stylesheetParseWarningSeen = false;
+    theme.setMode(ThemeController::Mode::Light);
+    QCoreApplication::processEvents();
+    QVERIFY2(!g_stylesheetParseWarningSeen, "Light theme stylesheet failed to parse");
+
+    qInstallMessageHandler(previous);
+}
 
 void BusTest::guiConsoleView() {
     ConsoleView view;
@@ -141,9 +272,8 @@ void BusTest::guiThemeController() {
     QCOMPARE(theme.mode(), ThemeController::Mode::Light);
 }
 
-#include "gui/sessions/session_view.hpp"
-
 void BusTest::guiMainWindow() {
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
     MainWindow mainWin;
 
     // Verify it contains SessionViews
@@ -155,4 +285,104 @@ void BusTest::guiMainWindow() {
     QMetaObject::invokeMethod(&mainWin, "addNewSession");
     sessions = mainWin.findChildren<SessionView *>();
     QCOMPARE(sessions.count(), 2);
+}
+
+void BusTest::mainWindowWorkspacePersistenceRoundTrip() {
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
+    {
+        MainWindow w1;  // starts with exactly 1 default Serial session
+        QMetaObject::invokeMethod(&w1, "addNewCanSession");
+        QCOMPARE(w1.findChildren<SessionView *>().count(), 2);
+        QMetaObject::invokeMethod(&w1, "saveWorkspaceState");
+    }  // destroyed directly (no closeEvent) — the explicit save above is what counts.
+
+    MainWindow w2;  // constructor calls restoreWorkspaceState() automatically.
+    auto sessions = w2.findChildren<SessionView *>();
+    QCOMPARE(sessions.count(), 2);
+
+    int serialCount = 0;
+    int canCount = 0;
+    for (SessionView *s : sessions) {
+        if (s->sessionType() == SessionType::Serial) {
+            ++serialCount;
+        } else if (s->sessionType() == SessionType::Can) {
+            ++canCount;
+        }
+    }
+    QCOMPARE(serialCount, 1);
+    QCOMPARE(canCount, 1);
+}
+
+void BusTest::mainWindowTileGridShape() {
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
+    MainWindow w;                                    // starts with exactly 1 default Serial session
+    QMetaObject::invokeMethod(&w, "addNewCanSession");
+    QMetaObject::invokeMethod(&w, "addNewSession");
+    QCOMPARE(w.findChildren<SessionView *>().count(), 3);
+    QMetaObject::invokeMethod(&w, "tileWorkspace");
+
+    {
+        // n=3: cols=ceil(sqrt(3))=2 -> one column of 2 (wrapped in a vertical
+        // splitter) plus one single session added directly to the root.
+        auto *root = w.findChild<QSplitter *>(QStringLiteral("workspaceGridRoot"));
+        QVERIFY(root != nullptr);
+        QCOMPARE(root->orientation(), Qt::Horizontal);
+        QCOMPARE(root->count(), 2);
+        auto columns = root->findChildren<QSplitter *>(QStringLiteral("workspaceGridColumn"));
+        QCOMPARE(columns.count(), 1);
+        QCOMPARE(columns.first()->orientation(), Qt::Vertical);
+        QCOMPARE(columns.first()->count(), 2);
+    }
+
+    QMetaObject::invokeMethod(&w, "addNewCanSession");
+    QCOMPARE(w.findChildren<SessionView *>().count(), 4);
+    QMetaObject::invokeMethod(&w, "tileWorkspace");
+
+    {
+        // n=4: cols=2, both columns balanced at 2 rows each (a proper 2x2 grid).
+        auto *root = w.findChild<QSplitter *>(QStringLiteral("workspaceGridRoot"));
+        QVERIFY(root != nullptr);
+        QCOMPARE(root->count(), 2);
+        auto columns = root->findChildren<QSplitter *>(QStringLiteral("workspaceGridColumn"));
+        QCOMPARE(columns.count(), 2);
+        for (QSplitter *col : columns) {
+            QCOMPARE(col->orientation(), Qt::Vertical);
+            QCOMPARE(col->count(), 2);
+        }
+    }
+}
+
+void BusTest::mainWindowSessionCloseDestroysWidget() {
+    // Regression test: session widgets never had Qt::WA_DeleteOnClose set, so
+    // close() (from the tab 'X' or Ctrl+W) only ever hid them — nothing was
+    // ever actually removed.
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
+    MainWindow w;
+    QMetaObject::invokeMethod(&w, "addNewSession");
+    QCOMPARE(w.findChildren<SessionView *>().count(), 2);
+
+    QMetaObject::invokeMethod(&w, "closeCurrentSession");
+    QTest::qWait(10);  // let the scheduled deleteLater() actually run
+
+    QCOMPARE(w.findChildren<SessionView *>().count(), 1);
+}
+
+void BusTest::mainWindowTileCloseButtonWorks() {
+    // Tiled mode has no tab bar, so each tile gets its own close button
+    // (wrapForTile()) as the only visible way to close a session there.
+    QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
+    MainWindow w;
+    QMetaObject::invokeMethod(&w, "addNewSession");
+    QCOMPARE(w.findChildren<SessionView *>().count(), 2);
+    QMetaObject::invokeMethod(&w, "tileWorkspace");
+
+    auto *root = w.findChild<QSplitter *>(QStringLiteral("workspaceGridRoot"));
+    QVERIFY(root != nullptr);
+    auto closeButtons = root->findChildren<QPushButton *>(QStringLiteral("tileCloseButton"));
+    QCOMPARE(closeButtons.count(), 2);
+
+    closeButtons.first()->click();
+    QTest::qWait(10);  // let the scheduled deleteLater() actually run
+
+    QCOMPARE(w.findChildren<SessionView *>().count(), 1);
 }

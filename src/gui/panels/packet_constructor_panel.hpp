@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QPushButton>
 #include <QVector>
+#include "gui/widgets/macro_button_bar.hpp"
 
 class QHBoxLayout;
 class QLabel;
@@ -84,14 +85,29 @@ private:
     QPushButton *m_playPcapBtn = nullptr;
 
     /// A saved, ready-to-send raw packet, quick-sent with a single click.
-    struct Macro {
+    struct EthernetMacro {
         QString name;
         QByteArray rawPacket;
     };
-    QVector<Macro> m_macros;
-    QWidget *m_macroContainer = nullptr;
-    QHBoxLayout *m_macroLayout = nullptr;
-    QLabel *m_emptyMacroHint = nullptr;
+
+    class EthernetMacroBar : public MacroButtonBar {
+    public:
+        explicit EthernetMacroBar(PacketConstructorPanel *parent);
+        void load();
+        void save();
+        void addMacro(const EthernetMacro &macro);
+    protected:
+        int macroCount() const override;
+        QString macroName(int index) const override;
+        QString macroToolTip(int index) const override;
+        void onMacroTriggered(int index) override;
+        void buildContextMenu(int index, QMenu &menu) override;
+    private:
+        QVector<EthernetMacro> m_macros;
+        PacketConstructorPanel *m_panel;
+    };
+
+    EthernetMacroBar *m_macroBar = nullptr;
 };
 
 }  // namespace aether

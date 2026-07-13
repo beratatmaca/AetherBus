@@ -55,8 +55,8 @@ PacketConstructorPanel::PacketConstructorPanel(QWidget *parent) : QWidget(parent
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &PacketConstructorPanel::onSendPeriodic);
     buildUi();
-    loadMacros();
-    rebuildMacroButtons();
+    m_macroBar->load();
+    m_macroBar->rebuildButtons();
 }
 
 void PacketConstructorPanel::buildUi() {
@@ -187,11 +187,8 @@ void PacketConstructorPanel::buildUi() {
     macroRow->setSpacing(6);
     macroRow->addWidget(makeSectionLabel(tr("Macros")));
 
-    m_macroContainer = new QWidget(this);
-    m_macroLayout = new QHBoxLayout(m_macroContainer);
-    m_macroLayout->setContentsMargins(0, 0, 0, 0);
-    m_macroLayout->setSpacing(6);
-    macroRow->addWidget(m_macroContainer);
+    m_macroBar = new EthernetMacroBar(this);
+    macroRow->addWidget(m_macroBar);
 
     macroRow->addStretch(1);
 
@@ -475,13 +472,19 @@ void PacketConstructorPanel::resetPlaybackButton() {
     m_playPcapBtn->setText(tr("Play PCAP…"));
 }
 
-void PacketConstructorPanel::loadMacros() {
+// ---------------------------------------------------------------------------
+// EthernetMacroBar
+// ---------------------------------------------------------------------------
+
+PacketConstructorPanel::EthernetMacroBar::EthernetMacroBar(PacketConstructorPanel *parent) : MacroButtonBar(parent), m_panel(parent) {}
+
+void PacketConstructorPanel::EthernetMacroBar::load() {
     m_macros.clear();
     QSettings settings;
     const int count = settings.beginReadArray(QStringLiteral("ethernet_macros"));
     for (int i = 0; i < count; ++i) {
         settings.setArrayIndex(i);
-        Macro macro;
+        EthernetMacro macro;
         macro.name = settings.value(QStringLiteral("name")).toString();
         macro.rawPacket = settings.value(QStringLiteral("packet")).toByteArray();
         m_macros.append(macro);
@@ -489,7 +492,7 @@ void PacketConstructorPanel::loadMacros() {
     settings.endArray();
 }
 
-void PacketConstructorPanel::saveMacros() {
+void PacketConstructorPanel::EthernetMacroBar::save() {
     QSettings settings;
     settings.beginWriteArray(QStringLiteral("ethernet_macros"));
     for (int i = 0; i < m_macros.size(); ++i) {
@@ -501,57 +504,46 @@ void PacketConstructorPanel::saveMacros() {
     settings.endArray();
 }
 
-void PacketConstructorPanel::rebuildMacroButtons() {
-    QLayoutItem *child = nullptr;
-    while ((child = m_macroLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) {
-            child->widget()->deleteLater();
-        }
-        delete child;
-    }
-
-    if (m_macros.isEmpty()) {
-        m_emptyMacroHint = new QLabel(tr("<i>none yet — click ★ Save as macro</i>"), m_macroContainer);
-        m_macroLayout->addWidget(m_emptyMacroHint);
-        return;
-    }
-    m_emptyMacroHint = nullptr;
-
-    for (int i = 0; i < m_macros.size(); ++i) {
-        const auto &macro = m_macros.at(i);
-        auto *btn = new QPushButton(macro.name, m_macroContainer);
-        btn->setObjectName(macro.name);
-        btn->setProperty("toolbarAction", true);
-        btn->setCursor(Qt::PointingHandCursor);
-
-        const QByteArray preview = macro.rawPacket.left(24).toHex(' ').toUpper();
-        btn->setToolTip(tr("%1 bytes: %2%3")
-                            .arg(macro.rawPacket.size())
-                            .arg(QString::fromLatin1(preview), macro.rawPacket.size() > 24 ? QStringLiteral("…") : QString()));
-
-        connect(btn, &QPushButton::clicked, this, [this, macro] { emit packetReady(macro.rawPacket); });
-
-        btn->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(btn, &QPushButton::customContextMenuRequested, this, [this, i](const QPoint &pos) {
-            auto *senderBtn = qobject_cast<QPushButton *>(sender());
-            if (!senderBtn) {
-                return;
-            }
-            QMenu menu(this);
-            auto *deleteAct = menu.addAction(tr("Delete Macro"));
-            connect(deleteAct, &QAction::triggered, this, [this, i] {
-                if (i >= 0 && i < m_macros.size()) {
-                    m_macros.removeAt(i);
-                    saveMacros();
-                    rebuildMacroButtons();
-                }
-            });
-            menu.exec(senderBtn->mapToGlobal(pos));
-        });
-
-        m_macroLayout->addWidget(btn);
-    }
+void PacketConstructorPanel::EthernetMacroBar::addMacro(const EthernetMacro &macro) {
+    m_macros.append(macro);
+    save();
+    rebuildButtons();
 }
+
+int PacketConstructorPanel::EthernetMacroBar::macroCount() const {
+    return m_macros.size();
+}
+
+QString PacketConstructorPanel::EthernetMacroBar::macroName(int index) const {
+    return m_macros.at(index).name;
+}
+
+QString PacketConstructorPanel::EthernetMacroBar::macroToolTip(int index) const {
+    const auto &macro = m_macros.at(index);
+    const QByteArray preview = macro.rawPacket.left(24).toHex(' ').toUpper();
+    return QStringLiteral("%1 bytes: %2%3")
+        .arg(macro.rawPacket.size())
+        .arg(QString::fromLatin1(preview), macro.rawPacket.size() > 24 ? QStringLiteral("…") : QString());
+}
+
+void PacketConstructorPanel::EthernetMacroBar::onMacroTriggered(int index) {
+    emit m_panel->packetReady(m_macros.at(index).rawPacket);
+}
+
+void PacketConstructorPanel::EthernetMacroBar::buildContextMenu(int index, QMenu &menu) {
+    auto *deleteAct = menu.addAction(QStringLiteral("Delete Macro"));
+    connect(deleteAct, &QAction::triggered, this, [this, index] {
+        if (index >= 0 && index < m_macros.size()) {
+            m_macros.removeAt(index);
+            save();
+            rebuildButtons();
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// saveCurrentAsMacro
+// ---------------------------------------------------------------------------
 
 void PacketConstructorPanel::saveCurrentAsMacro() {
     bool ok = true;
@@ -568,9 +560,7 @@ void PacketConstructorPanel::saveCurrentAsMacro() {
         return;
     }
 
-    m_macros.append(Macro{name.trimmed(), packet});
-    saveMacros();
-    rebuildMacroButtons();
+    m_macroBar->addMacro(EthernetMacro{name.trimmed(), packet});
 }
 
 }  // namespace aether

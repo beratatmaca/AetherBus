@@ -42,6 +42,15 @@ private slots:
     void resetWorkspaceLayout();
     void onTabCloseRequested(int index);
 
+    /// Persist window geometry, layout mode, active tab, and every open
+    /// session's configuration. Called from @ref closeEvent; kept invokable
+    /// (like the slots above) so tests can drive it directly.
+    void saveWorkspaceState();
+    /// Recreate the sessions saved by @ref saveWorkspaceState, idle (not
+    /// connected). Falls back to a single default Serial session if there's
+    /// nothing saved (first run). Called once from the constructor.
+    void restoreWorkspaceState();
+
 protected:
     void closeEvent(QCloseEvent *event) override;
 
@@ -53,13 +62,9 @@ private:
     /// (cols = ceil(sqrt(n)), extra rows assigned to the first columns).
     QSplitter *buildGridSplitter(const QList<QPointer<SessionView>> &sessions);
 
-    /// Persist window geometry, layout mode, active tab, and every open
-    /// session's configuration. Called from @ref closeEvent.
-    void saveWorkspaceState();
-    /// Recreate the sessions saved by @ref saveWorkspaceState, idle (not
-    /// connected). Falls back to a single default Serial session if there's
-    /// nothing saved (first run).
-    void restoreWorkspaceState();
+    /// Wrap a session in a thin header (title + close button) for tiled mode,
+    /// where there's no tab bar to provide a close affordance otherwise.
+    QWidget *wrapForTile(SessionView *session);
 
     /// Show a message in the bottom status bar. Errors persist (red, ⚠); other
     /// messages auto-clear after a few seconds. Empty text clears the bar.

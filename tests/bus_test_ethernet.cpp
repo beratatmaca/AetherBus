@@ -2,6 +2,7 @@
 #include "core/ethernet/ethernet_backend.hpp"
 #include "gui/panels/packet_constructor_panel.hpp"
 #include "gui/sessions/ethernet_packet_model.hpp"
+#include "gui/sessions/ethernet_session_widget.hpp"
 
 #include <QApplication>
 #include <QComboBox>
@@ -234,4 +235,27 @@ void BusTest::ethernetBackendOpenInvalidInterfaceFails() {
     QVERIFY(!backend.open(cfg));
     QVERIFY(!backend.isRunning());
     QCOMPARE(errorSpy.count(), 1);
+}
+
+void BusTest::ethernetSessionSettingsRoundTrip() {
+    QSettings in;
+    in.beginGroup(QStringLiteral("test_ethernet_in"));
+    in.setValue(QStringLiteral("interface"), QStringLiteral("eth-test0"));
+    in.setValue(QStringLiteral("bpfFilter"), QStringLiteral("udp port 5555"));
+    in.endGroup();
+
+    EthernetSessionWidget widget;
+    in.beginGroup(QStringLiteral("test_ethernet_in"));
+    widget.loadSettings(in);
+    in.endGroup();
+
+    QSettings out;
+    out.beginGroup(QStringLiteral("test_ethernet_out"));
+    widget.saveSettings(out);
+    out.endGroup();
+
+    out.beginGroup(QStringLiteral("test_ethernet_out"));
+    QCOMPARE(out.value(QStringLiteral("interface")).toString(), QStringLiteral("eth-test0"));
+    QCOMPARE(out.value(QStringLiteral("bpfFilter")).toString(), QStringLiteral("udp port 5555"));
+    out.endGroup();
 }

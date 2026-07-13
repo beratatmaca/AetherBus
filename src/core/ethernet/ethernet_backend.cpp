@@ -13,6 +13,23 @@
 
 namespace aether {
 
+namespace {
+// libpcap reports permission failures as plain text in errbuf (no distinct
+// errno path through pcap_open_live), typically "socket: Operation not
+// permitted" or "You don't have permission to capture on that device" —
+// match on that instead of the exact wording.
+bool looksLikePermissionError(const QString &pcapError) {
+    return pcapError.contains(QStringLiteral("ermission"), Qt::CaseInsensitive);
+}
+
+QString rawCaptureHint() {
+    return EthernetBackend::tr(
+        " Raw packet capture needs elevated privileges. Either run as root, or grant "
+        "this binary the capability once: 'sudo setcap cap_net_raw,cap_net_admin=eip "
+        "<path to aetherbus>' — no root needed after that.");
+}
+}  // namespace
+
 EthernetBackend::EthernetBackend(QObject *parent) : IBusBackend(parent) {}
 
 EthernetBackend::~EthernetBackend() {
@@ -33,7 +50,12 @@ bool EthernetBackend::open(const EthernetConfig &config) {
                                   errbuf.data());
 
     if (!m_pcapHandle) {
-        emit errorOccurred(tr("pcap_open_live failed: %1").arg(QString::fromLocal8Bit(errbuf.data())));
+        const QString pcapError = QString::fromLocal8Bit(errbuf.data());
+        QString message = tr("pcap_open_live failed: %1").arg(pcapError);
+        if (looksLikePermissionError(pcapError)) {
+            message += rawCaptureHint();
+        }
+        emit errorOccurred(message);
         return false;
     }
 

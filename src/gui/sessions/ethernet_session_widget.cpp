@@ -16,6 +16,9 @@
 #include <QFontDatabase>
 #include <QScrollBar>
 #include <QSettings>
+#include <QShortcut>
+#include <QStyle>
+#include <QApplication>
 
 namespace aether {
 
@@ -100,7 +103,19 @@ void EthernetSessionWidget::buildUi() {
 
     configLayout->addWidget(new QLabel(tr("Interface:"), configPane));
     m_interfaceBox = new QComboBox(configPane);
-    configLayout->addWidget(m_interfaceBox);
+
+    auto *rescanBtn = new QPushButton(configPane);
+    rescanBtn->setIcon(qApp->style()->standardIcon(QStyle::SP_BrowserReload));
+    rescanBtn->setFixedWidth(32);
+    rescanBtn->setToolTip(tr("Rescan network interfaces (F5)"));
+    connect(rescanBtn, &QPushButton::clicked, this, &EthernetSessionWidget::rescanInterfaces);
+    auto *rescanShortcut = new QShortcut(QKeySequence(Qt::Key_F5), this);
+    connect(rescanShortcut, &QShortcut::activated, this, &EthernetSessionWidget::rescanInterfaces);
+
+    auto *interfaceRow = new QHBoxLayout();
+    interfaceRow->addWidget(m_interfaceBox, 1);
+    interfaceRow->addWidget(rescanBtn);
+    configLayout->addLayout(interfaceRow);
 
     configLayout->addWidget(new QLabel(tr("BPF Filter:"), configPane));
     m_filterEdit = new QLineEdit(configPane);
@@ -227,8 +242,15 @@ void EthernetSessionWidget::stopCapture() {
 }
 
 void EthernetSessionWidget::rescanInterfaces() {
+    const QString previous = m_interfaceBox->currentText();
     m_interfaceBox->clear();
     m_interfaceBox->addItems(EthernetBackend::listInterfaces());
+    if (!previous.isEmpty()) {
+        if (m_interfaceBox->findText(previous) < 0) {
+            m_interfaceBox->addItem(previous);
+        }
+        m_interfaceBox->setCurrentText(previous);
+    }
 }
 
 void EthernetSessionWidget::saveSettings(QSettings &settings) const {

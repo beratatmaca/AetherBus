@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTemporaryDir>
 #include <QtTest/QtTest>
 
 class BusTest : public QObject {
@@ -10,6 +11,19 @@ private slots:
     // Lifecycle
     void initTestCase();
     void cleanupTestCase();
+
+    // QSettings persistence round-trips
+    void serialConfigSettingsRoundTrip();
+    void canConfigSettingsRoundTrip();
+#ifdef AETHER_HAVE_ETHERNET
+    void ethernetSessionSettingsRoundTrip();
+#endif
+    void mainWindowWorkspacePersistenceRoundTrip();
+    void mainWindowTileGridShape();
+    void mainWindowTileCloseButtonWorks();
+    void mainWindowSessionCloseDestroysWidget();
+    void welcomeTutorialDontShowPersistsOnToggle();
+    void themeControllerStylesheetParses();
 
     // Codec Tests
     void hexFormatting();
@@ -72,4 +86,10 @@ private slots:
     void ethernetPacketConstructorMacroRoundTrip();
     void ethernetBackendOpenInvalidInterfaceFails();
 #endif
+
+private:
+    /// Redirects every default-constructed QSettings in this process to an
+    /// isolated, throwaway location for the lifetime of the test binary —
+    /// see initTestCase().
+    QTemporaryDir m_settingsDir;
 };

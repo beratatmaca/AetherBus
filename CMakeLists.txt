@@ -178,6 +178,8 @@ add_library(aether_gui STATIC
     src/gui/widgets/consoleview_search.cpp
     src/gui/widgets/macrobar.cpp
     src/gui/widgets/macrobar.hpp
+    src/gui/widgets/macro_button_bar.cpp
+    src/gui/widgets/macro_button_bar.hpp
     src/gui/common/theme_controller.cpp
     src/gui/common/theme_controller.hpp
     src/gui/widgets/throughput_chart.cpp

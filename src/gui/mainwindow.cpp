@@ -32,6 +32,8 @@
 #include <QTextBrowser>
 #include <QStatusBar>
 #include <QTimer>
+#include <QDesktopServices>
+#include <QUrl>
 
 namespace aether {
 
@@ -143,6 +145,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         WelcomeTutorialDialog dlg(this);
         dlg.exec();
     });
+    helpMenu->addSeparator();
+    QAction *projectPageAct = helpMenu->addAction(tr("AetherBus on &GitHub"));
+    connect(projectPageAct, &QAction::triggered, this,
+            [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/beratatmaca/AetherBus"))); });
+    QAction *issuesAct = helpMenu->addAction(tr("Report an &Issue…"));
+    connect(issuesAct, &QAction::triggered, this,
+            [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/beratatmaca/AetherBus/issues"))); });
+    helpMenu->addSeparator();
     QAction *aboutAct = helpMenu->addAction(tr("&About AetherBus…"));
     connect(aboutAct, &QAction::triggered, this, [this]() {
         auto *dlg = new QDialog(this);
@@ -163,7 +173,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
         auto *titleCol = new QVBoxLayout();
         auto *nameLbl = new QLabel(QStringLiteral("<b style='font-size:18pt'>AetherBus</b>"), dlg);
-        auto *tagLbl = new QLabel(QStringLiteral("<span style='color:#888'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
+        auto *tagLbl = new QLabel(QStringLiteral("<span style='color:#808080'>Serial Bus Interceptor &amp; Monitor</span>"), dlg);
         titleCol->addWidget(nameLbl);
         titleCol->addWidget(tagLbl);
         titleCol->addStretch();
@@ -191,7 +201,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
                            "<tr><td><b>License</b></td><td>&nbsp;</td><td>MIT</td></tr>"
                            "<tr><td><b>Copyright</b></td><td>&nbsp;</td><td>&copy; 2026 AetherBus Project</td></tr>"
                            "</table>"
-                           "<p style='margin-top:8px; font-size:9pt; color:#888'>"
+                           "<p style='margin-top:8px; font-size:9pt; color:#808080'>"
                            "A modern, lightweight serial sniffer &amp; bus monitor."
                            "</p>")
                 .arg(QString::fromLatin1(AETHER_VERSION_STRING), QString::fromLatin1(AETHER_GIT_SHA), QString::fromLatin1(qVersion())));
@@ -330,7 +340,7 @@ void MainWindow::buildUi() {
         tr("Open multiple Serial, CAN, or Ethernet sessions side-by-side.\nUse the Window menu to Tile or Reset the workspace layout."),
         m_dashboard);
     infoLabel->setAlignment(Qt::AlignCenter);
-    infoLabel->setStyleSheet(QStringLiteral("color:#888; font-size:11pt;"));
+    infoLabel->setStyleSheet(QStringLiteral("color:#808080; font-size:11pt;"));
     dashLayout->addWidget(infoLabel);
 
     m_stack->addWidget(m_dashboard);
@@ -408,6 +418,10 @@ void MainWindow::addSession(SessionType type) {
     }
 
     session->setObjectName(title);
+    // close() only hides a plain child widget by default; without this, neither
+    // the tab's 'X' button nor Ctrl+W ever actually destroys the session, so the
+    // destroyed-signal cleanup below never fires.
+    session->setAttribute(Qt::WA_DeleteOnClose);
     m_sessions.append(session);
 
     connect(session, &SessionView::sessionTitleChanged, this, [this, session](const QString &newTitle) {
@@ -430,6 +444,16 @@ void MainWindow::addSession(SessionType type) {
         m_sessions.removeAll(session);
         if (m_stack && m_dashboard && m_sessions.isEmpty()) {
             m_stack->setCurrentWidget(m_dashboard);
+        } else if (m_tiledMode && !m_sessions.isEmpty()) {
+            // Reflow the remaining tiles into a properly-balanced grid instead of
+            // leaving a gap where the closed session used to be. Deferred so this
+            // doesn't run while the just-destroyed session's own destructor is
+            // still on the call stack.
+            QTimer::singleShot(0, this, [this]() {
+                if (m_tiledMode && !m_sessions.isEmpty()) {
+                    tileWorkspace();
+                }
+            });
         }
     });
 
@@ -446,8 +470,11 @@ void MainWindow::addSession(SessionType type) {
 void MainWindow::closeCurrentSession() {
     m_sessions.removeAll(nullptr);
     if (m_tiledMode) {
+        // isActiveWindow() is true for every tile whenever the main window itself
+        // is active, so it can't distinguish which pane the user is actually in —
+        // only a real focus-in-that-subtree counts.
         for (const auto &session : m_sessions) {
-            if (session && (session->isActiveWindow() || session->hasFocus())) {
+            if (session && session->isAncestorOf(QApplication::focusWidget())) {
                 session->close();
                 return;
             }
@@ -470,6 +497,39 @@ void MainWindow::showAboutQt() {
     QApplication::aboutQt();
 }
 
+QWidget *MainWindow::wrapForTile(SessionView *session) {
+    auto *container = new QWidget();
+    auto *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    auto *header = new QWidget(container);
+    auto *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(6, 2, 4, 2);
+    headerLayout->setSpacing(4);
+
+    auto *titleLabel = new QLabel(session->objectName(), header);
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch(1);
+
+    auto *closeBtn = new QPushButton(QStringLiteral("✕"), header);
+    closeBtn->setObjectName(QStringLiteral("tileCloseButton"));
+    closeBtn->setFixedSize(20, 20);
+    closeBtn->setFlat(true);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setToolTip(tr("Close this session"));
+    connect(closeBtn, &QPushButton::clicked, session, &SessionView::close);
+    headerLayout->addWidget(closeBtn);
+
+    // Rebuilt fresh every retile, so no stale-connection risk from the old
+    // header outliving this one.
+    connect(session, &SessionView::sessionTitleChanged, titleLabel, &QLabel::setText);
+
+    layout->addWidget(header);
+    layout->addWidget(session, 1);
+    return container;
+}
+
 QSplitter *MainWindow::buildGridSplitter(const QList<QPointer<SessionView>> &sessions) {
     const int n = static_cast<int>(sessions.size());
 
@@ -482,6 +542,7 @@ QSplitter *MainWindow::buildGridSplitter(const QList<QPointer<SessionView>> &ses
     const int extra = n % cols;
 
     auto *root = new QSplitter(Qt::Horizontal);
+    root->setObjectName(QStringLiteral("workspaceGridRoot"));
     root->setChildrenCollapsible(false);
 
     int idx = 0;
@@ -490,15 +551,16 @@ QSplitter *MainWindow::buildGridSplitter(const QList<QPointer<SessionView>> &ses
         if (rowsInCol <= 1) {
             SessionView *session = sessions[idx++];
             session->show();
-            root->addWidget(session);
+            root->addWidget(wrapForTile(session));
             continue;
         }
         auto *column = new QSplitter(Qt::Vertical, root);
+        column->setObjectName(QStringLiteral("workspaceGridColumn"));
         column->setChildrenCollapsible(false);
         for (int r = 0; r < rowsInCol && idx < n; ++r) {
             SessionView *session = sessions[idx++];
             session->show();
-            column->addWidget(session);
+            column->addWidget(wrapForTile(session));
         }
         for (int i = 0; i < column->count(); ++i) {
             column->setStretchFactor(i, 1);

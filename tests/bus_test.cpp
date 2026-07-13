@@ -4,7 +4,9 @@
 #include "core/serial/serial_types.hpp"
 #include "core/ethernet/ethernet_pcap.hpp"
 
+#include <QCoreApplication>
 #include <QDataStream>
+#include <QSettings>
 #include <QTemporaryFile>
 
 using namespace aether;
@@ -38,11 +40,29 @@ QByteArray buildClassicPcap(const QVector<QByteArray> &frames, quint32 linkType 
 }  // namespace
 
 void BusTest::initTestCase() {
-    // Lifecycle setup if needed
+    // QTEST_MAIN's generated main() never calls setOrganizationName/setApplicationName
+    // (unlike the real app's main.cpp), and every panel/session/MainWindow reads
+    // and writes QSettings via the no-arg constructor. Without this, tests would
+    // resolve to a shared fallback location — either colliding with the real
+    // app's own ~/.config store, or with each other across test runs. Force
+    // IniFormat (rather than NativeFormat, which is the Windows registry) and
+    // redirect it into a throwaway temp directory for the whole test binary.
+    QVERIFY(m_settingsDir.isValid());
+    QCoreApplication::setOrganizationName(QStringLiteral("AetherBus Project"));
+    QCoreApplication::setApplicationName(QStringLiteral("AetherBus"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settingsDir.path());
+
+    // Several tests construct a MainWindow, which schedules a 100ms singleShot
+    // to show the Welcome Tutorial (a blocking modal exec()) if this is unset.
+    // Suite-wide default off; the one test that exercises the tutorial itself
+    // sets its own value first.
+    QSettings appSettings;
+    appSettings.setValue(QStringLiteral("ui/show_tutorial"), false);
 }
 
 void BusTest::cleanupTestCase() {
-    // Lifecycle teardown if needed
+    // m_settingsDir cleans up its own temp directory on destruction.
 }
 
 void BusTest::hexFormatting() {

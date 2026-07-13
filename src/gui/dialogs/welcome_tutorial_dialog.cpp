@@ -45,7 +45,13 @@ void WelcomeTutorialDialog::setupUi() {
         browser->setFrameStyle(QFrame::NoFrame);
         browser->setReadOnly(true);
         browser->setOpenExternalLinks(true);
-        browser->setStyleSheet(QStringLiteral("background: transparent; color: #b0b0b0; font-size: 11pt;"));
+        // QTextBrowser is a QTextEdit, so leaving color unset would inherit the
+        // theme's global "QTextEdit, QPlainTextEdit" rule meant for the
+        // hex/ASCII console views (terminal green) — wrong here. Reference the
+        // palette directly instead of a hardcoded hex so this is always
+        // correct for the active theme (a fixed hex was the earlier bug: fine
+        // on dark, nearly invisible on light).
+        browser->setStyleSheet(QStringLiteral("background: transparent; color: palette(text); font-size: 11pt;"));
         browser->setMarkdown(slideText.trimmed());
         m_stack->addWidget(browser);
     }
@@ -56,12 +62,16 @@ void WelcomeTutorialDialog::setupUi() {
     auto *bottomRow = new QHBoxLayout();
 
     m_dontShowCheck = new QCheckBox(tr("Don't show this again"), this);
+    connect(m_dontShowCheck, &QCheckBox::toggled, this, [](bool checked) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("ui/show_tutorial"), !checked);
+    });
     bottomRow->addWidget(m_dontShowCheck);
 
     bottomRow->addStretch();
 
     m_indicatorLabel = new QLabel(QStringLiteral("1 / %1").arg(m_stack->count()), this);
-    m_indicatorLabel->setStyleSheet(QStringLiteral("color: #888888; font-weight: bold;"));
+    m_indicatorLabel->setStyleSheet(QStringLiteral("color: #808080; font-weight: bold;"));
     bottomRow->addWidget(m_indicatorLabel);
 
     bottomRow->addSpacing(16);
@@ -111,10 +121,7 @@ void WelcomeTutorialDialog::prevStep() {
 }
 
 void WelcomeTutorialDialog::finishTutorial() {
-    if (m_dontShowCheck->isChecked()) {
-        QSettings settings;
-        settings.setValue(QStringLiteral("ui/show_tutorial"), false);
-    }
+    // The checkbox's own toggled handler already persists the preference.
     accept();
 }
 

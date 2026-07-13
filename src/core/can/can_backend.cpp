@@ -34,6 +34,17 @@ constexpr int kArphrdCan = 280;  ///< ARPHRD_CAN link type in /sys/class/net/<if
 QString errnoText() {
     return QString::fromLocal8Bit(std::strerror(errno));
 }
+
+// ENODEV on SIOCGIFINDEX means the interface name simply doesn't exist yet —
+// almost always a not-yet-created vcan test bus or a physical link that's
+// still down. Point the user at the fix instead of just the raw errno text.
+QString ifaceNotFoundHint(const QString &iface) {
+    return CanBackend::tr(
+               " If '%1' is meant to be a virtual test bus, create it first: "
+               "'sudo ip link add dev %1 type vcan && sudo ip link set up %1'. "
+               "For a physical adapter, bring it up: 'sudo ip link set up %1'.")
+        .arg(iface);
+}
 #endif
 }  // namespace
 
@@ -360,7 +371,12 @@ bool CanBackend::open(const CanConfig &config) {
     const QByteArray ifaceBytes = config.iface.toLocal8Bit();
     std::strncpy(ifr.ifr_name, ifaceBytes.constData(), IFNAMSIZ - 1);
     if (::ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-        emit errorOccurred(tr("CAN interface '%1' not found: %2").arg(config.iface, errnoText()));
+        const int ifaceErrno = errno;
+        QString message = tr("CAN interface '%1' not found: %2").arg(config.iface, errnoText());
+        if (ifaceErrno == ENODEV) {
+            message += ifaceNotFoundHint(config.iface);
+        }
+        emit errorOccurred(message);
         ::close(fd);
         return false;
     }

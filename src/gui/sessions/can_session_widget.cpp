@@ -74,8 +74,8 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     m_consolePanel->console()->setNewlineMode(ConsoleView::NewlineMode::Frame, 0);
     connect(m_consolePanel, &ConsolePanel::formatChanged, this, &CanSessionWidget::applyFormats);
     applyFormats();
-    loadMacros();
-    rebuildMacroButtons();
+    m_macroBar->load();
+    m_macroBar->rebuildButtons();
 }
 
 CanSessionWidget::~CanSessionWidget() {
@@ -292,11 +292,8 @@ QWidget *CanSessionWidget::buildConsolePanel(QWidget *parent) {
     macroRow->setSpacing(6);
     macroRow->addWidget(makeSectionLabel(QStringLiteral("Macros")));
 
-    m_macroContainer = new QWidget(panel);
-    m_macroLayout = new QHBoxLayout(m_macroContainer);
-    m_macroLayout->setContentsMargins(0, 0, 0, 0);
-    m_macroLayout->setSpacing(6);
-    macroRow->addWidget(m_macroContainer);
+    m_macroBar = new CanMacroBar(this);
+    macroRow->addWidget(m_macroBar);
 
     macroRow->addStretch(1);
 
@@ -432,7 +429,13 @@ void CanSessionWidget::updateCounts() {
     m_consolePanel->setCountsText(text);
 }
 
-void CanSessionWidget::loadMacros() {
+// ---------------------------------------------------------------------------
+// CanMacroBar
+// ---------------------------------------------------------------------------
+
+CanSessionWidget::CanMacroBar::CanMacroBar(CanSessionWidget *parent) : MacroButtonBar(parent), m_session(parent) {}
+
+void CanSessionWidget::CanMacroBar::load() {
     m_macros.clear();
     QSettings settings;
     const int count = settings.beginReadArray(QStringLiteral("can_macros"));
@@ -448,7 +451,7 @@ void CanSessionWidget::loadMacros() {
     settings.endArray();
 }
 
-void CanSessionWidget::saveMacros() {
+void CanSessionWidget::CanMacroBar::save() {
     QSettings settings;
     settings.beginWriteArray(QStringLiteral("can_macros"));
     for (int i = 0; i < m_macros.size(); ++i) {
@@ -462,57 +465,46 @@ void CanSessionWidget::saveMacros() {
     settings.endArray();
 }
 
-void CanSessionWidget::rebuildMacroButtons() {
-    // Clear layout
-    QLayoutItem *child;
-    while ((child = m_macroLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) {
-            child->widget()->deleteLater();
-        }
-        delete child;
-    }
-
-    if (m_macros.isEmpty()) {
-        m_emptyMacroHint = new QLabel(QStringLiteral("<i>none yet — click ★ Save as macro</i>"), m_macroContainer);
-        m_macroLayout->addWidget(m_emptyMacroHint);
-        return;
-    }
-    m_emptyMacroHint = nullptr;
-
-    for (int i = 0; i < m_macros.size(); ++i) {
-        const auto &macro = m_macros.at(i);
-        auto *btn = new QPushButton(macro.name, m_macroContainer);
-        btn->setProperty("toolbarAction", true);
-        btn->setCursor(Qt::PointingHandCursor);
-
-        QString details =
-            QStringLiteral("ID: %1 | Data: %2")
-                .arg(QString::number(macro.id, 16).toUpper())
-                .arg(macro.payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(macro.payload.toHex(' ').toUpper()));
-        btn->setToolTip(details);
-
-        connect(btn, &QPushButton::clicked, this, [this, macro] { m_backend->sendFrame(macro.id, macro.flags, macro.payload); });
-
-        btn->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(btn, &QPushButton::customContextMenuRequested, this, [this, i](const QPoint &pos) {
-            auto *senderBtn = qobject_cast<QPushButton *>(sender());
-            if (!senderBtn)
-                return;
-            QMenu menu(this);
-            auto *deleteAct = menu.addAction(QStringLiteral("Delete Macro"));
-            connect(deleteAct, &QAction::triggered, this, [this, i] {
-                if (i >= 0 && i < m_macros.size()) {
-                    m_macros.removeAt(i);
-                    saveMacros();
-                    rebuildMacroButtons();
-                }
-            });
-            menu.exec(senderBtn->mapToGlobal(pos));
-        });
-
-        m_macroLayout->addWidget(btn);
-    }
+void CanSessionWidget::CanMacroBar::addMacro(const CanMacro &macro) {
+    m_macros.append(macro);
+    save();
+    rebuildButtons();
 }
+
+int CanSessionWidget::CanMacroBar::macroCount() const {
+    return m_macros.size();
+}
+
+QString CanSessionWidget::CanMacroBar::macroName(int index) const {
+    return m_macros.at(index).name;
+}
+
+QString CanSessionWidget::CanMacroBar::macroToolTip(int index) const {
+    const auto &macro = m_macros.at(index);
+    return QStringLiteral("ID: %1 | Data: %2")
+        .arg(QString::number(macro.id, 16).toUpper())
+        .arg(macro.payload.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(macro.payload.toHex(' ').toUpper()));
+}
+
+void CanSessionWidget::CanMacroBar::onMacroTriggered(int index) {
+    const auto &macro = m_macros.at(index);
+    m_session->m_backend->sendFrame(macro.id, macro.flags, macro.payload);
+}
+
+void CanSessionWidget::CanMacroBar::buildContextMenu(int index, QMenu &menu) {
+    auto *deleteAct = menu.addAction(QStringLiteral("Delete Macro"));
+    connect(deleteAct, &QAction::triggered, this, [this, index] {
+        if (index >= 0 && index < m_macros.size()) {
+            m_macros.removeAt(index);
+            save();
+            rebuildButtons();
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// saveCurrentAsMacro
+// ---------------------------------------------------------------------------
 
 void CanSessionWidget::saveCurrentAsMacro() {
     bool okId = false;
@@ -551,10 +543,7 @@ void CanSessionWidget::saveCurrentAsMacro() {
         return;
     }
 
-    CanMacro macro{name.trimmed(), id, payload, flags};
-    m_macros.append(macro);
-    saveMacros();
-    rebuildMacroButtons();
+    m_macroBar->addMacro(CanMacro{name.trimmed(), id, payload, flags});
 }
 
 void CanSessionWidget::toggleCapture() {

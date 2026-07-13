@@ -4,6 +4,7 @@
 #include "core/serial/serial_types.hpp"
 #include "core/common/stats_calculator.hpp"
 #include "gui/sessions/session_view.hpp"
+#include "gui/widgets/macro_button_bar.hpp"
 
 class QLineEdit;
 class QPushButton;
@@ -11,7 +12,6 @@ class QCheckBox;
 class QLabel;
 class QTimer;
 class QComboBox;
-class QHBoxLayout;
 
 namespace aether {
 
@@ -94,14 +94,25 @@ private:
         QByteArray payload;
         quint16 flags = 0;
     };
-    QVector<CanMacro> m_macros;
-    QWidget *m_macroContainer = nullptr;
-    QHBoxLayout *m_macroLayout = nullptr;
-    QLabel *m_emptyMacroHint = nullptr;
 
-    void loadMacros();
-    void saveMacros();
-    void rebuildMacroButtons();
+    class CanMacroBar : public MacroButtonBar {
+    public:
+        explicit CanMacroBar(CanSessionWidget *parent);
+        void load();
+        void save();
+        void addMacro(const CanMacro &macro);
+    protected:
+        int macroCount() const override;
+        QString macroName(int index) const override;
+        QString macroToolTip(int index) const override;
+        void onMacroTriggered(int index) override;
+        void buildContextMenu(int index, QMenu &menu) override;
+    private:
+        QVector<CanMacro> m_macros;
+        CanSessionWidget *m_session;
+    };
+
+    CanMacroBar *m_macroBar = nullptr;
     void saveCurrentAsMacro();
 };
 
