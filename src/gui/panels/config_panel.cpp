@@ -195,27 +195,72 @@ QString ConfigPanel::device() const {
     return m_deviceBox->currentText();
 }
 
-void ConfigPanel::onStartButtonClicked() {
-    if (m_isRunning) {
-        emit stopInterception();
-        return;
-    }
-
-    const int baud = m_baudBox->currentText().toInt();
-    if (baud <= 0) {
-        setStatus(QStringLiteral("<span style='color:#e57373'>Invalid baud rate: %1</span>").arg(m_baudBox->currentText()));
-        return;
-    }
-
+SerialConfig ConfigPanel::currentConfig() const {
     SerialConfig cfg;
     cfg.device = m_deviceBox->currentText();
-    cfg.baud = baud;
+    cfg.baud = m_baudBox->currentText().toInt();
     cfg.dataBits = m_dataBitsBox->currentData().toInt();
     cfg.parity = static_cast<Parity>(m_parityBox->currentData().toInt());
     cfg.stopBits = m_stopBitsBox->currentData().toInt();
     cfg.flow = static_cast<FlowControl>(m_flowBox->currentData().toInt());
     cfg.symlinkPath = m_symlinkEdit->text().trimmed();
     cfg.directMode = m_directCheck->isChecked();
+    return cfg;
+}
+
+void ConfigPanel::applyConfig(const SerialConfig &cfg) {
+    if (!cfg.device.isEmpty()) {
+        m_deviceBox->setCurrentText(cfg.device);
+    }
+    if (cfg.baud > 0) {
+        m_baudBox->setCurrentText(QString::number(cfg.baud));
+    }
+    m_dataBitsBox->setCurrentText(QString::number(cfg.dataBits));
+    const int parityIdx = m_parityBox->findData(static_cast<int>(cfg.parity));
+    m_parityBox->setCurrentIndex(parityIdx >= 0 ? parityIdx : 0);
+    m_stopBitsBox->setCurrentText(QString::number(cfg.stopBits));
+    const int flowIdx = m_flowBox->findData(static_cast<int>(cfg.flow));
+    m_flowBox->setCurrentIndex(flowIdx >= 0 ? flowIdx : 0);
+    m_symlinkEdit->setText(cfg.symlinkPath);
+    m_directCheck->setChecked(cfg.directMode);
+}
+
+void ConfigPanel::saveSettings(QSettings &settings) const {
+    const SerialConfig cfg = currentConfig();
+    settings.setValue(QStringLiteral("device"), cfg.device);
+    settings.setValue(QStringLiteral("baud"), cfg.baud);
+    settings.setValue(QStringLiteral("dataBits"), cfg.dataBits);
+    settings.setValue(QStringLiteral("parity"), static_cast<int>(cfg.parity));
+    settings.setValue(QStringLiteral("stopBits"), cfg.stopBits);
+    settings.setValue(QStringLiteral("flow"), static_cast<int>(cfg.flow));
+    settings.setValue(QStringLiteral("symlink"), cfg.symlinkPath);
+    settings.setValue(QStringLiteral("directMode"), cfg.directMode);
+}
+
+void ConfigPanel::loadSettings(const QSettings &settings) {
+    SerialConfig cfg;
+    cfg.device = settings.value(QStringLiteral("device")).toString();
+    cfg.baud = settings.value(QStringLiteral("baud"), 115200).toInt();
+    cfg.dataBits = settings.value(QStringLiteral("dataBits"), 8).toInt();
+    cfg.parity = static_cast<Parity>(settings.value(QStringLiteral("parity"), static_cast<int>(Parity::None)).toInt());
+    cfg.stopBits = settings.value(QStringLiteral("stopBits"), 1).toInt();
+    cfg.flow = static_cast<FlowControl>(settings.value(QStringLiteral("flow"), static_cast<int>(FlowControl::None)).toInt());
+    cfg.symlinkPath = settings.value(QStringLiteral("symlink")).toString();
+    cfg.directMode = settings.value(QStringLiteral("directMode"), false).toBool();
+    applyConfig(cfg);
+}
+
+void ConfigPanel::onStartButtonClicked() {
+    if (m_isRunning) {
+        emit stopInterception();
+        return;
+    }
+
+    SerialConfig cfg = currentConfig();
+    if (cfg.baud <= 0) {
+        setStatus(QStringLiteral("<span style='color:#e57373'>Invalid baud rate: %1</span>").arg(m_baudBox->currentText()));
+        return;
+    }
 
     // Persist port in recent-ports list (cap at 10 entries) and configuration
     {

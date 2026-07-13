@@ -33,6 +33,9 @@ public:
 
     [[nodiscard]] bool isRunning() const override;
     void stopSession() override;
+    [[nodiscard]] SessionType sessionType() const override { return SessionType::Serial; }
+    void saveSettings(QSettings &settings) const override;
+    void loadSettings(const QSettings &settings) override;
 
     StatsCalculator &stats() { return m_stats; }
 

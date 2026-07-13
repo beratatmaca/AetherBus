@@ -6,7 +6,7 @@
 #include <QSignalSpy>
 
 #include <QComboBox>
-#include <QTabWidget>
+#include <QDockWidget>
 #include <QtTest/QtTest>
 
 using namespace aether;
@@ -141,17 +141,18 @@ void BusTest::guiThemeController() {
     QCOMPARE(theme.mode(), ThemeController::Mode::Light);
 }
 
+#include "gui/sessions/session_view.hpp"
+
 void BusTest::guiMainWindow() {
     MainWindow mainWin;
 
-    // Verify it contains a QTabWidget
-    auto *tabWidget = mainWin.findChild<QTabWidget *>();
-    QVERIFY(tabWidget != nullptr);
-
-    // Should have 1 tab by default (initial session tab)
-    QCOMPARE(tabWidget->count(), 1);
+    // Verify it contains SessionViews
+    auto sessions = mainWin.findChildren<SessionView *>();
+    // Should have 1 session by default (initial session tab)
+    QCOMPARE(sessions.count(), 1);
 
     // Simulate adding session
     QMetaObject::invokeMethod(&mainWin, "addNewSession");
-    QCOMPARE(tabWidget->count(), 2);
+    sessions = mainWin.findChildren<SessionView *>();
+    QCOMPARE(sessions.count(), 2);
 }

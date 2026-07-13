@@ -18,6 +18,8 @@
 #include <QPushButton>
 #include <QTimer>
 
+class QSettings;
+
 namespace aether {
 
 class EthernetSessionWidget : public SessionView {
@@ -29,6 +31,9 @@ public:
 
     [[nodiscard]] bool isRunning() const override;
     void stopSession() override;
+    [[nodiscard]] SessionType sessionType() const override { return SessionType::Ethernet; }
+    void saveSettings(QSettings &settings) const override;
+    void loadSettings(const QSettings &settings) override;
 
 private slots:
     void startCapture();

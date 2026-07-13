@@ -231,11 +231,13 @@ QTreeView::branch:closed:has-children:has-siblings {
 }
 
 /* Monospaced Byte Inspectors (Zone 2) */
-QTextEdit, QPlainTextEdit {
+QTextEdit,
+QPlainTextEdit {
     background-color: #fafafa;
     border: 1px solid #dcdcdc;
     border-radius: 4px;
-    color: #007c41; /* Darker green for readability on light BG */
+    color: #007c41;
+    /* Darker green for readability on light BG */
 }
 
 /* Scrollbars */
@@ -256,7 +258,8 @@ QScrollBar::handle:vertical:hover {
     background: #aaaaaa;
 }
 
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
     border: none;
     background: none;
 }
@@ -274,7 +277,8 @@ QScrollBar::handle:horizontal {
     border-radius: 4px;
 }
 
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
     border: none;
     background: none;
 }

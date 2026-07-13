@@ -12,6 +12,8 @@
 
 #include <cstdint>
 
+class QSettings;
+
 namespace aether {
 
 /// Which transport a session drives.
@@ -33,6 +35,18 @@ public:
 
     /// Stop the session's backend if running (used before closing the tab).
     virtual void stopSession() = 0;
+
+    /// Which transport this session drives; lets the host window persist and
+    /// restore the workspace without knowing concrete session types.
+    [[nodiscard]] virtual SessionType sessionType() const = 0;
+
+    /// Write this session's current configuration into @p settings, using keys
+    /// relative to whatever group/array index the caller has already selected.
+    virtual void saveSettings(QSettings &settings) const = 0;
+
+    /// Restore configuration previously written by @ref saveSettings. Only
+    /// pre-fills fields — never starts the underlying connection or capture.
+    virtual void loadSettings(const QSettings &settings) = 0;
 
 signals:
     /// Request the hosting tab's label be updated.

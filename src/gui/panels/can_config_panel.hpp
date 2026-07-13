@@ -9,6 +9,7 @@ class QPushButton;
 class QLabel;
 class QCheckBox;
 class QTableWidget;
+class QSettings;
 
 namespace aether {
 
@@ -26,6 +27,11 @@ public:
     void setStatus(const QString &htmlText);
     void populateInterfaces(const QStringList &ifaces);
     [[nodiscard]] QString iface() const;
+
+    /// Write the current field values to @p settings (relative keys).
+    void saveSettings(QSettings &settings) const;
+    /// Restore field values previously written by @ref saveSettings.
+    void loadSettings(const QSettings &settings);
 
 signals:
     void startCan(const CanConfig &cfg);

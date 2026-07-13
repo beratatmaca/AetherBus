@@ -8,6 +8,7 @@ class QLineEdit;
 class QPushButton;
 class QLabel;
 class QCheckBox;
+class QSettings;
 
 namespace aether {
 
@@ -21,7 +22,12 @@ public:
     void setRunningState(bool running);
     void setStatus(const QString &htmlText);
     void populateDevices(const QStringList &systemPorts, const QStringList &byIdPorts);
-    QString device() const;
+    [[nodiscard]] QString device() const;
+
+    /// Write the current field values to @p settings (relative keys).
+    void saveSettings(QSettings &settings) const;
+    /// Restore field values previously written by @ref saveSettings.
+    void loadSettings(const QSettings &settings);
 
 signals:
     void startInterception(const SerialConfig &cfg);
@@ -35,6 +41,11 @@ private slots:
     void onStartButtonClicked();
 
 private:
+    /// Snapshot the current field values (no validation, no side effects).
+    [[nodiscard]] SerialConfig currentConfig() const;
+    /// Populate fields from @p cfg. Empty/non-positive fields keep their default.
+    void applyConfig(const SerialConfig &cfg);
+
     QComboBox *m_deviceBox = nullptr;
     QComboBox *m_baudBox = nullptr;
     QComboBox *m_dataBitsBox = nullptr;

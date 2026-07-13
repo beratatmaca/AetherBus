@@ -96,6 +96,14 @@ void CanSessionWidget::stopSession() {
     }
 }
 
+void CanSessionWidget::saveSettings(QSettings &settings) const {
+    m_configPanel->saveSettings(settings);
+}
+
+void CanSessionWidget::loadSettings(const QSettings &settings) {
+    m_configPanel->loadSettings(settings);
+}
+
 void CanSessionWidget::buildUi() {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);

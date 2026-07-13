@@ -15,6 +15,7 @@
 #include <QDataStream>
 #include <QFontDatabase>
 #include <QScrollBar>
+#include <QSettings>
 
 namespace aether {
 
@@ -228,6 +229,22 @@ void EthernetSessionWidget::stopCapture() {
 void EthernetSessionWidget::rescanInterfaces() {
     m_interfaceBox->clear();
     m_interfaceBox->addItems(EthernetBackend::listInterfaces());
+}
+
+void EthernetSessionWidget::saveSettings(QSettings &settings) const {
+    settings.setValue(QStringLiteral("interface"), m_interfaceBox->currentText());
+    settings.setValue(QStringLiteral("bpfFilter"), m_filterEdit->text());
+}
+
+void EthernetSessionWidget::loadSettings(const QSettings &settings) {
+    const QString iface = settings.value(QStringLiteral("interface")).toString();
+    if (!iface.isEmpty()) {
+        if (m_interfaceBox->findText(iface) < 0) {
+            m_interfaceBox->addItem(iface);
+        }
+        m_interfaceBox->setCurrentText(iface);
+    }
+    m_filterEdit->setText(settings.value(QStringLiteral("bpfFilter")).toString());
 }
 
 void EthernetSessionWidget::onStarted(const QString &info) {

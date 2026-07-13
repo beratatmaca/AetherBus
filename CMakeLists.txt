@@ -124,8 +124,9 @@ else() # Default to Linux
     )
 endif()
 
+find_path(PCAP_INCLUDE_DIR NAMES pcap.h)
 find_library(PCAP_LIB NAMES pcap wpcap libpcap)
-if(PCAP_LIB)
+if(PCAP_INCLUDE_DIR AND PCAP_LIB)
     list(APPEND AETHER_CORE_SOURCES
         src/core/ethernet/ethernet_backend.cpp
         src/core/ethernet/ethernet_backend.hpp
@@ -134,7 +135,8 @@ endif()
 
 add_library(aether_core STATIC ${AETHER_CORE_SOURCES})
 target_link_libraries(aether_core PUBLIC Qt6::Core)
-if(PCAP_LIB)
+if(PCAP_INCLUDE_DIR AND PCAP_LIB)
+    target_include_directories(aether_core PUBLIC ${PCAP_INCLUDE_DIR})
     target_link_libraries(aether_core PUBLIC ${PCAP_LIB})
     target_compile_definitions(aether_core PUBLIC AETHER_HAVE_ETHERNET)
 endif()
@@ -149,6 +151,8 @@ target_include_directories(aether_core PUBLIC
 add_library(aether_gui STATIC
     src/gui/mainwindow.cpp
     src/gui/mainwindow.hpp
+    src/gui/dialogs/welcome_tutorial_dialog.cpp
+    src/gui/dialogs/welcome_tutorial_dialog.hpp
     src/gui/sessions/session_view.hpp
     src/gui/sessions/session_widget.cpp
     src/gui/sessions/session_widget.hpp
@@ -184,7 +188,7 @@ add_library(aether_gui STATIC
     src/gui/widgets/can_sniffer_widget.hpp
     src/gui/resources.qrc
 )
-if(PCAP_LIB)
+if(PCAP_INCLUDE_DIR AND PCAP_LIB)
     target_sources(aether_gui PRIVATE
         src/gui/sessions/ethernet_session_widget.cpp
         src/gui/sessions/ethernet_session_widget.hpp
@@ -222,7 +226,7 @@ if(BUILD_TESTING)
         tests/bus_test_gui.cpp
         tests/bus_test_can.cpp
     )
-    if(PCAP_LIB)
+    if(PCAP_INCLUDE_DIR AND PCAP_LIB)
         target_sources(bus_test PRIVATE tests/bus_test_ethernet.cpp)
     endif()
     target_link_libraries(bus_test PRIVATE aether_gui Qt6::Widgets Qt6::Core Qt6::Test)

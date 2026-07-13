@@ -145,6 +145,14 @@ void SessionWidget::stopSession() {
     }
 }
 
+void SessionWidget::saveSettings(QSettings &settings) const {
+    m_configPanel->saveSettings(settings);
+}
+
+void SessionWidget::loadSettings(const QSettings &settings) {
+    m_configPanel->loadSettings(settings);
+}
+
 void SessionWidget::buildUi() {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);

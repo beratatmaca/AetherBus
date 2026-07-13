@@ -6,6 +6,7 @@
 #include "gui/sessions/ethernet_session_widget.hpp"
 #endif
 #include "gui/common/theme_controller.hpp"
+#include "gui/dialogs/welcome_tutorial_dialog.hpp"
 #include "aether/version.h"
 
 #include <QMenuBar>
@@ -21,6 +22,9 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QStackedWidget>
+#include <QSplitter>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -30,6 +34,30 @@
 #include <QTimer>
 
 namespace aether {
+
+namespace {
+QString sessionTypeKey(SessionType type) {
+    switch (type) {
+        case SessionType::Can:
+            return QStringLiteral("can");
+        case SessionType::Ethernet:
+            return QStringLiteral("ethernet");
+        case SessionType::Serial:
+            break;
+    }
+    return QStringLiteral("serial");
+}
+
+SessionType sessionTypeFromKey(const QString &key) {
+    if (key == QStringLiteral("can")) {
+        return SessionType::Can;
+    }
+    if (key == QStringLiteral("ethernet")) {
+        return SessionType::Ethernet;
+    }
+    return SessionType::Serial;
+}
+}  // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     m_theme = new ThemeController(qApp, this);
@@ -103,7 +131,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         settings.setValue(QStringLiteral("ui/theme"), ThemeController::modeToString(mode));
     });
 
+    QMenu *windowMenu = menu->addMenu(tr("&Window"));
+    QAction *tileAct = windowMenu->addAction(tr("&Tile Workspace"));
+    connect(tileAct, &QAction::triggered, this, &MainWindow::tileWorkspace);
+    QAction *resetAct = windowMenu->addAction(tr("&Reset Layout (Stack tabs)"));
+    connect(resetAct, &QAction::triggered, this, &MainWindow::resetWorkspaceLayout);
+
     QMenu *helpMenu = menu->addMenu(tr("&Help"));
+    QAction *tutorialAct = helpMenu->addAction(tr("Welcome &Tutorial…"));
+    connect(tutorialAct, &QAction::triggered, this, [this]() {
+        WelcomeTutorialDialog dlg(this);
+        dlg.exec();
+    });
     QAction *aboutAct = helpMenu->addAction(tr("&About AetherBus…"));
     connect(aboutAct, &QAction::triggered, this, [this]() {
         auto *dlg = new QDialog(this);
@@ -186,38 +225,129 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         preferredSize.setHeight(qMin(preferredSize.height(), qMax(minHeight, available.height() - 80)));
     }
     setMinimumSize(minWidth, minHeight);
-    resize(preferredSize);
+    const QByteArray savedGeometry = settings.value(QStringLiteral("window/geometry")).toByteArray();
+    if (savedGeometry.isEmpty() || !restoreGeometry(savedGeometry)) {
+        resize(preferredSize);
+    }
 
-    // Add initial session tab
-    addNewSession();
+    // Reopen whatever sessions were open last time (idle, not connected), or
+    // start with one default Serial session on first run.
+    restoreWorkspaceState();
+
+    // Trigger welcome tutorial if requested
+    QTimer::singleShot(100, this, [this]() {
+        QSettings settings;
+        if (settings.value(QStringLiteral("ui/show_tutorial"), true).toBool()) {
+            WelcomeTutorialDialog dlg(this);
+            dlg.exec();
+        }
+    });
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    for (const auto &session : m_sessions) {
+        if (session) {
+            session->disconnect(this);
+        }
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    saveWorkspaceState();
+    QMainWindow::closeEvent(event);
+}
+
+void MainWindow::saveWorkspaceState() {
+    m_sessions.removeAll(nullptr);
+    QSettings settings;
+
+    settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("window/tiledMode"), m_tiledMode);
+    settings.setValue(QStringLiteral("window/activeIndex"), m_tabWidget ? m_tabWidget->currentIndex() : -1);
+
+    settings.remove(QStringLiteral("sessions"));
+    settings.beginWriteArray(QStringLiteral("sessions"));
+    int index = 0;
+    for (const auto &session : m_sessions) {
+        if (!session) {
+            continue;
+        }
+        settings.setArrayIndex(index++);
+        settings.setValue(QStringLiteral("type"), sessionTypeKey(session->sessionType()));
+        session->saveSettings(settings);
+    }
+    settings.endArray();
+}
+
+void MainWindow::restoreWorkspaceState() {
+    QSettings settings;
+    m_tiledMode = settings.value(QStringLiteral("window/tiledMode"), false).toBool();
+
+    const int count = settings.beginReadArray(QStringLiteral("sessions"));
+    for (int i = 0; i < count; ++i) {
+        settings.setArrayIndex(i);
+        const SessionType type = sessionTypeFromKey(settings.value(QStringLiteral("type")).toString());
+        addSession(type);
+        if (SessionView *session = m_sessions.isEmpty() ? nullptr : m_sessions.last()) {
+            session->loadSettings(settings);
+        }
+    }
+    settings.endArray();
+
+    if (count == 0) {
+        addNewSession();
+        return;
+    }
+
+    const int activeIndex = settings.value(QStringLiteral("window/activeIndex"), 0).toInt();
+    if (!m_tiledMode && m_tabWidget && activeIndex >= 0 && activeIndex < m_tabWidget->count()) {
+        m_tabWidget->setCurrentIndex(activeIndex);
+    }
+}
 
 void MainWindow::buildUi() {
+    m_stack = new QStackedWidget(this);
+
+    m_dashboard = new QWidget(this);
+    auto *dashLayout = new QVBoxLayout(m_dashboard);
+    dashLayout->setAlignment(Qt::AlignCenter);
+    dashLayout->setContentsMargins(40, 40, 40, 40);
+    dashLayout->setSpacing(20);
+
+    auto *logoLabel = new QLabel(m_dashboard);
+    QPixmap logoPix(QStringLiteral(":/aetherbus/icon.png"));
+    if (!logoPix.isNull()) {
+        logoLabel->setPixmap(logoPix.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
+    logoLabel->setAlignment(Qt::AlignCenter);
+    dashLayout->addWidget(logoLabel);
+
+    auto *welcomeLabel = new QLabel(QStringLiteral("<b style='font-size:16pt'>AetherBus Workspace</b>"), m_dashboard);
+    welcomeLabel->setAlignment(Qt::AlignCenter);
+    dashLayout->addWidget(welcomeLabel);
+
+    auto *infoLabel = new QLabel(
+        tr("Open multiple Serial, CAN, or Ethernet sessions side-by-side.\nUse the Window menu to Tile or Reset the workspace layout."),
+        m_dashboard);
+    infoLabel->setAlignment(Qt::AlignCenter);
+    infoLabel->setStyleSheet(QStringLiteral("color:#888; font-size:11pt;"));
+    dashLayout->addWidget(infoLabel);
+
+    m_stack->addWidget(m_dashboard);
+
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setTabsClosable(true);
-    m_tabWidget->setMovable(true);
-    connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, &MainWindow::closeSessionTab);
+    m_tabWidget->setDocumentMode(true);
+    connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
+    m_stack->addWidget(m_tabWidget);
 
-    // An add button in the corner of the tab bar, offering a session type.
-    auto *addTabButton = new QPushButton(QStringLiteral("+"), this);
-    addTabButton->setToolTip(tr("Open new session"));
-    addTabButton->setFlat(true);
-    addTabButton->setFixedWidth(30);
-    auto *addMenu = new QMenu(addTabButton);
-    addMenu->addAction(tr("Serial Session"), this, &MainWindow::addNewSession);
-    addMenu->addAction(tr("CAN Session"), this, &MainWindow::addNewCanSession);
-#ifdef AETHER_HAVE_ETHERNET
-    addMenu->addAction(tr("Ethernet Session"), this, &MainWindow::addNewEthernetSession);
-#endif
-    addTabButton->setMenu(addMenu);
-    m_tabWidget->setCornerWidget(addTabButton, Qt::TopRightCorner);
+    m_splitter = new QSplitter(Qt::Horizontal, this);
+    m_splitter->setChildrenCollapsible(false);
+    m_stack->addWidget(m_splitter);
 
-    setCentralWidget(m_tabWidget);
+    setCentralWidget(m_stack);
+    m_stack->setCurrentWidget(m_dashboard);
 
-    // Always-visible status bar: mirrors the active session's status/errors so a
-    // transient message can't be missed in the sidebar.
     m_statusLabel = new QLabel(this);
     m_statusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     statusBar()->addWidget(m_statusLabel, 1);
@@ -225,16 +355,6 @@ void MainWindow::buildUi() {
     m_statusClearTimer = new QTimer(this);
     m_statusClearTimer->setSingleShot(true);
     connect(m_statusClearTimer, &QTimer::timeout, this, [this] { showStatus(QString(), false); });
-
-    // When the active tab changes, restore that session's last message.
-    connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int) {
-        const auto it = m_sessionStatus.constFind(m_tabWidget->currentWidget());
-        if (it != m_sessionStatus.constEnd()) {
-            showStatus(it->text, it->isError);
-        } else {
-            showStatus(QString(), false);
-        }
-    });
 }
 
 void MainWindow::showStatus(const QString &text, bool isError) {
@@ -272,7 +392,8 @@ void MainWindow::addNewEthernetSession() {
 void MainWindow::addSession(SessionType type) {
     SessionView *session = nullptr;
     QString title;
-    const int count = m_tabWidget->count() + 1;
+    m_sessions.removeAll(nullptr);
+    const int count = static_cast<int>(m_sessions.size()) + 1;
     if (type == SessionType::Can) {
         session = new CanSessionWidget(this);
         title = QStringLiteral("CAN Session %1").arg(count);
@@ -286,57 +407,169 @@ void MainWindow::addSession(SessionType type) {
         title = QStringLiteral("Serial Session %1").arg(count);
     }
 
-    const int index = m_tabWidget->addTab(session, title);
+    session->setObjectName(title);
+    m_sessions.append(session);
 
     connect(session, &SessionView::sessionTitleChanged, this, [this, session](const QString &newTitle) {
-        const int idx = m_tabWidget->indexOf(session);
+        int idx = m_tabWidget->indexOf(session);
         if (idx != -1) {
             m_tabWidget->setTabText(idx, newTitle);
         }
+        session->setObjectName(newTitle);
     });
 
     connect(session, &SessionView::statusMessage, this, [this, session](const QString &text, bool isError) {
         m_sessionStatus.insert(session, {text, isError});
-        if (m_tabWidget->currentWidget() == session) {
-            showStatus(text, isError);
+        int idx = m_tabWidget->indexOf(session);
+        QString prefix = (idx != -1) ? m_tabWidget->tabText(idx) : QString();
+        showStatus(prefix.isEmpty() ? text : QStringLiteral("[%1] %2").arg(prefix, text), isError);
+    });
+
+    connect(session, &QObject::destroyed, this, [this, session]() {
+        m_sessionStatus.remove(session);
+        m_sessions.removeAll(session);
+        if (m_stack && m_dashboard && m_sessions.isEmpty()) {
+            m_stack->setCurrentWidget(m_dashboard);
         }
     });
 
-    m_tabWidget->setCurrentIndex(index);
-}
+    m_tabWidget->addTab(session, title);
 
-void MainWindow::closeSessionTab(int index) {
-    if (index < 0 || index >= m_tabWidget->count()) {
-        return;
+    if (m_tiledMode) {
+        tileWorkspace();
+    } else {
+        m_stack->setCurrentWidget(m_tabWidget);
+        m_tabWidget->setCurrentWidget(session);
     }
-
-    auto *session = qobject_cast<SessionView *>(m_tabWidget->widget(index));
-    if (!session) {
-        return;
-    }
-
-    if (session->isRunning()) {
-        auto response = QMessageBox::warning(this, tr("Session Running"),
-                                             tr("This session is active. Do you want to stop the connection and close the tab?"),
-                                             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-
-        if (response == QMessageBox::No) {
-            return;
-        }
-        session->stopSession();
-    }
-
-    m_sessionStatus.remove(session);
-    m_tabWidget->removeTab(index);
-    session->deleteLater();
 }
 
 void MainWindow::closeCurrentSession() {
-    closeSessionTab(m_tabWidget->currentIndex());
+    m_sessions.removeAll(nullptr);
+    if (m_tiledMode) {
+        for (const auto &session : m_sessions) {
+            if (session && (session->isActiveWindow() || session->hasFocus())) {
+                session->close();
+                return;
+            }
+        }
+        if (!m_sessions.isEmpty() && m_sessions.last()) {
+            m_sessions.last()->close();
+        }
+    } else {
+        int idx = m_tabWidget->currentIndex();
+        if (idx != -1) {
+            QWidget *w = m_tabWidget->widget(idx);
+            if (w) {
+                w->close();
+            }
+        }
+    }
 }
 
 void MainWindow::showAboutQt() {
     QApplication::aboutQt();
+}
+
+QSplitter *MainWindow::buildGridSplitter(const QList<QPointer<SessionView>> &sessions) {
+    const int n = static_cast<int>(sessions.size());
+
+    int cols = 1;
+    while (cols * cols < n) {
+        ++cols;
+    }
+
+    const int base = n / cols;
+    const int extra = n % cols;
+
+    auto *root = new QSplitter(Qt::Horizontal);
+    root->setChildrenCollapsible(false);
+
+    int idx = 0;
+    for (int c = 0; c < cols && idx < n; ++c) {
+        const int rowsInCol = base + (c < extra ? 1 : 0);
+        if (rowsInCol <= 1) {
+            SessionView *session = sessions[idx++];
+            session->show();
+            root->addWidget(session);
+            continue;
+        }
+        auto *column = new QSplitter(Qt::Vertical, root);
+        column->setChildrenCollapsible(false);
+        for (int r = 0; r < rowsInCol && idx < n; ++r) {
+            SessionView *session = sessions[idx++];
+            session->show();
+            column->addWidget(session);
+        }
+        for (int i = 0; i < column->count(); ++i) {
+            column->setStretchFactor(i, 1);
+        }
+        root->addWidget(column);
+    }
+
+    for (int i = 0; i < root->count(); ++i) {
+        root->setStretchFactor(i, 1);
+    }
+    return root;
+}
+
+void MainWindow::tileWorkspace() {
+    m_sessions.removeAll(nullptr);
+    if (m_sessions.isEmpty()) {
+        return;
+    }
+    m_tiledMode = true;
+
+    for (const auto &session : m_sessions) {
+        if (session) {
+            session->setParent(nullptr);
+        }
+    }
+
+    while (m_tabWidget->count() > 0) {
+        m_tabWidget->removeTab(0);
+    }
+
+    m_stack->removeWidget(m_splitter);
+    delete m_splitter;
+
+    m_splitter = buildGridSplitter(m_sessions);
+    m_stack->addWidget(m_splitter);
+    m_stack->setCurrentWidget(m_splitter);
+}
+
+void MainWindow::resetWorkspaceLayout() {
+    m_sessions.removeAll(nullptr);
+    m_tiledMode = false;
+
+    for (const auto &session : m_sessions) {
+        if (session) {
+            session->setParent(nullptr);
+        }
+    }
+
+    m_stack->removeWidget(m_splitter);
+    delete m_splitter;
+    m_splitter = new QSplitter(Qt::Horizontal, this);
+    m_splitter->setChildrenCollapsible(false);
+    m_stack->addWidget(m_splitter);
+
+    for (const auto &session : m_sessions) {
+        if (session) {
+            m_tabWidget->addTab(session, session->objectName().isEmpty() ? QStringLiteral("Session") : session->objectName());
+            session->show();
+        }
+    }
+
+    m_stack->setCurrentWidget(m_tabWidget);
+}
+
+void MainWindow::onTabCloseRequested(int index) {
+    if (index >= 0 && index < m_tabWidget->count()) {
+        QWidget *w = m_tabWidget->widget(index);
+        if (w) {
+            w->close();
+        }
+    }
 }
 
 }  // namespace aether

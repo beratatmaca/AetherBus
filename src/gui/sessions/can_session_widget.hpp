@@ -35,6 +35,9 @@ public:
 
     [[nodiscard]] bool isRunning() const override;
     void stopSession() override;
+    [[nodiscard]] SessionType sessionType() const override { return SessionType::Can; }
+    void saveSettings(QSettings &settings) const override;
+    void loadSettings(const QSettings &settings) override;
 
 private slots:
     void startCapture(const CanConfig &cfg);

@@ -231,6 +231,27 @@ bool CanConfigPanel::buildConfig(CanConfig &out) {
     return true;
 }
 
+void CanConfigPanel::saveSettings(QSettings &settings) const {
+    settings.setValue(QStringLiteral("iface"), m_ifaceBox->currentText().trimmed());
+    settings.setValue(QStringLiteral("fdMode"), m_fdCheck->isChecked());
+    settings.setValue(QStringLiteral("loopback"), m_loopbackCheck->isChecked());
+    settings.setValue(QStringLiteral("receiveOwn"), m_recvOwnCheck->isChecked());
+    settings.setValue(QStringLiteral("errorFrames"), m_errorCheck->isChecked());
+    settings.setValue(QStringLiteral("filters"), saveFiltersToString());
+}
+
+void CanConfigPanel::loadSettings(const QSettings &settings) {
+    const QString iface = settings.value(QStringLiteral("iface")).toString();
+    if (!iface.isEmpty()) {
+        m_ifaceBox->setCurrentText(iface);
+    }
+    m_fdCheck->setChecked(settings.value(QStringLiteral("fdMode"), true).toBool());
+    m_loopbackCheck->setChecked(settings.value(QStringLiteral("loopback"), true).toBool());
+    m_recvOwnCheck->setChecked(settings.value(QStringLiteral("receiveOwn"), false).toBool());
+    m_errorCheck->setChecked(settings.value(QStringLiteral("errorFrames"), true).toBool());
+    loadFiltersFromString(settings.value(QStringLiteral("filters")).toString());
+}
+
 void CanConfigPanel::onStartButtonClicked() {
     if (m_isRunning) {
         emit stopCan();
