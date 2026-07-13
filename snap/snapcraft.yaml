@@ -3,7 +3,7 @@ title: AetherBus
 base: core24
 adopt-info: aetherbus
 icon: snap/gui/icon.png
-summary: Unified serial port utility, SocketCAN analyzer, and Ethernet network traffic viewer
+summary: Unified serial port utility, SocketCAN analyzer, and Ethernet traffic viewer
 description: |
   AetherBus is a lightweight, open-source diagnostic application combining a serial-port utility, SocketCAN analyzer, and Ethernet network traffic viewer into a unified Linux dashboard.
 
