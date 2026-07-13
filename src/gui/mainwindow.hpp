@@ -10,6 +10,7 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QAction>
+#include <QPointer>
 
 class QLabel;
 class QTimer;
