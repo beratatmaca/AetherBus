@@ -65,7 +65,7 @@ private slots:
     // Ethernet Tests (backend + GUI; only built where libpcap is available)
     void ethernetBackendAndParsing();
     void ethernetPacketConstructorIcmp();
-    void ethernetPacketConstructorTcpWarns();
+    void ethernetPacketConstructorTcp();
     void ethernetPacketConstructorInvalidMacBlocksSend();
     void ethernetPacketModelBasics();
     void ethernetPacketModelEvictsOldest();

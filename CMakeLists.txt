@@ -124,9 +124,7 @@ else() # Default to Linux
     )
 endif()
 
-if(NOT WIN32)
-    find_library(PCAP_LIB pcap)
-endif()
+find_library(PCAP_LIB NAMES pcap wpcap libpcap)
 if(PCAP_LIB)
     list(APPEND AETHER_CORE_SOURCES
         src/core/ethernet/ethernet_backend.cpp

@@ -107,7 +107,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }}
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ needs.version.outputs.build }} -DAETHER_GIT_SHA=${{ needs.version.outputs.sha }} -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Compile Code (All Platforms)
         run: |

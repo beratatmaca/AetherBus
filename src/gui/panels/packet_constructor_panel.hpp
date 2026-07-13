@@ -36,7 +36,7 @@ private slots:
 private:
     void buildUi();
     QByteArray buildPacket(bool *ok = nullptr);
-    void warnIfTcpUnsupported();
+    void updateProtocolFieldsVisibility();
 
     void loadMacros();
     void saveMacros();
@@ -53,8 +53,26 @@ private:
     QSpinBox *m_ttlSpin = nullptr;
     QComboBox *m_ipProtoBox = nullptr;
 
+    QLabel *m_srcPortLabel = nullptr;
     QSpinBox *m_srcPortSpin = nullptr;
+    QLabel *m_destPortLabel = nullptr;
     QSpinBox *m_destPortSpin = nullptr;
+
+    QLabel *m_tcpSeqLabel = nullptr;
+    QLineEdit *m_tcpSeqEdit = nullptr;
+    QLabel *m_tcpAckLabel = nullptr;
+    QLineEdit *m_tcpAckEdit = nullptr;
+    QLabel *m_tcpWindowLabel = nullptr;
+    QSpinBox *m_tcpWindowSpin = nullptr;
+    QLabel *m_tcpFlagsLabel = nullptr;
+    QWidget *m_tcpFlagsWidget = nullptr;
+    QCheckBox *m_synCheck = nullptr;
+    QCheckBox *m_ackCheck = nullptr;
+    QCheckBox *m_finCheck = nullptr;
+    QCheckBox *m_rstCheck = nullptr;
+    QCheckBox *m_pshCheck = nullptr;
+    QCheckBox *m_urgCheck = nullptr;
+
     QLineEdit *m_payloadEdit = nullptr;
     QComboBox *m_payloadFormatBox = nullptr;
 
@@ -64,7 +82,6 @@ private:
     QTimer *m_timer = nullptr;
 
     QPushButton *m_playPcapBtn = nullptr;
-    bool m_tcpWarningShown = false;
 
     /// A saved, ready-to-send raw packet, quick-sent with a single click.
     struct Macro {

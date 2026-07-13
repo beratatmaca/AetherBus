@@ -99,7 +99,7 @@ void BusTest::ethernetPacketConstructorIcmp() {
     QCOMPARE(static_cast<uint16_t>(~sum), static_cast<uint16_t>(0));
 }
 
-void BusTest::ethernetPacketConstructorTcpWarns() {
+void BusTest::ethernetPacketConstructorTcp() {
     PacketConstructorPanel constructor;
     auto *protoBox = constructor.findChild<QComboBox *>(QStringLiteral("protocolCombo"));
     QVERIFY(protoBox != nullptr);
@@ -107,19 +107,18 @@ void BusTest::ethernetPacketConstructorTcpWarns() {
 
     QSignalSpy spy(&constructor, &PacketConstructorPanel::packetReady);
 
-    // First send with TCP selected shows a one-time warning modal.
-    dismissNextModal();
     QMetaObject::invokeMethod(&constructor, "onSendClicked");
     QCOMPARE(spy.count(), 1);
 
     const QByteArray pkt = spy.first().at(0).toByteArray();
     QCOMPARE(static_cast<uint8_t>(pkt[23]), 6);  // IP protocol byte claims TCP
-    QCOMPARE(pkt.size(), 14 + 20 + 4);           // ...but no transport header is appended
+    QCOMPARE(pkt.size(), 14 + 20 + 20 + 4);      // Eth (14) + IP (20) + TCP (20) + Payload (4)
 
-    // Second send must NOT show another modal (warning is once-per-session);
-    // if it did, this call would hang since no dismiss timer is armed.
-    QMetaObject::invokeMethod(&constructor, "onSendClicked");
-    QCOMPARE(spy.count(), 2);
+    // Verify TCP source and destination ports
+    uint16_t srcPort = (static_cast<uint8_t>(pkt[34]) << 8) | static_cast<uint8_t>(pkt[35]);
+    uint16_t destPort = (static_cast<uint8_t>(pkt[36]) << 8) | static_cast<uint8_t>(pkt[37]);
+    QCOMPARE(srcPort, 1234);
+    QCOMPARE(destPort, 9999);
 }
 
 void BusTest::ethernetPacketConstructorInvalidMacBlocksSend() {

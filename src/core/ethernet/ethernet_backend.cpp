@@ -22,7 +22,7 @@ EthernetBackend::~EthernetBackend() {
 bool EthernetBackend::open(const EthernetConfig &config) {
     close();
 
-    std::array<char, PCAP_ERRBUF_SIZE> errbuf;
+    std::array<char, PCAP_ERRBUF_SIZE> errbuf{};
     m_interfaceName = config.interfaceName;
 
     // Open interface in live capture mode
@@ -33,7 +33,7 @@ bool EthernetBackend::open(const EthernetConfig &config) {
                                   errbuf.data());
 
     if (!m_pcapHandle) {
-        emit errorOccurred(tr("pcap_open_live failed: %1").arg(QString::fromLocal8Bit(errbuf)));
+        emit errorOccurred(tr("pcap_open_live failed: %1").arg(QString::fromLocal8Bit(errbuf.data())));
         return false;
     }
 

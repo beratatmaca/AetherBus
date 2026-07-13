@@ -102,17 +102,62 @@ void PacketConstructorPanel::buildUi() {
     grid->addWidget(m_ipProtoBox, 2, 3);
 
     // Layer 4
-    grid->addWidget(new QLabel(tr("Src Port:")), 3, 0);
+    m_srcPortLabel = new QLabel(tr("Src Port:"), this);
+    grid->addWidget(m_srcPortLabel, 3, 0);
     m_srcPortSpin = new QSpinBox(this);
     m_srcPortSpin->setRange(1, 65535);
     m_srcPortSpin->setValue(1234);
     grid->addWidget(m_srcPortSpin, 3, 1);
 
-    grid->addWidget(new QLabel(tr("Dest Port:")), 3, 2);
+    m_destPortLabel = new QLabel(tr("Dest Port:"), this);
+    grid->addWidget(m_destPortLabel, 3, 2);
     m_destPortSpin = new QSpinBox(this);
     m_destPortSpin->setRange(1, 65535);
     m_destPortSpin->setValue(9999);
     grid->addWidget(m_destPortSpin, 3, 3);
+
+    // TCP Options
+    m_tcpSeqLabel = new QLabel(tr("TCP Seq:"), this);
+    grid->addWidget(m_tcpSeqLabel, 4, 0);
+    m_tcpSeqEdit = new QLineEdit(QStringLiteral("0"), this);
+    m_tcpSeqEdit->setValidator(new QDoubleValidator(0.0, 4294967295.0, 0, this));  // Allow full 32-bit range representation
+    grid->addWidget(m_tcpSeqEdit, 4, 1);
+
+    m_tcpAckLabel = new QLabel(tr("TCP Ack:"), this);
+    grid->addWidget(m_tcpAckLabel, 4, 2);
+    m_tcpAckEdit = new QLineEdit(QStringLiteral("0"), this);
+    m_tcpAckEdit->setValidator(new QDoubleValidator(0.0, 4294967295.0, 0, this));
+    grid->addWidget(m_tcpAckEdit, 4, 3);
+
+    m_tcpWindowLabel = new QLabel(tr("TCP Window:"), this);
+    grid->addWidget(m_tcpWindowLabel, 5, 0);
+    m_tcpWindowSpin = new QSpinBox(this);
+    m_tcpWindowSpin->setRange(0, 65535);
+    m_tcpWindowSpin->setValue(64240);
+    grid->addWidget(m_tcpWindowSpin, 5, 1);
+
+    m_tcpFlagsLabel = new QLabel(tr("TCP Flags:"), this);
+    grid->addWidget(m_tcpFlagsLabel, 5, 2);
+
+    m_tcpFlagsWidget = new QWidget(this);
+    auto *flagsLayout = new QHBoxLayout(m_tcpFlagsWidget);
+    flagsLayout->setContentsMargins(0, 0, 0, 0);
+    flagsLayout->setSpacing(4);
+
+    m_synCheck = new QCheckBox(tr("SYN"), m_tcpFlagsWidget);
+    m_ackCheck = new QCheckBox(tr("ACK"), m_tcpFlagsWidget);
+    m_finCheck = new QCheckBox(tr("FIN"), m_tcpFlagsWidget);
+    m_rstCheck = new QCheckBox(tr("RST"), m_tcpFlagsWidget);
+    m_pshCheck = new QCheckBox(tr("PSH"), m_tcpFlagsWidget);
+    m_urgCheck = new QCheckBox(tr("URG"), m_tcpFlagsWidget);
+
+    flagsLayout->addWidget(m_synCheck);
+    flagsLayout->addWidget(m_ackCheck);
+    flagsLayout->addWidget(m_finCheck);
+    flagsLayout->addWidget(m_rstCheck);
+    flagsLayout->addWidget(m_pshCheck);
+    flagsLayout->addWidget(m_urgCheck);
+    grid->addWidget(m_tcpFlagsWidget, 5, 3);
 
     layout->addLayout(grid);
 
@@ -181,6 +226,10 @@ void PacketConstructorPanel::buildUi() {
     txLayout->addWidget(m_playPcapBtn);
 
     layout->addLayout(txLayout);
+
+    connect(m_ipProtoBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &PacketConstructorPanel::updateProtocolFieldsVisibility);
+    updateProtocolFieldsVisibility();
 }
 
 QByteArray PacketConstructorPanel::buildPacket(bool *ok) {
@@ -243,6 +292,82 @@ QByteArray PacketConstructorPanel::buildPacket(bool *ok) {
         icmp[3] = static_cast<char>(icmpCsum & 0xFF);
 
         ipPayload.append(icmp);
+    } else if (proto == 6) {  // TCP
+        QByteArray tcp;
+        auto srcPort = static_cast<uint16_t>(m_srcPortSpin->value());
+        auto destPort = static_cast<uint16_t>(m_destPortSpin->value());
+
+        uint32_t seq = static_cast<uint32_t>(m_tcpSeqEdit->text().toDouble());
+        uint32_t ack = static_cast<uint32_t>(m_tcpAckEdit->text().toDouble());
+
+        uint8_t dataOffset = 5 << 4;
+        uint8_t flags = 0;
+        if (m_synCheck->isChecked())
+            flags |= 0x02;
+        if (m_ackCheck->isChecked())
+            flags |= 0x10;
+        if (m_finCheck->isChecked())
+            flags |= 0x01;
+        if (m_rstCheck->isChecked())
+            flags |= 0x04;
+        if (m_pshCheck->isChecked())
+            flags |= 0x08;
+        if (m_urgCheck->isChecked())
+            flags |= 0x20;
+
+        uint16_t window = static_cast<uint16_t>(m_tcpWindowSpin->value());
+
+        tcp.append(static_cast<char>(srcPort >> 8));
+        tcp.append(static_cast<char>(srcPort & 0xFF));
+        tcp.append(static_cast<char>(destPort >> 8));
+        tcp.append(static_cast<char>(destPort & 0xFF));
+
+        tcp.append(static_cast<char>(seq >> 24));
+        tcp.append(static_cast<char>(seq >> 16));
+        tcp.append(static_cast<char>(seq >> 8));
+        tcp.append(static_cast<char>(seq & 0xFF));
+
+        tcp.append(static_cast<char>(ack >> 24));
+        tcp.append(static_cast<char>(ack >> 16));
+        tcp.append(static_cast<char>(ack >> 8));
+        tcp.append(static_cast<char>(ack & 0xFF));
+
+        tcp.append(static_cast<char>(dataOffset));
+        tcp.append(static_cast<char>(flags));
+
+        tcp.append(static_cast<char>(window >> 8));
+        tcp.append(static_cast<char>(window & 0xFF));
+
+        tcp.append(static_cast<char>(0x00));
+        tcp.append(static_cast<char>(0x00));
+
+        tcp.append(static_cast<char>(0x00));
+        tcp.append(static_cast<char>(0x00));
+
+        tcp.append(rawPayload);
+
+        // Pseudo-Header
+        QByteArray pseudoHeader;
+        QHostAddress srcAddr(m_srcIpEdit->text());
+        QHostAddress destAddr(m_destIpEdit->text());
+        uint32_t srcIp = qToBigEndian(srcAddr.toIPv4Address());
+        uint32_t destIp = qToBigEndian(destAddr.toIPv4Address());
+
+        pseudoHeader.append(reinterpret_cast<const char *>(&srcIp), 4);
+        pseudoHeader.append(reinterpret_cast<const char *>(&destIp), 4);
+        pseudoHeader.append(static_cast<char>(0x00));
+        pseudoHeader.append(static_cast<char>(0x06));
+        auto tcpLen = static_cast<uint16_t>(tcp.size());
+        pseudoHeader.append(static_cast<char>(tcpLen >> 8));
+        pseudoHeader.append(static_cast<char>(tcpLen & 0xFF));
+
+        QByteArray checksumBuffer = pseudoHeader + tcp;
+        uint16_t tcpCsum = calculateIpChecksum(reinterpret_cast<const uint8_t *>(checksumBuffer.constData()), checksumBuffer.size());
+
+        tcp[16] = static_cast<char>(tcpCsum >> 8);
+        tcp[17] = static_cast<char>(tcpCsum & 0xFF);
+
+        ipPayload.append(tcp);
     } else {
         ipPayload.append(rawPayload);
     }
@@ -280,19 +405,27 @@ QByteArray PacketConstructorPanel::buildPacket(bool *ok) {
     return packet;
 }
 
-void PacketConstructorPanel::warnIfTcpUnsupported() {
-    if (m_tcpWarningShown || m_ipProtoBox->currentData().toInt() != 6) {
-        return;
-    }
-    m_tcpWarningShown = true;
-    QMessageBox::warning(this, tr("TCP Not Supported"),
-                         tr("TCP segment construction (sequence number, flags, checksum) isn't implemented yet — "
-                            "the packet will be sent with the IP protocol byte set to TCP but no TCP header, which "
-                            "most stacks will reject. Select UDP or ICMP for a valid packet. (Shown once per session.)"));
+void PacketConstructorPanel::updateProtocolFieldsVisibility() {
+    int proto = m_ipProtoBox->currentData().toInt();
+    bool isIcmp = (proto == 1);
+    bool isTcp = (proto == 6);
+
+    m_srcPortLabel->setVisible(!isIcmp);
+    m_srcPortSpin->setVisible(!isIcmp);
+    m_destPortLabel->setVisible(!isIcmp);
+    m_destPortSpin->setVisible(!isIcmp);
+
+    m_tcpSeqLabel->setVisible(isTcp);
+    m_tcpSeqEdit->setVisible(isTcp);
+    m_tcpAckLabel->setVisible(isTcp);
+    m_tcpAckEdit->setVisible(isTcp);
+    m_tcpWindowLabel->setVisible(isTcp);
+    m_tcpWindowSpin->setVisible(isTcp);
+    m_tcpFlagsLabel->setVisible(isTcp);
+    m_tcpFlagsWidget->setVisible(isTcp);
 }
 
 void PacketConstructorPanel::onSendClicked() {
-    warnIfTcpUnsupported();
     bool ok = true;
     QByteArray pkt = buildPacket(&ok);
     if (!ok) {
@@ -304,7 +437,6 @@ void PacketConstructorPanel::onSendClicked() {
 
 void PacketConstructorPanel::onPeriodicToggled(bool checked) {
     if (checked) {
-        warnIfTcpUnsupported();
         m_timer->start(m_intervalSpin->value());
         m_sendBtn->setEnabled(false);
     } else {
