@@ -530,7 +530,7 @@ QWidget *MainWindow::wrapForTile(SessionView *session) {
     return container;
 }
 
-QSplitter *MainWindow::buildGridSplitter(const QList<QPointer<SessionView>> &sessions) {
+QSplitter *MainWindow::buildGridSplitter(const QList<SessionView *> &sessions) {
     const int n = static_cast<int>(sessions.size());
 
     int cols = 1;

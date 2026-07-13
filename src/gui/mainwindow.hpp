@@ -60,7 +60,7 @@ private:
 
     /// Arrange sessions into a balanced grid of nested splitters
     /// (cols = ceil(sqrt(n)), extra rows assigned to the first columns).
-    QSplitter *buildGridSplitter(const QList<QPointer<SessionView>> &sessions);
+    QSplitter *buildGridSplitter(const QList<SessionView *> &sessions);
 
     /// Wrap a session in a thin header (title + close button) for tiled mode,
     /// where there's no tab bar to provide a close affordance otherwise.
@@ -80,7 +80,7 @@ private:
     QPointer<QWidget> m_dashboard;
     QPointer<QTabWidget> m_tabWidget;
     QPointer<QSplitter> m_splitter;
-    QList<QPointer<SessionView>> m_sessions;
+    QList<SessionView *> m_sessions;
     bool m_tiledMode = false;
 
     ThemeController *m_theme = nullptr;
