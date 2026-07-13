@@ -8,9 +8,9 @@
 [![Qt 6](https://img.shields.io/badge/Qt-6-green.svg?logo=qt)](https://www.qt.io/)
 [![aetherbus](https://snapcraft.io/aetherbus/badge.svg)](https://snapcraft.io/aetherbus)
 
-AetherBus is a modern, lightweight, open-source serial-port interceptor, protocol sniffer, SocketCAN bus analyzer, and Ethernet packet sniffer/crafter for Linux, macOS, and Windows.
+AetherBus is a modern, lightweight, open-source serial-port utility, SocketCAN bus analyzer, and Ethernet network traffic viewer/generator for Linux, macOS, and Windows.
 
-Written in C++17 and powered by the Qt 6 framework, it transparently proxies a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus captures, decodes, and lets you inject every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID sniffer table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. A third session type adds a Wireshark-style Ethernet/IP sniffer: live `libpcap` capture with BPF filters, a packet list / protocol tree / hex dump layout, and a packet constructor for crafting and replaying UDP/ICMP traffic. Think `interceptty` wired to a diagnostic console, built for high-baud streams without dropping frames or stalling the UI.
+Written in C++17 and powered by the Qt 6 framework, it bridges a physical UART through a virtual port — a kernel pseudo-terminal on Linux/macOS, or a named pipe on Windows — letting a target application keep talking to the device while AetherBus monitors, decodes, and lets you transmit every byte in real time. It records to Wireshark-compatible pcap, replays captures offline, mirrors live line-setting changes onto the hardware, and reports throughput and timing statistics. On Linux, an independent SocketCAN session type adds a `candump`/`cansend`-equivalent CAN bus analyzer — a live per-ID monitor table, structured filters, CAN-FD, and DBC-driven signal decoding — in its own tab alongside serial sessions. A third session type adds a Wireshark-style Ethernet network traffic viewer: live `libpcap` capture with BPF filters, a packet list / protocol tree / hex dump layout, and a packet constructor for crafting and replaying UDP/ICMP traffic. Built for high-baud streams without dropping frames or stalling the UI.
 
 ## Previews
 
@@ -27,6 +27,39 @@ Written in C++17 and powered by the Qt 6 framework, it transparently proxies a p
   <img src="assets/serial_session_light.jpg" alt="Serial Interceptor Light Theme" width="49%">
   <img src="assets/socketcan_session_light.jpg" alt="SocketCAN Analyzer Light Theme" width="49%">
 </p>
+
+## ⏱️ 3-Minute Quick Start
+
+### 1. Install AetherBus
+
+Get up and running immediately via the official snap package or precompiled releases:
+
+* **Linux (Snap)**:
+
+  ```bash
+  sudo snap install aetherbus
+  sudo snap connect aetherbus:serial-port
+  sudo snap connect aetherbus:raw-usb
+  sudo snap connect aetherbus:network-control
+  sudo snap connect aetherbus:network-observe
+  ```
+
+* **Linux (Debian/Ubuntu)**: Download the `.deb` from [Releases](https://github.com/beratatmaca/AetherBus/releases).
+* **macOS**: Download the `.dmg` from [Releases](https://github.com/beratatmaca/AetherBus/releases).
+* **Windows**: Download the `.msi` from [Releases](https://github.com/beratatmaca/AetherBus/releases).
+
+### 2. Live Monitor & Bridge in 3 Steps
+
+1. **Configure & Start**: Open AetherBus, select your physical port (e.g. `/dev/ttyUSB0` or `COM1`), configure the parameters, and click **Start Interception**. A virtual port path will be shown in the status bar (e.g., `/dev/pts/5`).
+2. **Connect Client**: Point your client application (like minicom, a firmware flasher, or your own software) to that virtual port instead of the physical one.
+3. **Analyze**: Watch live bidirectional traffic stream in the console color-coded by direction (Rx/Tx) and use the injection panel to transmit custom data packets.
+
+### 3. CAN & Ethernet Quick Start
+
+* **SocketCAN**: Select **File → New CAN Session**, choose your interface (e.g., `vcan0` or `can0`), and click **Start Capture** to view, filter, and decode live frames.
+* **Ethernet**: Select **File → New Ethernet Session**, choose your interface, and click **Start Capture** to view live traffic in a Wireshark-style 3-pane layout.
+
+---
 
 ## How It Works
 
@@ -66,7 +99,7 @@ Parallel SocketCAN and Ethernet backends implement the same capture/lifecycle in
 **SocketCAN bus analysis** (Linux only)
 
 * **Independent CAN session type** — `candump`/`cansend`-equivalent capture and transmit over `PF_CAN`/`SOCK_RAW`, classic and CAN-FD, alongside serial sessions in their own tabs.
-* **Live per-ID sniffer table** — one row per CAN ID (DLC, frame count, last-received time, hex payload) with changed-byte highlighting and stale-row graying, throttled to 5 Hz.
+* **Live per-ID monitor table** — one row per CAN ID (DLC, frame count, last-received time, hex payload) with changed-byte highlighting and stale-row graying, throttled to 5 Hz.
 * **Structured filter table** — add/remove ID + mask rules with extended-ID and invert flags, instead of hand-typed filter strings.
 * **DBC signal decoding** — load a `.dbc` file (or define custom rules) to see live decoded signal values in a dedicated decoder panel.
 * **Read-only bitrate reporting** — queries the configured interface bitrate via netlink; bus configuration itself stays external (`ip link set ...`), no in-app privilege escalation.

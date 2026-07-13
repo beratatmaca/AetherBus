@@ -3,23 +3,23 @@ title: AetherBus
 base: core24
 adopt-info: aetherbus
 icon: snap/gui/icon.png
-summary: Unified serial interceptor, SocketCAN analyzer, and Ethernet packet sniffer
+summary: Unified serial port utility, SocketCAN analyzer, and Ethernet network traffic viewer
 description: |
-  AetherBus is a lightweight, open-source diagnostic application combining a serial-port interceptor, SocketCAN analyzer, and Ethernet packet sniffer into a unified Linux dashboard.
+  AetherBus is a lightweight, open-source diagnostic application combining a serial-port utility, SocketCAN analyzer, and Ethernet network traffic viewer into a unified Linux dashboard.
 
-  It transparently proxies a physical UART through a kernel pseudo-terminal, allowing unmodified applications to talk to target hardware while capturing, decoding, and injecting traffic in real time. Independent native session tabs provide specialized SocketCAN analysis and low-level Ethernet packet interception.
+  It bridges a physical UART through a kernel pseudo-terminal, allowing unmodified applications to talk to target hardware while monitoring, decoding, and transmitting traffic in real time. Independent native session tabs provide specialized SocketCAN analysis and low-level Ethernet packet viewing.
 
   Key Features:
-  * Transparent UART Interception: Maps a physical device to a virtual pseudo-terminal link, capturing bidirectional serial data streams with millisecond precision.
+  * UART Bridging: Maps a physical device to a virtual pseudo-terminal link, monitoring bidirectional serial data streams with millisecond precision.
   * Multi-View Live Console: Displays data in side-by-side HEX, ASCII, BINARY, and DECIMAL layouts, optimized for high-bandwidth data rendering.
-  * SocketCAN Session: Provides an independent CAN bus analyzer with real-time per-ID sniffer tables, ID/mask filtering, CAN-FD capability, and DBC-driven signal decoding.
-  * Ethernet Session: Captures raw network traffic directly at the data-link layer, displaying frame structures, addresses, and payload contents.
-  * Live Traffic Injection: Supports manual injection of raw byte sequences, frames, or packets directly into active serial, CAN, or Ethernet links.
+  * SocketCAN Session: Provides an independent CAN bus analyzer with real-time per-ID monitor tables, ID/mask filtering, CAN-FD capability, and DBC-driven signal decoding.
+  * Ethernet Session: Views network traffic directly at the data-link layer, displaying frame structures, addresses, and payload contents.
+  * Live Traffic Injection: Supports manual transmission of raw byte sequences, frames, or packets directly into active serial, CAN, or Ethernet links.
 
   Use Cases:
-  * Reverse-engineering embedded fieldbus and network protocols.
+  * Analyzing embedded fieldbus and network protocols.
   * Debugging serial, CAN, and Ethernet communication links in real time.
-  * Analyzing data-link layer interactions and executing man-in-the-middle diagnostics.
+  * Analyzing data-link layer interactions and executing in-line diagnostics.
 
   Note: This snap uses strict confinement. After installing, connect the interfaces it needs for hardware access (see the project README for the exact commands): serial-port, raw-usb, network-control, and network-observe.
 license: MIT
