@@ -334,6 +334,17 @@ void PosixPtyProxy::runLoop() {
             continue;
         }
 
+        // Chunks read during this wakeup are delivered as one batched signal —
+        // a queued emission allocates an event per receiver, so per-read
+        // emission gets expensive at high baud rates.
+        QVector<CapturedChunk> batch;
+        const auto emitBatch = [&] {
+            if (!batch.isEmpty()) {
+                emit q_ptr->chunksCaptured(batch);
+                batch.clear();
+            }
+        };
+
         const short uartRev = fds[0].revents;
         if ((uartRev & POLLOUT) != 0) {
             std::lock_guard<std::mutex> lk(m_writeMutex);
@@ -348,13 +359,14 @@ void PosixPtyProxy::runLoop() {
                 QByteArray data(buf.data(), static_cast<int>(n));
                 const qint64 ts = QDateTime::currentMSecsSinceEpoch();
                 m_rxBytes.fetch_add(static_cast<std::uint64_t>(n));
-                emit q_ptr->chunkCaptured({ts, Direction::Rx, data});
+                batch.append({ts, Direction::Rx, data});
                 m_pcap.writePacket(ts, Direction::Rx, data);
                 if (!direct && m_masterFd >= 0) {
                     forward(m_masterFd, m_masterOut, Direction::Rx, data);
                 }
             } else if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
                 deviceLost = true;
+                emitBatch();
                 break;
             }
         }
@@ -365,6 +377,7 @@ void PosixPtyProxy::runLoop() {
                 std::lock_guard<std::mutex> lk(m_writeMutex);
                 if (!drainLocked(m_masterFd, m_masterOut)) {
                     deviceLost = true;
+                    emitBatch();
                     break;
                 }
             }
@@ -377,7 +390,7 @@ void PosixPtyProxy::runLoop() {
                             QByteArray data(buf.data() + 1, static_cast<int>(n - 1));
                             const qint64 ts = QDateTime::currentMSecsSinceEpoch();
                             m_txBytes.fetch_add(static_cast<std::uint64_t>(n - 1));
-                            emit q_ptr->chunkCaptured({ts, Direction::Tx, data});
+                            batch.append({ts, Direction::Tx, data});
                             m_pcap.writePacket(ts, Direction::Tx, data);
                             forward(m_uartFd, m_uartOut, Direction::Tx, data);
                         }
@@ -391,6 +404,8 @@ void PosixPtyProxy::runLoop() {
                 }
             }
         }
+
+        emitBatch();
     }
 
     m_running.store(false);
@@ -561,7 +576,7 @@ bool PosixPtyProxy::injectToDevice(const QByteArray &bytes) {
     const bool ok = forward(m_uartFd, m_uartOut, Direction::Tx, bytes);
     if (ok) {
         const qint64 ts = QDateTime::currentMSecsSinceEpoch();
-        emit q_ptr->chunkCaptured({ts, Direction::Tx, bytes});
+        emit q_ptr->chunksCaptured({{ts, Direction::Tx, bytes}});
         m_pcap.writePacket(ts, Direction::Tx, bytes);
     }
     wakeLoop();
@@ -575,7 +590,7 @@ bool PosixPtyProxy::injectToApp(const QByteArray &bytes) {
     const bool ok = forward(m_masterFd, m_masterOut, Direction::Rx, bytes);
     if (ok) {
         const qint64 ts = QDateTime::currentMSecsSinceEpoch();
-        emit q_ptr->chunkCaptured({ts, Direction::Rx, bytes});
+        emit q_ptr->chunksCaptured({{ts, Direction::Rx, bytes}});
         m_pcap.writePacket(ts, Direction::Rx, bytes);
     }
     wakeLoop();

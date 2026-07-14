@@ -183,6 +183,7 @@ void StatsPanel::setActiveCalculator(StatsCalculator *calc) {
     m_currentRxPktRate = 0.0;
     m_currentTxPktRate = 0.0;
 
+    m_lastSeenRevision = std::numeric_limits<quint64>::max();  // force the next refresh
     refreshUi();
 }
 
@@ -193,6 +194,7 @@ void StatsPanel::resetStats() {
     m_currentRxPktRate = 0.0;
     m_currentTxPktRate = 0.0;
     m_chart->setHistory(m_activeCalc->rxRateHistory(), m_activeCalc->txRateHistory());
+    m_lastSeenRevision = std::numeric_limits<quint64>::max();  // force the next refresh
     refreshUi();
 }
 
@@ -216,9 +218,17 @@ void StatsPanel::refreshUi() {
     if (!m_activeCalc)
         return;
 
-    // Determine dark mode state from current palette
+    // Determine dark mode state from current palette. Kept ahead of the idle
+    // skip below so a theme switch still restyles the chart.
     bool isDark = palette().color(QPalette::WindowText).lightness() > palette().color(QPalette::Window).lightness();
     m_chart->setDarkMode(isDark);
+
+    // Nothing changed since the last tick — skip the ~20 label updates.
+    const quint64 revision = m_activeCalc->revision();
+    if (revision == m_lastSeenRevision) {
+        return;
+    }
+    m_lastSeenRevision = revision;
 
     // Update rate labels
     m_rxRateLbl->setText(formatRate(m_activeCalc->currentRxRate()));

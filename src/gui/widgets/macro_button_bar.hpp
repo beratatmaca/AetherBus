@@ -23,11 +23,11 @@ namespace aether {
  * @brief Abstract base for a horizontal row of quick-send macro buttons.
  *
  * Concrete subclasses must override:
- *  - @ref macroCount()
- *  - @ref macroName(int)
- *  - @ref macroToolTip(int)
- *  - @ref onMacroTriggered(int)
- *  - @ref buildContextMenu(int, QMenu &)
+ *  - @ref macroCount
+ *  - @ref macroName
+ *  - @ref macroToolTip
+ *  - @ref onMacroTriggered
+ *  - @ref buildContextMenu
  */
 class MacroButtonBar : public QWidget {
     Q_OBJECT

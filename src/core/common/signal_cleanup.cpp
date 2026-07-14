@@ -19,8 +19,7 @@ namespace aether {
 
 namespace {
 
-/// Upper bound on concurrently tracked proxies (one per session tab, plus slack).
-constexpr int kMaxSlots = 32;
+constexpr int kMaxSlots = 32;  ///< Upper bound on concurrently tracked proxies (one per session tab, plus slack).
 
 struct CleanupSlot {
     std::atomic<bool> active{false};
@@ -30,9 +29,8 @@ struct CleanupSlot {
     std::array<char, PATH_MAX> symlink{};
 };
 
-// Static storage: never freed, safe to touch from a signal handler.
-std::array<CleanupSlot, kMaxSlots> g_slots;
-std::mutex g_registryMutex;  // guards slot acquisition; NOT taken in the handler.
+std::array<CleanupSlot, kMaxSlots> g_slots;  ///< Static storage: never freed, safe to touch from a signal handler.
+std::mutex g_registryMutex;                  ///< guards slot acquisition; NOT taken in the handler.
 
 // Signals we clean up after: termination requests first, then fatal faults.
 constexpr std::array<int, 8> kSignals{SIGINT, SIGTERM, SIGHUP, SIGQUIT, SIGSEGV, SIGABRT, SIGBUS, SIGFPE};

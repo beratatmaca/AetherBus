@@ -24,6 +24,10 @@ class QSettings;
 
 namespace aether {
 
+/**
+ * @brief A raw Ethernet capture session: Wireshark-style packet list, per-packet
+ * detail tree and hex dump, plus the packet constructor for transmit.
+ */
 class EthernetSessionWidget : public SessionView {
     Q_OBJECT
 
@@ -69,7 +73,7 @@ private slots:
 private:
     void buildUi();
     void processCapturedPacket(const aether::CapturedChunk &chunk);
-    void appendToPacketList(const aether::CapturedChunk &chunk);
+    void appendToPacketList(const QVector<aether::CapturedChunk> &chunks);
     void parsePacket(const QByteArray &data, QTreeWidgetItem *root);
     void renderSelectedHexDump();
 
@@ -97,24 +101,20 @@ private:
     QPushButton *m_binCheck = nullptr;
     QPushButton *m_asciiCheck = nullptr;
 
-    // Packets received while paused; flushed into the model on resume.
-    QVector<CapturedChunk> m_pausedChunks;
+    QVector<CapturedChunk> m_pausedChunks;  ///< Packets received while paused; flushed into the model on resume.
 
-    // Continuous "Capture" toggle: streams every packet to disk as it
-    // arrives, independent of the in-memory model's 10,000-row cap.
-    EthernetPcapWriter m_captureWriter;
+    EthernetPcapWriter m_captureWriter;  ///< Continuous "Capture" toggle: streams every packet to disk as it
+                                         ///< arrives, independent of the in-memory model's 10,000-row cap.
 
     QTimer *m_pcapPlayTimer = nullptr;
     QTimer *m_throttleTimer = nullptr;
     QTimer *m_statsTimer = nullptr;
 
-    // PCAP file replay: frames pending injection and the index of the next one.
-    QVector<CapturedChunk> m_replayChunks;
+    QVector<CapturedChunk> m_replayChunks;  ///< PCAP file replay: frames pending injection and the index of the next one.
     int m_replayIndex = 0;
     static constexpr int kMaxReplayGapMs = 2000;
 
-    // Offline "Replay" (view-only, distinct from the on-wire replay above).
-    QTimer *m_offlineReplayTimer = nullptr;
+    QTimer *m_offlineReplayTimer = nullptr;  ///< Offline "Replay" (view-only, distinct from the on-wire replay above).
     QVector<CapturedChunk> m_offlineReplayChunks;
     int m_offlineReplayIndex = 0;
 

@@ -24,7 +24,7 @@ public:
     explicit ByteInspectorPanel(QWidget *parent = nullptr);
     ~ByteInspectorPanel() override;
 
-    /// Update the inspected bytes and refresh the rendered values.
+    /** @brief Update the inspected bytes and refresh the rendered values. */
     void setBytes(const QByteArray &bytes);
 
 private:

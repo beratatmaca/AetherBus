@@ -18,6 +18,18 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# LTO for release builds: the capture/render hot loops cross the aether_core
+# static-library boundary, so cross-TU inlining is worth having.
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT AETHER_IPO_SUPPORTED OUTPUT AETHER_IPO_MESSAGE)
+    if(AETHER_IPO_SUPPORTED)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    else()
+        message(STATUS "IPO/LTO not supported: ${AETHER_IPO_MESSAGE}")
+    endif()
+endif()
+
 option(BUILD_COVERAGE "Enable coverage instrumentation" OFF)
 if(BUILD_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")

@@ -208,9 +208,7 @@ void EthernetSessionWidget::buildUi() {
         }
         const QVector<CapturedChunk> pending = m_pausedChunks;
         m_pausedChunks.clear();
-        for (const auto &chunk : pending) {
-            appendToPacketList(chunk);
-        }
+        appendToPacketList(pending);
     });
     controlsRow->addWidget(m_pauseBtn);
 
@@ -219,8 +217,7 @@ void EthernetSessionWidget::buildUi() {
 
     // Format-view row for the hex dump pane, mirroring the Serial/CAN console
     // toolbar's HEX/DEC/BIN/ASCII format toggles (same labels/tooltips).
-    const auto makeFormatToggle = [&](const QString &objectName, const QString &text, const QString &tooltip,
-                                       bool checkedByDefault) {
+    const auto makeFormatToggle = [&](const QString &objectName, const QString &text, const QString &tooltip, bool checkedByDefault) {
         auto *button = new QPushButton(text, rightColumn);
         button->setObjectName(objectName);
         button->setCheckable(true);
@@ -388,12 +385,27 @@ void EthernetSessionWidget::onDisconnected() {
 }
 
 void EthernetSessionWidget::onThrottleTimeout() {
-    auto chunks = m_backend->consumeBufferedChunks();
+    const auto chunks = m_backend->consumeBufferedChunks();
     if (chunks.empty())
         return;
+
+    // Per-packet accounting stays per-chunk; the visible list gets ONE
+    // batched model insert + scroll for the whole tick.
+    QVector<CapturedChunk> visible;
+    visible.reserve(static_cast<int>(chunks.size()));
+    const bool paused = m_pauseBtn->isChecked();
     for (const auto &chunk : chunks) {
-        processCapturedPacket(chunk);
+        m_stats.addChunk(chunk);
+        if (m_captureWriter.isOpen()) {
+            m_captureWriter.writePacket(chunk.timestampMs, chunk.data);
+        }
+        if (paused) {
+            m_pausedChunks.append(chunk);
+        } else {
+            visible.append(chunk);
+        }
     }
+    appendToPacketList(visible);
 }
 
 void EthernetSessionWidget::processCapturedPacket(const aether::CapturedChunk &chunk) {
@@ -412,14 +424,18 @@ void EthernetSessionWidget::processCapturedPacket(const aether::CapturedChunk &c
         return;
     }
 
-    appendToPacketList(chunk);
+    appendToPacketList({chunk});
 }
 
-void EthernetSessionWidget::appendToPacketList(const aether::CapturedChunk &chunk) {
+void EthernetSessionWidget::appendToPacketList(const QVector<aether::CapturedChunk> &chunks) {
+    if (chunks.isEmpty()) {
+        return;
+    }
+
     QScrollBar *vbar = m_packetList->verticalScrollBar();
     const bool wasAtBottom = vbar->value() == vbar->maximum();
 
-    m_packetModel->appendPacket(chunk);
+    m_packetModel->appendPackets(chunks);
 
     if (wasAtBottom) {
         m_packetList->scrollToBottom();
@@ -595,9 +611,9 @@ void EthernetSessionWidget::toggleFileCapture() {
         return;
     }
 
-    const QString path = QFileDialog::getSaveFileName(this, tr("Capture traffic to pcap"),
-                                                       QStringLiteral("aetherbus_ethernet_capture.pcap"),
-                                                       QStringLiteral("pcap files (*.pcap);;All files (*)"));
+    const QString path =
+        QFileDialog::getSaveFileName(this, tr("Capture traffic to pcap"), QStringLiteral("aetherbus_ethernet_capture.pcap"),
+                                     QStringLiteral("pcap files (*.pcap);;All files (*)"));
     if (path.isEmpty()) {
         m_captureBtn->setChecked(false);
         return;
@@ -632,7 +648,7 @@ void EthernetSessionWidget::toggleOfflineReplay() {
     }
 
     const QString path = QFileDialog::getOpenFileName(this, tr("Open capture file for replay"), QString(),
-                                                       QStringLiteral("pcap files (*.pcap);;All files (*)"));
+                                                      QStringLiteral("pcap files (*.pcap);;All files (*)"));
     if (path.isEmpty()) {
         m_replayBtn->setChecked(false);
         return;

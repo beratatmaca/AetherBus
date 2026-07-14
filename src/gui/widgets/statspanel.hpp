@@ -3,6 +3,8 @@
 #include <QWidget>
 #include "core/common/stats_calculator.hpp"
 
+#include <limits>
+
 class QLabel;
 class QTimer;
 class QPushButton;
@@ -11,12 +13,14 @@ namespace aether {
 
 class ThroughputChart;
 
+/** @brief Live traffic statistics panel: byte/packet rates, inter-frame gap timings, and a throughput chart. */
 class StatsPanel : public QWidget {
     Q_OBJECT
 public:
     explicit StatsPanel(QWidget *parent = nullptr);
     ~StatsPanel() override;
 
+    /** @brief Switch the panel to read from @p calc; nullptr falls back to an internal idle dummy. */
     void setActiveCalculator(StatsCalculator *calc);
     void resetStats();
 
@@ -29,7 +33,7 @@ private:
     QString formatGap(qint64 ms) const;
 
     StatsCalculator *m_activeCalc = nullptr;
-    StatsCalculator m_dummyCalc;  // Used when no active calculator is set
+    StatsCalculator m_dummyCalc;  ///< Used when no active calculator is set
     QTimer *m_refreshTimer = nullptr;
     QTimer *m_oneSecondTimer = nullptr;
 
@@ -68,6 +72,9 @@ private:
     qint64 m_txChunksThisSecond = 0;
     double m_currentRxPktRate = 0.0;
     double m_currentTxPktRate = 0.0;
+
+    quint64 m_lastSeenRevision = std::numeric_limits<quint64>::max();  ///< Skip the ~20 label updates per 200 ms tick
+                                                                       ///< while nothing changed.
 };
 
 }  // namespace aether

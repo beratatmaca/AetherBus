@@ -8,8 +8,9 @@
  * unsupported.
  *
  * Threading mirrors the serial PTY proxy: a background worker runs a @c poll()
- * loop over the CAN socket plus a self-pipe wake fd, and emits @c chunkCaptured
- * across a queued connection to the owning (GUI) thread.
+ * loop over the CAN socket plus a self-pipe wake fd, and emits one batched
+ * @c chunksCaptured per wakeup across a queued connection to the owning (GUI)
+ * thread.
  */
 #pragma once
 
@@ -34,12 +35,15 @@ public:
     explicit CanBackend(QObject *parent = nullptr);
     ~CanBackend() override;
 
-    /// Open and bind a raw CAN socket on @p config.iface. @return true on success.
+    /**
+     * @brief Open and bind a raw CAN socket on @p config.iface.
+     * @return true on success.
+     */
     bool open(const CanConfig &config);
     void close() override;
     [[nodiscard]] bool isRunning() const override;
 
-    /// Interface this backend is bound to (empty when closed).
+    /** @brief Interface this backend is bound to (empty when closed). */
     [[nodiscard]] QString iface() const;
 
     /**
@@ -65,13 +69,13 @@ public:
 
     // --- Static helpers, safe to call on any platform ---
 
-    /// @return true when SocketCAN is available on this build/platform.
+    /** @return true when SocketCAN is available on this build/platform. */
     [[nodiscard]] static bool isSupported();
 
-    /// @return names of CAN interfaces currently present (empty if none/unsupported).
+    /** @return names of CAN interfaces currently present (empty if none/unsupported). */
     [[nodiscard]] static QStringList listInterfaces();
 
-    /// @return the configured bit rate of @p iface, or -1 if unknown/unsupported.
+    /** @return the configured bit rate of @p iface, or -1 if unknown/unsupported. */
     [[nodiscard]] static int queryBitrate(const QString &iface);
 
 private:
@@ -101,6 +105,8 @@ private:
     void writePcapPacket(qint64 timestampMs, Direction dir, quint32 id, quint16 flags, const QByteArray &payload);
     mutable std::mutex m_captureMutex;
     std::unique_ptr<QFile> m_captureFile;
+    QByteArray m_captureScratch;  ///< Reused record buffer (guarded by m_captureMutex) so each captured
+                                  ///< frame costs one write() and no allocations at steady state.
 };
 
 }  // namespace aether

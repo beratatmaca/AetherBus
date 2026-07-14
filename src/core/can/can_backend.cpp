@@ -50,6 +50,7 @@ QString ifaceNotFoundHint(const QString &iface) {
 
 CanBackend::CanBackend(QObject *parent) : IBusBackend(parent) {
     qRegisterMetaType<aether::CapturedChunk>("aether::CapturedChunk");
+    qRegisterMetaType<QVector<aether::CapturedChunk>>("QVector<aether::CapturedChunk>");
     qRegisterMetaType<aether::Direction>("aether::Direction");
 }
 
@@ -255,31 +256,32 @@ void CanBackend::writePcapPacket(qint64 timestampMs, Direction dir, quint32 id, 
     const auto sec = static_cast<quint32>(timestampMs / 1000);
     const auto usec = static_cast<quint32>((timestampMs % 1000) * 1000);
 
-    QByteArray canData;
-    const auto appendBe32 = [&](quint32 v) {
-        canData.append(static_cast<char>((v >> 24) & 0xFF));
-        canData.append(static_cast<char>((v >> 16) & 0xFF));
-        canData.append(static_cast<char>((v >> 8) & 0xFF));
-        canData.append(static_cast<char>(v & 0xFF));
-    };
-    const auto appendBe16 = [&](quint16 v) {
-        canData.append(static_cast<char>((v >> 8) & 0xFF));
-        canData.append(static_cast<char>(v & 0xFF));
-    };
-
-    appendBe32(id);
-    appendBe16(flags);
-    canData.append(payload);
+    // One reused buffer, one write() per frame. The record header is written
+    // first with the id/flags payload prefix appended after it, replacing the
+    // old two-throwaway-arrays-per-frame layout byte for byte.
+    QByteArray &record = m_captureScratch;
+    record.resize(0);
 
     constexpr int kRtacHeaderLen = 12;
-    const auto fill = static_cast<quint32>(kRtacHeaderLen + canData.size());
+    constexpr int kCanPrefixLen = 6;  // BE32 id + BE16 flags ahead of the payload
+    const auto fill = static_cast<quint32>(kRtacHeaderLen + kCanPrefixLen + payload.size());
+    record.reserve(16 + static_cast<int>(fill));
 
-    QByteArray record;
     const auto appendLe32 = [&](quint32 v) {
         record.append(static_cast<char>(v & 0xFF));
         record.append(static_cast<char>((v >> 8) & 0xFF));
         record.append(static_cast<char>((v >> 16) & 0xFF));
         record.append(static_cast<char>((v >> 24) & 0xFF));
+    };
+    const auto appendBe32 = [&](quint32 v) {
+        record.append(static_cast<char>((v >> 24) & 0xFF));
+        record.append(static_cast<char>((v >> 16) & 0xFF));
+        record.append(static_cast<char>((v >> 8) & 0xFF));
+        record.append(static_cast<char>(v & 0xFF));
+    };
+    const auto appendBe16 = [&](quint16 v) {
+        record.append(static_cast<char>((v >> 8) & 0xFF));
+        record.append(static_cast<char>(v & 0xFF));
     };
 
     appendLe32(sec);
@@ -294,7 +296,9 @@ void CanBackend::writePcapPacket(qint64 timestampMs, Direction dir, quint32 id, 
     record.append(static_cast<char>(0x00));
     record.append(static_cast<char>(0x00));
 
-    record.append(canData);
+    appendBe32(id);
+    appendBe16(flags);
+    record.append(payload);
     m_captureFile->write(record);
 }
 
@@ -529,7 +533,7 @@ bool CanBackend::sendFrame(quint32 id, quint16 flags, const QByteArray &payload)
     }
     m_txFrames.fetch_add(1);
     writePcapPacket(chunk.timestampMs, Direction::Tx, id, flags, payload);
-    emit chunkCaptured(chunk);
+    emit chunksCaptured({chunk});
     return true;
 }
 
@@ -584,6 +588,10 @@ void CanBackend::runLoop() {
         }
 
         if ((rev & (POLLIN | POLLERR | POLLHUP | POLLNVAL)) != 0) {
+            // One batched emission per wakeup: a queued signal allocates an
+            // event per receiver, so per-frame emission floods the GUI event
+            // loop at high bus loads.
+            QVector<CapturedChunk> batch;
             for (;;) {
                 const ssize_t n = ::recv(m_sockFd, &frame, sizeof(frame), 0);
                 if (n < 0) {
@@ -639,7 +647,10 @@ void CanBackend::runLoop() {
 
                 m_rxFrames.fetch_add(1);
                 writePcapPacket(chunk.timestampMs, Direction::Rx, chunk.frameId, chunk.frameFlags, chunk.data);
-                emit chunkCaptured(chunk);
+                batch.append(chunk);
+            }
+            if (!batch.isEmpty()) {
+                emit chunksCaptured(batch);
             }
             if (deviceLost) {
                 break;

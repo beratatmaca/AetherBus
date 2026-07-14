@@ -10,9 +10,8 @@ namespace aether {
 
 namespace {
 
-/// Sensible fallback width for a pane that was never seen expanded (e.g. a
-/// session restored from settings with no remembered size yet).
-constexpr int kDefaultExpandedSize = 260;
+constexpr int kDefaultExpandedSize = 260;  ///< Sensible fallback width for a pane that was never seen expanded
+                                           ///< (e.g. a session restored from settings with no remembered size yet).
 
 int handleIndexOf(QSplitter *splitter, QSplitterHandle *handle) {
     for (int i = 0; i < splitter->count(); ++i) {
@@ -25,10 +24,14 @@ int handleIndexOf(QSplitter *splitter, QSplitterHandle *handle) {
 
 }  // namespace
 
-/// Draws a small, palette-driven chevron on top of the normal QSS-styled
-/// handle background, only for handles that border a collapsible pane —
-/// clicking (not dragging) toggles that pane. Dragging to resize still works
-/// unchanged; this only adds a click affordance on top of it.
+/**
+ * @brief Draws a small, palette-driven chevron on top of the normal QSS-styled
+ * handle background, only for handles that border a collapsible pane —
+ * clicking (not dragging) toggles that pane.
+ *
+ * Dragging to resize still works unchanged; this only adds a click affordance
+ * on top of it.
+ */
 class CollapsibleSplitterHandle : public QSplitterHandle {
 public:
     CollapsibleSplitterHandle(Qt::Orientation orientation, CollapsibleSplitter *parent)
@@ -136,9 +139,12 @@ protected:
     }
 
 private:
-    /// Which pane (if any) this handle toggles: the pane immediately before
-    /// it, or immediately after, whichever was marked collapsible. Returns -1
-    /// if neither neighbor is collapsible.
+    /**
+     * @brief Which pane (if any) this handle toggles: the pane immediately before
+     * it, or immediately after, whichever was marked collapsible.
+     *
+     * Returns -1 if neither neighbor is collapsible.
+     */
     [[nodiscard]] int targetPane() const {
         const int idx = handleIndexOf(m_owner, const_cast<CollapsibleSplitterHandle *>(this));
         if (idx <= 0) {

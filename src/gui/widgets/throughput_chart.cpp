@@ -17,6 +17,9 @@ void ThroughputChart::setHistory(const QVector<double> &rxHistory, const QVector
 }
 
 void ThroughputChart::setDarkMode(bool enabled) {
+    if (m_darkMode == enabled) {
+        return;
+    }
     m_darkMode = enabled;
     update();
 }

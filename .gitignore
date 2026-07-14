@@ -64,6 +64,14 @@ compile_commands.json
 # vcpkg
 vcpkg_installed/
 
+# Python wheel packaging (staged by scripts/wheel/stage.py / CI only)
+python/src/aetherbus/_bundle/
+python/LICENSE.txt
+python/dist/
+wheelhouse/
+smoke/
+__pycache__/
+
 # debug information files
 *.dwo
 

@@ -77,6 +77,7 @@ public:
 
 private:
     std::unique_ptr<QFile> m_file;
+    QByteArray m_scratch;  ///< Reused record buffer so each packet costs one write() and no allocations at steady state.
 };
 
 }  // namespace aether

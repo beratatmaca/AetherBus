@@ -24,9 +24,13 @@ class CanDecoderPanel;
 class CaptureReplayer;
 class CollapsibleSplitter;
 
-/// A SocketCAN session: candump-style frame log plus a cansend-style transmit
-/// bar, reusing the shared ConsoleView and StatsPanel. Kept separate from the
-/// serial SessionWidget so neither transport's UI complicates the other.
+/**
+ * @brief A SocketCAN session: candump-style frame log plus a cansend-style transmit
+ * bar, reusing the shared ConsoleView and StatsPanel.
+ *
+ * Kept separate from the
+ * serial SessionWidget so neither transport's UI complicates the other.
+ */
 class CanSessionWidget : public SessionView {
     Q_OBJECT
 
@@ -49,6 +53,7 @@ private slots:
     void onError(const QString &message);
     void onDisconnected();
     void onChunkCaptured(const aether::CapturedChunk &chunk);
+    void onChunksCaptured(const QVector<aether::CapturedChunk> &chunks);
     void transmit();
     void applyFormats();
     void updateCounts();

@@ -86,6 +86,7 @@ private slots:
     void ethernetPacketConstructorInvalidMacBlocksSend();
     void ethernetPacketModelBasics();
     void ethernetPacketModelEvictsOldest();
+    void ethernetPacketModelBatchClampsAndEvicts();
     void ethernetPacketConstructorMacroRoundTrip();
     void ethernetBackendOpenInvalidInterfaceFails();
 #endif

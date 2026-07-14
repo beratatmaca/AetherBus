@@ -8,7 +8,7 @@ namespace aether {
 
 namespace {
 
-/// Build a full pipe path (\\.\pipe\<leaf>) from a user-supplied name/leaf.
+/** @brief Build a full pipe path (\\.\pipe\<leaf>) from a user-supplied name/leaf. */
 QString buildPipePath(const QString &requested) {
     QString leaf = requested;
     if (leaf.isEmpty()) {
@@ -23,7 +23,7 @@ QString buildPipePath(const QString &requested) {
     return QStringLiteral("\\\\.\\pipe\\") + leaf;
 }
 
-/// Prefix a COM device path with \\.\ so ports COM10+ open correctly.
+/** @brief Prefix a COM device path with \\.\ so ports COM10+ open correctly. */
 QString buildComPath(const QString &device) {
     if (device.startsWith(QStringLiteral("\\\\.\\"))) {
         return device;
@@ -380,7 +380,7 @@ bool WindowsPtyProxy::drainComInput() {
         QByteArray data(m_comReadBuf.data(), static_cast<int>(n));
         const qint64 ts = QDateTime::currentMSecsSinceEpoch();
         m_rxBytes.fetch_add(n);
-        emit q_ptr->chunkCaptured({ts, Direction::Rx, data});
+        emit q_ptr->chunksCaptured({{ts, Direction::Rx, data}});
         m_pcap.writePacket(ts, Direction::Rx, data);
         if (!m_directMode.load()) {
             std::lock_guard<std::mutex> lk(m_writeMutex);
@@ -429,7 +429,7 @@ bool WindowsPtyProxy::onPipeReadComplete() {
         QByteArray data(m_pipeReadBuf.data(), static_cast<int>(n));
         const qint64 ts = QDateTime::currentMSecsSinceEpoch();
         m_txBytes.fetch_add(n);
-        emit q_ptr->chunkCaptured({ts, Direction::Tx, data});
+        emit q_ptr->chunksCaptured({{ts, Direction::Tx, data}});
         m_pcap.writePacket(ts, Direction::Tx, data);
         {
             std::lock_guard<std::mutex> lk(m_writeMutex);
@@ -637,7 +637,7 @@ bool WindowsPtyProxy::injectToDevice(const QByteArray &bytes) {
         enqueue(m_toComQueue, m_toComQueued, bytes, Direction::Tx);
     }
     const qint64 ts = QDateTime::currentMSecsSinceEpoch();
-    emit q_ptr->chunkCaptured({ts, Direction::Tx, bytes});
+    emit q_ptr->chunksCaptured({{ts, Direction::Tx, bytes}});
     m_pcap.writePacket(ts, Direction::Tx, bytes);
     if (m_wakeEvent != nullptr) {
         ::SetEvent(m_wakeEvent);
@@ -654,7 +654,7 @@ bool WindowsPtyProxy::injectToApp(const QByteArray &bytes) {
         enqueue(m_toPipeQueue, m_toPipeQueued, bytes, Direction::Rx);
     }
     const qint64 ts = QDateTime::currentMSecsSinceEpoch();
-    emit q_ptr->chunkCaptured({ts, Direction::Rx, bytes});
+    emit q_ptr->chunksCaptured({{ts, Direction::Rx, bytes}});
     m_pcap.writePacket(ts, Direction::Rx, bytes);
     if (m_wakeEvent != nullptr) {
         ::SetEvent(m_wakeEvent);

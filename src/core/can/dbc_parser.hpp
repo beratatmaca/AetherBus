@@ -7,11 +7,12 @@
 
 namespace aether {
 
+/** @brief One signal definition (SG_ line) within a DBC message. */
 struct DbcSignal {
     QString name;
     int startBit = 0;
     int bitLength = 0;
-    bool isBigEndian = false; // true = Motorola, false = Intel
+    bool isBigEndian = false;  ///< true = Motorola, false = Intel
     bool isSigned = false;
     double factor = 1.0;
     double offset = 0.0;
@@ -20,6 +21,7 @@ struct DbcSignal {
     QString unit;
 };
 
+/** @brief One message definition (BO_ line) and the signals it carries. */
 struct DbcMessage {
     quint32 id = 0;
     QString name;
@@ -27,6 +29,7 @@ struct DbcMessage {
     QVector<DbcSignal> signalList;
 };
 
+/** @brief In-memory DBC database mapping CAN message ids to their definitions. */
 class DbcDatabase {
 public:
     DbcDatabase() = default;
@@ -38,10 +41,10 @@ public:
     [[nodiscard]] bool contains(quint32 id) const { return m_messages.contains(id); }
     [[nodiscard]] DbcMessage getMessage(quint32 id) const { return m_messages.value(id); }
 
-    /// Parse a DBC file from its content string
+    /** @brief Parse a DBC file from its content string. */
     bool parse(const QString &content);
 
-    /// Decode a signal from raw payload bytes
+    /** @brief Decode a signal from raw payload bytes. */
     static double decodeSignal(const QByteArray &payload, const DbcSignal &sig);
 
 private:

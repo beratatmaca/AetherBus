@@ -129,9 +129,9 @@ struct SerialConfig {
 
 }  // namespace aether
 
-/// Enables @ref aether::CapturedChunk in queued signal/slot connections.
+/** @brief Enables @ref aether::CapturedChunk in queued signal/slot connections. */
 Q_DECLARE_METATYPE(aether::CapturedChunk)
-/// Enables @ref aether::Direction as a queued signal/slot argument.
+/** @brief Enables @ref aether::Direction as a queued signal/slot argument. */
 Q_DECLARE_METATYPE(aether::Direction)
-/// Enables @ref aether::Parity as a queued signal/slot argument.
+/** @brief Enables @ref aether::Parity as a queued signal/slot argument. */
 Q_DECLARE_METATYPE(aether::Parity)

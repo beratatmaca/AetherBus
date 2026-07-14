@@ -3,6 +3,7 @@
 #include "core/serial/serial_types.hpp"
 
 #include <QAbstractTableModel>
+#include <QVector>
 
 #include <cstdint>
 #include <deque>
@@ -30,20 +31,30 @@ public:
     [[nodiscard]] QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     [[nodiscard]] QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 
-    /// Append a captured packet, evicting the oldest once @ref kMaxRows is exceeded.
+    /** @brief Append a captured packet, evicting the oldest once @ref kMaxRows is exceeded. */
     void appendPacket(const CapturedChunk &chunk);
 
-    /// Remove all rows.
+    /**
+     * @brief Append a whole drain-tick's worth of packets with one insert
+     * notification (and at most one eviction notification), instead of a
+     * begin/endInsertRows round-trip per packet.
+     */
+    void appendPackets(const QVector<CapturedChunk> &chunks);
+
+    /** @brief Remove all rows. */
     void clearPackets();
 
-    /// Raw captured chunk backing @p row. @p row must be in [0, rowCount()).
+    /**
+     * @brief Raw captured chunk backing @p row.
+     *
+     * @p row must be in [0, rowCount()).
+     */
     [[nodiscard]] const CapturedChunk &chunkAt(int row) const;
 
     [[nodiscard]] int packetCount() const { return static_cast<int>(m_rows.size()); }
 
-    /// Ceiling matching ConsoleView::kMaxLines, so a long-running or
-    /// high-rate capture doesn't grow memory/table rows without bound.
-    static constexpr int kMaxRows = 10000;
+    static constexpr int kMaxRows = 10000;  ///< Ceiling matching ConsoleView::kMaxLines, so a long-running or
+                                            ///< high-rate capture doesn't grow memory/table rows without bound.
 
 private:
     struct Row {

@@ -25,7 +25,7 @@ namespace {
 constexpr quint32 kStdIdMask = 0x7FF;
 constexpr quint32 kExtIdMask = 0x1FFFFFFF;
 
-/// Strip a trailing 'x'/'X' extended-id marker; returns true if one was present.
+/** @brief Strip a trailing 'x'/'X' extended-id marker; returns true if one was present. */
 bool stripExtendedMarker(QString &token) {
     if (token.endsWith(QLatin1Char('x'), Qt::CaseInsensitive)) {
         token.chop(1);

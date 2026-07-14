@@ -1,0 +1,146 @@
+name: AetherBus Python Wheels
+
+# Builds pip-installable wheels (launcher package + app binary + bundled Qt
+# runtime) as workflow artifacts. Publishing (PyPI or otherwise) is
+# intentionally not wired up yet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheels:
+    name: Build Python Wheel on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-22.04 is pinned (not -latest): the binary links the
+          # runner's glibc and the wheel tag promises that floor. Bump the
+          # manylinux tag in lockstep if this runner ever changes.
+          - os: ubuntu-22.04
+            plat: manylinux_2_35_x86_64
+          - os: windows-latest
+            plat: win_amd64
+          - os: macos-latest
+            plat: macosx_12_0_arm64
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # Full history so `git rev-list --count HEAD` resolves the real
+          # build number instead of 1 (shallow clone).
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: v
+        shell: bash
+        # Same scheme as release.yml's version job: MAJOR.MINOR.PATCH from
+        # VERSION plus the commit count, or the bare tag version on v* tags.
+        run: |
+          base=$(tr -d '[:space:]' < VERSION)
+          build=$(git rev-list --count HEAD)
+          sha=$(git rev-parse --short HEAD)
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${base}.${build}"
+          fi
+          {
+            echo "version=$version"
+            echo "build=$build"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version (build $build, commit $sha)"
+
+      - name: Install Qt 6 SDK
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: "6.6.3"
+          cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux Build Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgl1-mesa-dev patchelf
+
+      - name: Configure CMake (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -G "Unix Makefiles" -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DBUILD_COVERAGE=OFF \
+            -DAETHER_BUILD_NUMBER=${{ steps.v.outputs.build }} \
+            -DAETHER_GIT_SHA=${{ steps.v.outputs.sha }}
+
+      - name: Configure CMake (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -G "Unix Makefiles" -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DBUILD_COVERAGE=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DAETHER_BUILD_NUMBER=${{ steps.v.outputs.build }} \
+            -DAETHER_GIT_SHA=${{ steps.v.outputs.sha }}
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_COVERAGE=OFF -DAETHER_BUILD_NUMBER=${{ steps.v.outputs.build }} -DAETHER_GIT_SHA=${{ steps.v.outputs.sha }} -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Compile Code (All Platforms)
+        run: |
+          cmake --build build --config Release -j2
+
+      - name: Stage Wheel Bundle
+        shell: bash
+        run: |
+          python scripts/wheel/stage.py --build-dir build --qt-root "$QT_ROOT_DIR" \
+            --dest python/src/aetherbus/_bundle
+
+      - name: Check glibc Ceiling (Linux)
+        if: runner.os == 'Linux'
+        run: python scripts/wheel/check_glibc.py --max 2.35 python/src/aetherbus/_bundle
+
+      - name: Build Wheel
+        shell: bash
+        env:
+          AETHER_WHEEL_VERSION: ${{ steps.v.outputs.version }}
+          AETHER_WHEEL_PLAT: ${{ matrix.plat }}
+        run: |
+          python -m pip install --upgrade build
+          python -m build --wheel python --outdir wheelhouse
+
+      - name: Smoke Test Wheel
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m venv smoke
+          source smoke/bin/activate 2>/dev/null || source smoke/Scripts/activate
+          pip install wheelhouse/*.whl
+          aetherbus --version
+          python scripts/wheel/smoke_run.py
+
+      - name: Upload Wheel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.plat }}
+          path: wheelhouse/*.whl

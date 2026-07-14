@@ -3,6 +3,12 @@
 
 namespace aether {
 
+/**
+ * @brief Platform backend interface behind @ref PtyProxy.
+ *
+ * One concrete implementation per platform (POSIX PTY, Windows named pipe);
+ * @ref PtyProxy owns the instance and forwards every public call here.
+ */
 class PtyProxyImpl {
 public:
     explicit PtyProxyImpl(PtyProxy *q) : q_ptr(q) {}
@@ -27,7 +33,7 @@ public:
     virtual PtyProxy::Stats stats() const = 0;
 
 protected:
-    PtyProxy *q_ptr;  // pointer to public QObject wrapper to emit signals
+    PtyProxy *q_ptr;  ///< pointer to public QObject wrapper to emit signals
 };
 
 }  // namespace aether

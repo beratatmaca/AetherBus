@@ -94,15 +94,31 @@ QVariant EthernetPacketModel::headerData(int section, Qt::Orientation orientatio
 }
 
 void EthernetPacketModel::appendPacket(const CapturedChunk &chunk) {
-    if (packetCount() >= kMaxRows) {
-        beginRemoveRows(QModelIndex(), 0, 0);
-        m_rows.pop_front();
+    appendPackets({chunk});
+}
+
+void EthernetPacketModel::appendPackets(const QVector<CapturedChunk> &chunks) {
+    if (chunks.isEmpty()) {
+        return;
+    }
+
+    // Only the newest kMaxRows entries of an oversized batch can survive.
+    const int incoming = static_cast<int>(qMin<qsizetype>(chunks.size(), kMaxRows));
+    const int skipped = static_cast<int>(chunks.size()) - incoming;
+
+    // One batched eviction for the overflow, one batched insert for the rest.
+    const int overflow = packetCount() + incoming - kMaxRows;
+    if (overflow > 0) {
+        beginRemoveRows(QModelIndex(), 0, overflow - 1);
+        m_rows.erase(m_rows.begin(), m_rows.begin() + overflow);
         endRemoveRows();
     }
 
-    const int newRow = packetCount();
-    beginInsertRows(QModelIndex(), newRow, newRow);
-    m_rows.push_back(summarize(chunk));
+    const int first = packetCount();
+    beginInsertRows(QModelIndex(), first, first + incoming - 1);
+    for (qsizetype i = skipped; i < chunks.size(); ++i) {
+        m_rows.push_back(summarize(chunks.at(i)));
+    }
     endInsertRows();
 }
 

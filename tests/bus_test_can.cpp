@@ -95,7 +95,7 @@ void BusTest::canBackendCapturesFrame() {
     }
 
     CanBackend backend;
-    QSignalSpy spy(&backend, &CanBackend::chunkCaptured);
+    QSignalSpy spy(&backend, &CanBackend::chunksCaptured);
 
     CanConfig cfg;
     cfg.iface = iface;
@@ -117,11 +117,13 @@ void BusTest::canBackendCapturesFrame() {
 
     bool found = false;
     for (const QList<QVariant> &args : spy) {
-        const auto chunk = args.at(0).value<aether::CapturedChunk>();
-        if (chunk.isFrame && chunk.dir == Direction::Rx && chunk.frameId == 0x123) {
-            QCOMPARE(chunk.data, QByteArray::fromHex("DEADBEEF"));
-            QVERIFY((chunk.frameFlags & FrameExtendedId) == 0);
-            found = true;
+        const auto batch = args.at(0).value<QVector<aether::CapturedChunk>>();
+        for (const aether::CapturedChunk &chunk : batch) {
+            if (chunk.isFrame && chunk.dir == Direction::Rx && chunk.frameId == 0x123) {
+                QCOMPARE(chunk.data, QByteArray::fromHex("DEADBEEF"));
+                QVERIFY((chunk.frameFlags & FrameExtendedId) == 0);
+                found = true;
+            }
         }
     }
     QVERIFY(found);

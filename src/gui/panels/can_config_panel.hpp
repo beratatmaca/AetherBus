@@ -13,9 +13,13 @@ class QSettings;
 
 namespace aether {
 
-/// Left-hand configuration panel for a SocketCAN session: interface selection,
-/// per-socket options, and a receive-filter editor. Emits a validated
-/// @ref CanConfig when the user starts capture.
+/**
+ * @brief Left-hand configuration panel for a SocketCAN session: interface selection,
+ * per-socket options, and a receive-filter editor.
+ *
+ * Emits a validated
+ * @ref CanConfig when the user starts capture.
+ */
 class CanConfigPanel : public QGroupBox {
     Q_OBJECT
 
@@ -28,25 +32,31 @@ public:
     void populateInterfaces(const QStringList &ifaces);
     [[nodiscard]] QString iface() const;
 
-    /// Write the current field values to @p settings (relative keys).
+    /** @brief Write the current field values to @p settings (relative keys). */
     void saveSettings(QSettings &settings) const;
-    /// Restore field values previously written by @ref saveSettings.
+    /** @brief Restore field values previously written by @ref saveSettings. */
     void loadSettings(const QSettings &settings);
 
 signals:
     void startCan(const CanConfig &cfg);
     void stopCan();
     void rescanRequested();
-    /// Emitted whenever the status text changes, as plain text plus an error flag,
-    /// so the host window can mirror it into the always-visible status bar.
+    /**
+     * @brief Emitted whenever the status text changes, as plain text plus an error flag,
+     * so the host window can mirror it into the always-visible status bar.
+     */
     void statusChanged(const QString &plainText, bool isError);
 
 private slots:
     void onStartButtonClicked();
 
 private:
-    /// Parse the UI into @p out. Returns false (and sets an error status) on a
-    /// malformed filter specification.
+    /**
+     * @brief Parse the UI into @p out.
+     *
+     * Returns false (and sets an error status) on a
+     * malformed filter specification.
+     */
     bool buildConfig(CanConfig &out);
 
     void addFilterRow(bool use, const QString &idHex, const QString &maskHex, bool ext, bool invert);

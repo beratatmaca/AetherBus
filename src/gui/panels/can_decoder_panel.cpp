@@ -14,6 +14,9 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QMenu>
+#include <QTimer>
+
+#include <utility>
 
 namespace aether {
 
@@ -130,6 +133,11 @@ private:
 CanDecoderPanel::CanDecoderPanel(QWidget *parent) : QGroupBox(QStringLiteral("CAN DBC Decoder"), parent) {
     setupUi();
     loadSettings();
+
+    m_renderTimer = new QTimer(this);
+    m_renderTimer->setSingleShot(true);
+    m_renderTimer->setInterval(100);
+    connect(m_renderTimer, &QTimer::timeout, this, &CanDecoderPanel::flushDirtyValues);
 }
 
 CanDecoderPanel::~CanDecoderPanel() {
@@ -167,6 +175,8 @@ void CanDecoderPanel::setupUi() {
 
 void CanDecoderPanel::updateTable() {
     m_tree->clear();
+    m_signalItems.clear();  // items were owned (and just destroyed) by the tree
+    m_dirtyValues.clear();
 
     // 1. Add DBC Database Messages
     for (const auto &msg : m_dbcDb.messages()) {
@@ -218,8 +228,8 @@ void CanDecoderPanel::addOrUpdateSignalItem(const DbcMessage &msg, const DbcSign
     sigItem->setText(0, sig.name);
 
     // Check if we have a last value cached
-    QString cacheKey = QStringLiteral("%1_%2").arg(msg.id).arg(sig.name);
-    sigItem->setText(1, m_lastValues.value(cacheKey, QStringLiteral("---")));
+    const SignalKey key{msg.id, sig.name};
+    sigItem->setText(1, m_lastValues.value(key, QStringLiteral("---")));
     sigItem->setText(2, sig.unit);
     sigItem->setText(3, sig.isSigned ? QStringLiteral("Signed") : QStringLiteral("Unsigned"));
     sigItem->setText(4, QString::number(sig.startBit));
@@ -229,10 +239,16 @@ void CanDecoderPanel::addOrUpdateSignalItem(const DbcMessage &msg, const DbcSign
     sigItem->setData(0, Qt::UserRole, msg.id);
     sigItem->setData(0, Qt::UserRole + 1, isCustom);
     sigItem->setData(0, Qt::UserRole + 2, sig.name);  // signal name
+
+    m_signalItems.insert(key, sigItem);
 }
 
 void CanDecoderPanel::processChunk(const CapturedChunk &chunk) {
     if (!chunk.isFrame)
+        return;
+    // The panel is hidden (e.g. its session tab is in the background) —
+    // values repopulate from the live stream as soon as it is shown again.
+    if (!isVisible())
         return;
 
     quint32 id = chunk.frameId;
@@ -241,8 +257,9 @@ void CanDecoderPanel::processChunk(const CapturedChunk &chunk) {
     if (m_customSignals.contains(id)) {
         for (const auto &sig : m_customSignals[id]) {
             double val = DbcDatabase::decodeSignal(chunk.data, sig);
-            QString cacheKey = QStringLiteral("%1_%2").arg(id).arg(sig.name);
-            m_lastValues[cacheKey] = QString::number(val, 'f', 2);
+            const SignalKey key{id, sig.name};
+            m_lastValues[key] = QString::number(val, 'f', 2);
+            m_dirtyValues.insert(key);
         }
     }
 
@@ -251,25 +268,27 @@ void CanDecoderPanel::processChunk(const CapturedChunk &chunk) {
         const auto &msg = m_dbcDb.getMessage(id);
         for (const auto &sig : msg.signalList) {
             double val = DbcDatabase::decodeSignal(chunk.data, sig);
-            QString cacheKey = QStringLiteral("%1_%2").arg(id).arg(sig.name);
-            m_lastValues[cacheKey] = QString::number(val, 'f', 2);
+            const SignalKey key{id, sig.name};
+            m_lastValues[key] = QString::number(val, 'f', 2);
+            m_dirtyValues.insert(key);
         }
     }
 
-    // Update tree values inline if displayed
-    for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
-        auto *msgItem = m_tree->topLevelItem(i);
-        if (msgItem->data(0, Qt::UserRole).toUInt() == id) {
-            for (int j = 0; j < msgItem->childCount(); ++j) {
-                auto *child = msgItem->child(j);
-                QString sigName = child->data(0, Qt::UserRole + 2).toString();
-                QString cacheKey = QStringLiteral("%1_%2").arg(id).arg(sigName);
-                if (m_lastValues.contains(cacheKey)) {
-                    child->setText(1, m_lastValues.value(cacheKey));
-                }
-            }
+    // Rendering is deferred to the flush timer so a high-rate bus doesn't
+    // pay a tree update per frame.
+    if (!m_dirtyValues.isEmpty() && !m_renderTimer->isActive()) {
+        m_renderTimer->start();
+    }
+}
+
+void CanDecoderPanel::flushDirtyValues() {
+    for (const SignalKey &key : std::as_const(m_dirtyValues)) {
+        QTreeWidgetItem *item = m_signalItems.value(key, nullptr);
+        if (item != nullptr) {
+            item->setText(1, m_lastValues.value(key));
         }
     }
+    m_dirtyValues.clear();
 }
 
 void CanDecoderPanel::onLoadDbcClicked() {
@@ -347,8 +366,7 @@ void CanDecoderPanel::editSelectedSignal() {
             SignalEditDialog dlg(this, &sigs.at(i), id, item->parent()->text(0).split(QLatin1Char(' ')).first());
             if (dlg.exec() == QDialog::Accepted) {
                 // Delete old cache
-                QString cacheKey = QStringLiteral("%1_%2").arg(id).arg(sigName);
-                m_lastValues.remove(cacheKey);
+                m_lastValues.remove({id, sigName});
 
                 // Update signal
                 quint32 newId = dlg.canId();
@@ -381,8 +399,7 @@ void CanDecoderPanel::deleteSelectedSignal() {
         for (int i = 0; i < sigs.size(); ++i) {
             if (sigs.at(i).name == sigName) {
                 sigs.removeAt(i);
-                QString cacheKey = QStringLiteral("%1_%2").arg(id).arg(sigName);
-                m_lastValues.remove(cacheKey);
+                m_lastValues.remove({id, sigName});
                 break;
             }
         }

@@ -16,7 +16,7 @@ class QSettings;
 
 namespace aether {
 
-/// Which transport a session drives.
+/** @brief Which transport a session drives. */
 enum class SessionType : std::uint8_t {
     Serial,  ///< UART interception via the PTY proxy.
     Can,     ///< SocketCAN receive/transmit.
@@ -30,30 +30,41 @@ public:
     explicit SessionView(QWidget *parent = nullptr) : QWidget(parent) {}
     ~SessionView() override = default;
 
-    /// @return true while the session's backend is actively capturing.
+    /** @return true while the session's backend is actively capturing. */
     [[nodiscard]] virtual bool isRunning() const = 0;
 
-    /// Stop the session's backend if running (used before closing the tab).
+    /** @brief Stop the session's backend if running (used before closing the tab). */
     virtual void stopSession() = 0;
 
-    /// Which transport this session drives; lets the host window persist and
-    /// restore the workspace without knowing concrete session types.
+    /**
+     * @brief Which transport this session drives; lets the host window persist and
+     * restore the workspace without knowing concrete session types.
+     */
     [[nodiscard]] virtual SessionType sessionType() const = 0;
 
-    /// Write this session's current configuration into @p settings, using keys
-    /// relative to whatever group/array index the caller has already selected.
+    /**
+     * @brief Write this session's current configuration into @p settings, using keys
+     * relative to whatever group/array index the caller has already selected.
+     */
     virtual void saveSettings(QSettings &settings) const = 0;
 
-    /// Restore configuration previously written by @ref saveSettings. Only
-    /// pre-fills fields — never starts the underlying connection or capture.
+    /**
+     * @brief Restore configuration previously written by @ref saveSettings.
+     *
+     * Only pre-fills fields — never starts the underlying connection or capture.
+     */
     virtual void loadSettings(const QSettings &settings) = 0;
 
 signals:
-    /// Request the hosting tab's label be updated.
+    /** @brief Request the hosting tab's label be updated. */
     void sessionTitleChanged(const QString &title);
 
-    /// Status/error text for this session, mirrored into the main window's
-    /// always-visible status bar. @p isError marks messages that should persist.
+    /**
+     * @brief Status/error text for this session, mirrored into the main window's
+     * always-visible status bar.
+     *
+     * @p isError marks messages that should persist.
+     */
     void statusMessage(const QString &text, bool isError);
 };
 

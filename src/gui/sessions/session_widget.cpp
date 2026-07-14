@@ -67,9 +67,9 @@ SessionWidget::SessionWidget(QWidget *parent) : SessionView(parent), m_proxy(new
                 }
             });
 
-    // Proxy connections
-    connect(m_proxy, &PtyProxy::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
-    connect(m_proxy, &PtyProxy::chunkCaptured, this, &SessionWidget::onChunkCaptured);
+    // Proxy connections. One queued event per worker wakeup (batched), not
+    // one per receiver per chunk.
+    connect(m_proxy, &PtyProxy::chunksCaptured, this, &SessionWidget::onChunksCaptured);
     connect(m_proxy, &PtyProxy::started, this, &SessionWidget::onStarted);
     connect(m_proxy, &PtyProxy::stopped, this, &SessionWidget::onStopped);
     connect(m_proxy, &PtyProxy::errorOccurred, this, &SessionWidget::onError);
@@ -571,8 +571,12 @@ void SessionWidget::onWriteStalled(aether::Direction dir, quint64 droppedTotal) 
                                  .arg(droppedTotal));
 }
 
-void SessionWidget::onChunkCaptured(const aether::CapturedChunk &chunk) {
-    m_stats.addChunk(chunk);
+void SessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &chunks) {
+    ConsoleView *console = m_consolePanel->console();
+    for (const CapturedChunk &chunk : chunks) {
+        console->appendChunk(chunk);
+        m_stats.addChunk(chunk);
+    }
 }
 
 }  // namespace aether

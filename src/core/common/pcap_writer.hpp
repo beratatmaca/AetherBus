@@ -12,6 +12,7 @@
 
 #include "core/serial/serial_types.hpp"
 
+#include <QByteArray>
 #include <QString>
 
 #include <memory>
@@ -61,6 +62,8 @@ public:
 private:
     mutable std::mutex m_mutex;
     std::unique_ptr<QFile> m_file;
+    QByteArray m_scratch;  ///< Reused record buffer (guarded by m_mutex) so the per-packet path
+                           ///< costs one write() and no allocations at steady state.
 };
 
 }  // namespace aether

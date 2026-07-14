@@ -224,6 +224,36 @@ void BusTest::ethernetPacketModelEvictsOldest() {
     QVERIFY(model.chunkAt(0).data != QByteArrayLiteral("first"));
 }
 
+void BusTest::ethernetPacketModelBatchClampsAndEvicts() {
+    EthernetPacketModel model;
+
+    // Seed with a few rows, then append a single batch larger than the cap.
+    for (int i = 0; i < 5; ++i) {
+        CapturedChunk seed;
+        seed.timestampMs = i;
+        seed.data = QByteArrayLiteral("seed") + QByteArray::number(i);
+        model.appendPacket(seed);
+    }
+
+    QVector<CapturedChunk> batch;
+    const int overCap = EthernetPacketModel::kMaxRows + 250;
+    batch.reserve(overCap);
+    for (int i = 0; i < overCap; ++i) {
+        CapturedChunk chunk;
+        chunk.timestampMs = 1000 + i;
+        chunk.data = QByteArray::number(i);
+        batch.append(chunk);
+    }
+    model.appendPackets(batch);
+
+    // The count is clamped to the cap, the seed rows are gone, and only the
+    // newest kMaxRows of the oversized batch survive in order (so the last row
+    // is the batch's final element and the first is batch element #250).
+    QCOMPARE(model.rowCount(), EthernetPacketModel::kMaxRows);
+    QCOMPARE(model.chunkAt(model.rowCount() - 1).data, QByteArray::number(overCap - 1));
+    QCOMPARE(model.chunkAt(0).data, QByteArray::number(overCap - EthernetPacketModel::kMaxRows));
+}
+
 void BusTest::ethernetBackendOpenInvalidInterfaceFails() {
     EthernetBackend backend;
     QSignalSpy errorSpy(&backend, &EthernetBackend::errorOccurred);

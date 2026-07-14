@@ -623,7 +623,7 @@ void MainWindow::updateMinimumSizeForTiling() {
         if (!session) {
             continue;
         }
-        const QSize hint = session->minimumSizeHint();
+        const QSize hint = session->sizeHint();
         tileMinWidth = qMax(tileMinWidth, hint.width());
         tileMinHeight = qMax(tileMinHeight, hint.height());
     }

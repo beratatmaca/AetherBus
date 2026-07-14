@@ -32,8 +32,7 @@ struct StatValue {
     }
 };
 
-/// Per-identifier statistics for framed transports (CAN), accumulated purely
-/// from observed traffic.
+/** @brief Per-identifier statistics for framed transports (CAN), accumulated purely from observed traffic. */
 struct CanIdStat {
     quint64 count = 0;            ///< Frames seen with this id.
     qint64 lastTimestampMs = -1;  ///< Timestamp of the most recent frame.
@@ -74,8 +73,16 @@ public:
     const QVector<double> &rxRateHistory() const { return m_rxRateHistory; }
     const QVector<double> &txRateHistory() const { return m_txRateHistory; }
 
-    /// Per-CAN-id statistics keyed by identifier (populated only for framed chunks).
+    /** @brief Per-CAN-id statistics keyed by identifier (populated only for framed chunks). */
     const QHash<quint32, CanIdStat> &perIdStats() const { return m_perId; }
+
+    /**
+     * @brief Monotonic change counter, bumped by addChunk()/rollRates()/reset().
+     *
+     * Periodic UI refreshers compare it against their last-seen value so an
+     * idle bus costs them nothing.
+     */
+    quint64 revision() const { return m_revision; }
 
 private:
     qint64 m_rxBytes = 0;
@@ -93,19 +100,21 @@ private:
     // Gaps
     StatValue m_rxGap;
     StatValue m_txGap;
-    StatValue m_txRxGap;  // Tx -> Rx latency
-    StatValue m_rxTxGap;  // Rx -> Tx latency
+    StatValue m_txRxGap;  ///< Tx -> Rx latency
+    StatValue m_rxTxGap;  ///< Rx -> Tx latency
 
     // Rates calculation
     qint64 m_rxBytesThisPeriod = 0;
     qint64 m_txBytesThisPeriod = 0;
-    double m_currentRxRate = 0.0;  // bytes/sec
-    double m_currentTxRate = 0.0;  // bytes/sec
+    double m_currentRxRate = 0.0;  ///< bytes/sec
+    double m_currentTxRate = 0.0;  ///< bytes/sec
 
     QVector<double> m_rxRateHistory;
     QVector<double> m_txRateHistory;
 
     QHash<quint32, CanIdStat> m_perId;
+
+    quint64 m_revision = 0;
 
     // Serial parameters
     int m_baud = 115200;

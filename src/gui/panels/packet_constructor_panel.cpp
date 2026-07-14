@@ -312,7 +312,7 @@ QByteArray PacketConstructorPanel::buildPacket(bool *ok) {
         if (m_urgCheck->isChecked())
             flags |= 0x20;
 
-        uint16_t window = static_cast<uint16_t>(m_tcpWindowSpin->value());
+        auto window = static_cast<uint16_t>(m_tcpWindowSpin->value());
 
         tcp.append(static_cast<char>(srcPort >> 8));
         tcp.append(static_cast<char>(srcPort & 0xFF));

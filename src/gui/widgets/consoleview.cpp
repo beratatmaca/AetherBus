@@ -8,11 +8,16 @@
 #include <QTimer>
 #include <QWheelEvent>
 
+#include <algorithm>
+
 namespace aether {
 
 namespace {
-constexpr int kFlushIntervalMs = 16;       // ~60 Hz
-constexpr int kMaxLines = 10000;           // rolling history ceiling
+constexpr int kFlushIntervalMs = 16;  // ~60 Hz
+constexpr int kMaxLines = 10000;      // rolling history ceiling
+// Evicted in blocks: removing the front of a 10k QVector one entry at a time
+// would memmove the whole buffer on every chunk once the ceiling is reached.
+constexpr int kEvictBatch = 512;
 constexpr int kThroughputWindowMs = 1000;  // rate averaging window
 }  // namespace
 
@@ -60,12 +65,12 @@ void ConsoleView::appendChunk(const aether::CapturedChunk &chunk) {
         m_rateTimer.restart();
     }
 
-    emit countsChanged(m_rx, m_tx, m_rxRate, m_txRate);
+    m_countsDirty = true;
 
     m_pending.append(chunk);
     m_history.append(chunk);
     if (m_history.size() > kMaxLines) {
-        m_history.removeFirst();
+        m_history.remove(0, kEvictBatch);
     }
 }
 
@@ -169,6 +174,13 @@ void ConsoleView::moveCursorToEnd() {
 }
 
 void ConsoleView::flush() {
+    // Counter labels update here (at most 60 Hz) rather than per chunk; the
+    // early-outs below must not starve them, e.g. while paused.
+    if (m_countsDirty) {
+        m_countsDirty = false;
+        emit countsChanged(m_rx, m_tx, m_rxRate, m_txRate);
+    }
+
     if (m_paused || m_pending.isEmpty()) {
         return;
     }
@@ -209,13 +221,14 @@ void ConsoleView::renderOpenLine() {
         m_lines.append(m_openLine);
         m_openLineActive = true;
         if (m_lines.size() > kMaxLines) {
-            m_lines.removeFirst();
+            m_lines.remove(0, kEvictBatch);
+            m_searchHits.erase(
+                std::remove_if(m_searchHits.begin(), m_searchHits.end(), [](const SearchHit &h) { return h.line < kEvictBatch; }),
+                m_searchHits.end());
             for (auto &h : m_searchHits) {
-                --h.line;
+                h.line -= kEvictBatch;
             }
-            if (m_cursor.line > 0) {
-                --m_cursor.line;
-            }
+            m_cursor.line = qMax(0, m_cursor.line - kEvictBatch);
         }
     }
 }
@@ -427,7 +440,15 @@ QString ConsoleView::lineToPlain(const DisplayLine &dl) const {
 }
 
 QString ConsoleView::lineSearchText(const DisplayLine &dl) const {
-    return lineToPlain(dl);
+    // Cache the joined plain text: a live-search keystroke re-scans every
+    // line, and findQuery() cycles over them repeatedly, so building it once
+    // per line is worth the stored string. Lines are immutable once finalized;
+    // reapplyHistory() rebuilds them fresh (empty cache) so no invalidation is
+    // needed.
+    if (dl.plainCache.isEmpty()) {
+        dl.plainCache = lineToPlain(dl);
+    }
+    return dl.plainCache;
 }
 
 void ConsoleView::reapplyHistory() {

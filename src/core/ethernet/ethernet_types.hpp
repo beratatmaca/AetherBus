@@ -6,13 +6,14 @@
 
 namespace aether {
 
+/** @brief Parameters describing how to open a pcap capture on a network interface. */
 struct EthernetConfig {
-    QString interfaceName;
-    QString bpfFilter;
-    bool promiscuous = false;
+    QString interfaceName;      ///< Network interface name, e.g. @c eth0.
+    QString bpfFilter;          ///< BPF capture filter expression; empty => capture everything.
+    bool promiscuous = false;   ///< Open the interface in promiscuous mode.
 };
 
-// Flags for visual construction
+/** @brief Flags for visual construction. */
 enum EthernetProto : uint8_t {
     ProtoUDP = 17,
     ProtoTCP = 6,

@@ -93,13 +93,26 @@ void CanSnifferWidget::refreshUi() {
         return;
     }
 
-    auto stats = m_calc->perIdStats();
+    // Skip the full rebuild once the bus has been quiet long enough for the
+    // time-driven visuals to settle (the <1 s changed-byte highlight and the
+    // 3 s stale-gray threshold); keep refreshing until then so they fade
+    // correctly after the last frame.
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const quint64 revision = m_calc->revision();
+    if (revision != m_lastSeenRevision) {
+        m_lastSeenRevision = revision;
+        m_revisionChangedAtMs = nowMs;
+    } else if (nowMs - m_revisionChangedAtMs > 3500) {
+        return;
+    }
+
+    const auto &stats = m_calc->perIdStats();
     QList<quint32> keys = stats.keys();
     // Sort by reception time ascending so the most recently received frame is
     // at the bottom; tie-break by id for a stable order of equal timestamps.
     std::sort(keys.begin(), keys.end(), [&](quint32 a, quint32 b) {
-        const qint64 ta = stats[a].lastTimestampMs;
-        const qint64 tb = stats[b].lastTimestampMs;
+        const qint64 ta = stats.constFind(a)->lastTimestampMs;
+        const qint64 tb = stats.constFind(b)->lastTimestampMs;
         return ta != tb ? ta < tb : a < b;
     });
 
@@ -126,7 +139,7 @@ void CanSnifferWidget::refreshUi() {
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     for (int i = 0; i < keys.size(); ++i) {
         quint32 id = keys[i];
-        const auto &s = stats[id];
+        const auto &s = *stats.constFind(id);
 
         // 0. ID
         QString idStr = QStringLiteral("0x") + QString::number(id, 16).toUpper();

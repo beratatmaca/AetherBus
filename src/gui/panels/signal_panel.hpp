@@ -8,6 +8,10 @@ class QPushButton;
 
 namespace aether {
 
+/**
+ * @brief Serial control-line panel: RTS/DTR toggles, a break trigger, CTS/DSR/DCD/RI
+ * status LEDs, and the auto-reconnect option.
+ */
 class SignalPanel : public QGroupBox {
     Q_OBJECT
 

@@ -18,7 +18,7 @@ constexpr quint32 kPcapMagic = 0xa1b2c3d4U;
 constexpr quint32 kLinkTypeRtacSerial = 250;
 constexpr char kRtacEventTxStart = 0x01;  ///< DATA_TX_START (host -> peripheral).
 
-/// Read a little-endian 32-bit word at @p off (caller guarantees 4 bytes exist).
+/** @brief Read a little-endian 32-bit word at @p off (caller guarantees 4 bytes exist). */
 quint32 readLe32(const QByteArray &buf, int off) {
     const auto b = [&](int i) { return static_cast<quint32>(static_cast<quint8>(buf.at(off + i))); };
     return b(0) | (b(1) << 8) | (b(2) << 16) | (b(3) << 24);

@@ -24,26 +24,32 @@ public:
     void populateDevices(const QStringList &systemPorts, const QStringList &byIdPorts);
     [[nodiscard]] QString device() const;
 
-    /// Write the current field values to @p settings (relative keys).
+    /** @brief Write the current field values to @p settings (relative keys). */
     void saveSettings(QSettings &settings) const;
-    /// Restore field values previously written by @ref saveSettings.
+    /** @brief Restore field values previously written by @ref saveSettings. */
     void loadSettings(const QSettings &settings);
 
 signals:
     void startInterception(const SerialConfig &cfg);
     void stopInterception();
     void rescanRequested();
-    /// Emitted whenever the status text changes, as plain text plus an error flag,
-    /// so the host window can mirror it into the always-visible status bar.
+    /**
+     * @brief Emitted whenever the status text changes, as plain text plus an error flag,
+     * so the host window can mirror it into the always-visible status bar.
+     */
     void statusChanged(const QString &plainText, bool isError);
 
 private slots:
     void onStartButtonClicked();
 
 private:
-    /// Snapshot the current field values (no validation, no side effects).
+    /** @brief Snapshot the current field values (no validation, no side effects). */
     [[nodiscard]] SerialConfig currentConfig() const;
-    /// Populate fields from @p cfg. Empty/non-positive fields keep their default.
+    /**
+     * @brief Populate fields from @p cfg.
+     *
+     * Empty/non-positive fields keep their default.
+     */
     void applyConfig(const SerialConfig &cfg);
 
     QComboBox *m_deviceBox = nullptr;

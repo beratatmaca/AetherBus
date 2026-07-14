@@ -93,20 +93,22 @@ void BusTest::injectionTagsDirection() {
     cfg.device = physSlave;
     QVERIFY(proxy.open(cfg));
 
-    QSignalSpy spy(&proxy, &PtyProxy::chunkCaptured);
+    QSignalSpy spy(&proxy, &PtyProxy::chunksCaptured);
     QVERIFY(spy.isValid());
 
     QVERIFY(proxy.injectToApp(QByteArray::fromHex("AABB")));
     QVERIFY(proxy.injectToDevice(QByteArray::fromHex("CCDD")));
     QCOMPARE(spy.count(), 2);
 
-    const auto first = qvariant_cast<CapturedChunk>(spy.at(0).at(0));
-    QCOMPARE(first.dir, Direction::Rx);  // toward the app
-    QCOMPARE(first.data, QByteArray::fromHex("AABB"));
+    const auto firstBatch = qvariant_cast<QVector<CapturedChunk>>(spy.at(0).at(0));
+    QCOMPARE(firstBatch.size(), 1);
+    QCOMPARE(firstBatch.first().dir, Direction::Rx);  // toward the app
+    QCOMPARE(firstBatch.first().data, QByteArray::fromHex("AABB"));
 
-    const auto second = qvariant_cast<CapturedChunk>(spy.at(1).at(0));
-    QCOMPARE(second.dir, Direction::Tx);  // toward the device
-    QCOMPARE(second.data, QByteArray::fromHex("CCDD"));
+    const auto secondBatch = qvariant_cast<QVector<CapturedChunk>>(spy.at(1).at(0));
+    QCOMPARE(secondBatch.size(), 1);
+    QCOMPARE(secondBatch.first().dir, Direction::Tx);  // toward the device
+    QCOMPARE(secondBatch.first().data, QByteArray::fromHex("CCDD"));
 
     proxy.close();
     ::close(physMaster);

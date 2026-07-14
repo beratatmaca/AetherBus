@@ -48,9 +48,8 @@ CanSessionWidget::CanSessionWidget(QWidget *parent) : SessionView(parent), m_bac
     connect(m_configPanel, &CanConfigPanel::rescanRequested, this, &CanSessionWidget::rescan);
     connect(m_configPanel, &CanConfigPanel::statusChanged, this, &CanSessionWidget::statusMessage);
 
-    connect(m_backend, &CanBackend::chunkCaptured, m_consolePanel->console(), &ConsoleView::appendChunk);
-    connect(m_backend, &CanBackend::chunkCaptured, m_decoderPanel, &CanDecoderPanel::processChunk);
-    connect(m_backend, &CanBackend::chunkCaptured, this, &CanSessionWidget::onChunkCaptured);
+    // One queued event per socket-drain wakeup (batched), not three per frame.
+    connect(m_backend, &CanBackend::chunksCaptured, this, &CanSessionWidget::onChunksCaptured);
     connect(m_backend, &CanBackend::started, this, &CanSessionWidget::onStarted);
     connect(m_backend, &CanBackend::stopped, this, &CanSessionWidget::onStopped);
     connect(m_backend, &CanBackend::errorOccurred, this, &CanSessionWidget::onError);
@@ -356,6 +355,15 @@ void CanSessionWidget::onDisconnected() {
 
 void CanSessionWidget::onChunkCaptured(const aether::CapturedChunk &chunk) {
     m_stats.addChunk(chunk);
+}
+
+void CanSessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &chunks) {
+    ConsoleView *console = m_consolePanel->console();
+    for (const CapturedChunk &chunk : chunks) {
+        console->appendChunk(chunk);
+        m_decoderPanel->processChunk(chunk);
+        m_stats.addChunk(chunk);
+    }
 }
 
 void CanSessionWidget::transmit() {

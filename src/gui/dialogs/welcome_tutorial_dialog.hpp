@@ -9,6 +9,10 @@ class QLabel;
 
 namespace aether {
 
+/**
+ * @brief First-run tutorial dialog that pages through the slides of the bundled
+ * Usage.md, with a "don't show this again" preference.
+ */
 class WelcomeTutorialDialog : public QDialog {
     Q_OBJECT
 

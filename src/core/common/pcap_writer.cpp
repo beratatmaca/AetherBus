@@ -75,19 +75,22 @@ void PcapWriter::writePacket(qint64 timestampMs, Direction dir, const QByteArray
     const auto usec = static_cast<quint32>((timestampMs % 1000) * 1000);
     const auto fill = static_cast<quint32>(kRtacHeaderLen + data.size());
 
-    QByteArray record;
-    appendLe32(record, sec);
-    appendLe32(record, usec);
-    appendLe32(record, fill);
-    appendLe32(record, fill);
-    appendBe32(record, sec);
-    appendBe32(record, usec);
-    record.append(static_cast<char>(dir == Direction::Tx ? 0x01 : 0x02));
-    record.append(static_cast<char>(0x00));
-    record.append(static_cast<char>(0x00));
-    record.append(static_cast<char>(0x00));
-    record.append(data);
-    m_file->write(record);
+    // resize(0) keeps the allocation, so steady-state packets reuse one
+    // buffer and cost a single write().
+    m_scratch.resize(0);
+    m_scratch.reserve(16 + kRtacHeaderLen + data.size());
+    appendLe32(m_scratch, sec);
+    appendLe32(m_scratch, usec);
+    appendLe32(m_scratch, fill);
+    appendLe32(m_scratch, fill);
+    appendBe32(m_scratch, sec);
+    appendBe32(m_scratch, usec);
+    m_scratch.append(static_cast<char>(dir == Direction::Tx ? 0x01 : 0x02));
+    m_scratch.append(static_cast<char>(0x00));
+    m_scratch.append(static_cast<char>(0x00));
+    m_scratch.append(static_cast<char>(0x00));
+    m_scratch.append(data);
+    m_file->write(m_scratch);
 }
 
 }  // namespace aether

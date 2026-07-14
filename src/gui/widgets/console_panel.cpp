@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include <QTextDocument>
 #include <QSplitter>
+#include <QTimer>
 #include "gui/widgets/byte_inspector_panel.hpp"
 
 namespace aether {
@@ -197,8 +198,21 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
     m_findEdit = new QLineEdit(this);
     m_findEdit->setPlaceholderText(QStringLiteral("find…"));
     m_findEdit->setFixedWidth(160);
-    connect(m_findEdit, &QLineEdit::returnPressed, this, [this] { doFind(false); });
-    connect(m_findEdit, &QLineEdit::textChanged, m_console, &ConsoleView::highlightSearchText);
+
+    // Re-highlighting rescans the whole (up to 10k-line) history, so debounce
+    // it: typing coalesces into one pass 150 ms after the last keystroke.
+    // Enter / find-next stay immediate below.
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(150);
+    connect(m_searchDebounce, &QTimer::timeout, this, [this] { m_console->highlightSearchText(m_findEdit->text()); });
+
+    connect(m_findEdit, &QLineEdit::returnPressed, this, [this] {
+        m_searchDebounce->stop();
+        m_console->highlightSearchText(m_findEdit->text());
+        doFind(false);
+    });
+    connect(m_findEdit, &QLineEdit::textChanged, this, [this] { m_searchDebounce->start(); });
     row2->addWidget(m_findEdit);
 
     auto *findPrevBtn = makeAction(QStringLiteral("◀"), QStringLiteral("Find previous"));

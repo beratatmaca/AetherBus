@@ -38,18 +38,22 @@ class QMimeData;
 
 namespace aether {
 
-/// One fully-assembled display line ready to be painted.
+/** @brief One fully-assembled display line ready to be painted. */
 struct DisplayLine {
     qint64 timestampMs = 0;
     Direction dir = Direction::Rx;
     QByteArray bytes;  ///< raw payload bytes for this line
 
-    // Pre-rendered text tokens (one string per byte per active column).
-    // Columns are stored in the order: HEX, DEC, BIN, ASCII (only active
-    // ones are populated).  Each element is a QStringList of width == bytes.size().
-    QVector<QStringList> cols;  ///< cols[colIdx][byteIdx]
+    QVector<QStringList> cols;  ///< cols[colIdx][byteIdx] — pre-rendered text tokens (one string per byte per active column).
+                                ///< Columns are stored in the order: HEX, DEC, BIN, ASCII (only active ones are populated).
+                                ///< Each element is a QStringList of width == bytes.size().
     QString prefix;             ///< "[HH:mm:ss.zzz Rx/Tx]" or "[Rx/Tx]" (+ frame header)
     QString ascii;              ///< ASCII representation on the right
+
+    mutable QString plainCache;  ///< Lazily-filled full plain-text form (see ConsoleView::lineSearchText). Empty means
+                                 ///< uncached — a real line's text always has a non-empty prefix. Never populated by
+                                 ///< buildLine() (that would add a string join to the per-chunk hot path); filled on
+                                 ///< first search/copy use instead.
 
     // Optional framing metadata mirrored from the source chunk (CAN etc.).
     bool isFrame = false;
@@ -57,7 +61,7 @@ struct DisplayLine {
     quint16 frameFlags = 0;
 };
 
-/// Lightweight text cursor pointing into the DisplayLine vector.
+/** @brief Lightweight text cursor pointing into the DisplayLine vector. */
 struct CursorPos {
     int line = 0;    ///< index into m_lines
     int column = 0;  ///< flat character index within the rendered line text
@@ -67,7 +71,7 @@ class ConsoleView : public QAbstractScrollArea {
     Q_OBJECT
 
 public:
-    /// How accumulated bytes are split into display lines.
+    /** @brief How accumulated bytes are split into display lines. */
     enum class NewlineMode : std::uint8_t {
         PerChunk,    ///< one line per captured chunk (legacy behaviour)
         Delimiter,   ///< break after a chosen byte value (e.g. 0x0A)
@@ -77,8 +81,11 @@ public:
         Frame,       ///< one line per captured frame, rendered with its frame header (CAN)
     };
 
-    /// How the Find query text is interpreted before matching. Order matches the
-    /// GUI mode combo, so an index can be cast directly to this enum.
+    /**
+     * @brief How the Find query text is interpreted before matching.
+     *
+     * Order matches the GUI mode combo, so an index can be cast directly to this enum.
+     */
     enum class SearchMode : std::uint8_t {
         Auto,  ///< guess: hex-looking input is bytes, otherwise literal text
         Text,  ///< literal (case-insensitive) substring of the rendered line
@@ -92,79 +99,83 @@ public:
     [[nodiscard]] qint64 rxCount() const { return m_rx; }
     [[nodiscard]] qint64 txCount() const { return m_tx; }
 
-    /// Return all visible history as plain text (used by Save… action).
+    /** @brief Return all visible history as plain text (used by Save… action). */
     [[nodiscard]] QString toPlainText() const;
 
-    /// Minimal cursor replacement — position in lines×chars.
+    /** @brief Minimal cursor replacement — position in lines×chars. */
     [[nodiscard]] CursorPos textCursor() const { return m_cursor; }
     void setTextCursor(const CursorPos &c);
 
-    /// Jump to start / end (mirrors QTextCursor::Start / End moves).
+    /** @brief Jump to start / end (mirrors QTextCursor::Start / End moves). */
     void moveCursorToStart();
     void moveCursorToEnd();
 
-    /// Find forward or backward from the current cursor position.
-    /// @param query  Text (or pattern) to search for in the console buffer.
-    /// @param flags  QTextDocument::FindBackward is honoured; others ignored.
+    /**
+     * @brief Find forward or backward from the current cursor position.
+     * @param query  Text (or pattern) to search for in the console buffer.
+     * @param flags  QTextDocument::FindBackward is honoured; others ignored.
+     */
     bool findQuery(const QString &query, int flags = 0);
 
     [[nodiscard]] bool isLogging() const { return m_logFile != nullptr; }
 
 public slots:
-    /// Enqueue a chunk for the next flush. Cheap; safe to call at high rates.
+    /** @brief Enqueue a chunk for the next flush. Cheap; safe to call at high rates. */
     void appendChunk(const aether::CapturedChunk &chunk);
 
-    /// Drop all buffered and displayed content (does not reset counters).
+    /** @brief Drop all buffered and displayed content (does not reset counters). */
     void clearConsole();
 
-    /// Choose which representation columns are rendered.
+    /** @brief Choose which representation columns are rendered. */
     void setFormats(bool hex, bool dec, bool bin, bool ascii);
 
-    /// Set the TLV parsing parameters.
+    /** @brief Set the TLV parsing parameters. */
     void setTlvParams(int headerSize, int lenOffset, int lenSize);
 
-    /// Set the line-splitting rule.
+    /** @brief Set the line-splitting rule. */
     void setNewlineMode(NewlineMode mode, int param);
 
-    /// When @p on is false the [HH:mm:ss.zzz] prefix is hidden.
+    /** @brief When @p on is false the [HH:mm:ss.zzz] prefix is hidden. */
     void setShowTimestamps(bool on);
 
-    /// When off, the view does not auto-jump to the newest line.
+    /** @brief When off, the view does not auto-jump to the newest line. */
     void setAutoScroll(bool on);
 
-    /// When paused, incoming chunks are counted but not rendered until resumed.
+    /** @brief When paused, incoming chunks are counted but not rendered until resumed. */
     void setPaused(bool paused);
 
-    /// Zero the Rx/Tx byte counters.
+    /** @brief Zero the Rx/Tx byte counters. */
     void resetCounts();
 
-    /// Begin appending every finalized line to @p path.
+    /** @brief Begin appending every finalized line to @p path. */
     bool startLogging(const QString &path);
 
-    /// Stop and close the active log file.
+    /** @brief Stop and close the active log file. */
     void stopLogging();
 
-    /// Highlight all occurrences of @p text in the viewport.
+    /** @brief Highlight all occurrences of @p text in the viewport. */
     void highlightSearchText(const QString &text);
 
-    /// Choose how the Find query is interpreted (text / hex / dec / bin / auto).
+    /** @brief Choose how the Find query is interpreted (text / hex / dec / bin / auto). */
     void setSearchMode(SearchMode mode);
 
     [[nodiscard]] QString selectedText() const;
 
-    /// Raw payload bytes covered by the current selection, mapped back from the
-    /// underlying per-line data (never the rendered timestamps/ASCII gutter), so
-    /// callers get exactly the bytes the user highlighted across one or more lines.
+    /**
+     * @brief Raw payload bytes covered by the current selection, mapped back from the
+     * underlying per-line data (never the rendered timestamps/ASCII gutter), so
+     * callers get exactly the bytes the user highlighted across one or more lines.
+     */
     [[nodiscard]] QByteArray selectedBytes() const;
 
 signals:
-    /// Emitted whenever the running byte totals change.
+    /** @brief Emitted whenever the running byte totals change. */
     void countsChanged(qint64 rx, qint64 tx, qint64 rxRate, qint64 txRate);
 
-    /// Emitted when the text selection changes; @p chars is the selected length.
+    /** @brief Emitted when the text selection changes; @p chars is the selected length. */
     void selectionChars(int chars);
 
-    /// Emitted after a highlight pass with the number of matches found.
+    /** @brief Emitted after a highlight pass with the number of matches found. */
     void searchMatchCount(int count);
 
 protected:
@@ -183,39 +194,47 @@ private slots:
 private:
     void processChunk(const CapturedChunk &chunk);
     void beginLineIfEmpty(const CapturedChunk &chunk);
-    void commitOpenLine();  ///< push m_openLine into m_lines and reset
-    void renderOpenLine();  ///< re-render m_openLine.cols from m_openLine.bytes
-    void finalizeLine();    ///< commit + log
+    /** @brief push m_openLine into m_lines and reset */
+    void commitOpenLine();
+    /** @brief re-render m_openLine.cols from m_openLine.bytes */
+    void renderOpenLine();
+    /** @brief commit + log */
+    void finalizeLine();
 
     DisplayLine buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame = false, quint32 frameId = 0,
                           quint16 frameFlags = 0) const;
-    /// Compose the per-frame header shown after the timestamp, e.g. "123 [4] R".
+    /** @brief Compose the per-frame header shown after the timestamp, e.g. "123 [4] R". */
     [[nodiscard]] static QString frameHeader(quint32 id, quint16 flags, int payloadLen);
     [[nodiscard]] QString lineToPlain(const DisplayLine &dl) const;
 
-    /// Build a regex matching @p bytes against the active display columns.
+    /** @brief Build a regex matching @p bytes against the active display columns. */
     [[nodiscard]] QRegularExpression buildByteRegex(const QByteArray &bytes) const;
-    /// Resolve the query into a matcher per @ref m_searchMode. Returns a regex to
-    /// match; if it is empty, @p useLiteral says whether the caller should fall
-    /// back to a literal substring search (true) or treat it as no match (false,
-    /// e.g. an explicit hex/dec/bin query that failed to parse).
+    /**
+     * @brief Resolve the query into a matcher per @ref m_searchMode.
+     *
+     * Returns a regex to match; if it is empty, @p useLiteral says whether the
+     * caller should fall back to a literal substring search (true) or treat it
+     * as no match (false, e.g. an explicit hex/dec/bin query that failed to parse).
+     */
     [[nodiscard]] QRegularExpression searchRegexForQuery(const QString &query, bool &useLiteral) const;
-    /// Flat plain-text representation of a line for search matching.
+    /** @brief Flat plain-text representation of a line for search matching. */
     [[nodiscard]] QString lineSearchText(const DisplayLine &dl) const;
 
     void updateScrollBars();
-    /// Content-space x (pixels, pre-scroll) at which @p dl's hex region ends,
-    /// i.e. where its "  |  " separator would begin without alignment.
+    /**
+     * @brief Content-space x (pixels, pre-scroll) at which @p dl's hex region ends,
+     * i.e. where its "  |  " separator would begin without alignment.
+     */
     [[nodiscard]] int hexRegionEndX(const DisplayLine &dl) const;
     int lineHeight() const;
     int firstVisibleLine() const;
     int visibleLineCount() const;
 
-    /// Translate a viewport pixel position to (line, charOffset).
+    /** @brief Translate a viewport pixel position to (line, charOffset). */
     CursorPos posFromPoint(QPoint pt) const;
-    /// Pixel x offset of character @p col in line @p li (approx, monospace).
+    /** @brief Pixel x offset of character @p col in line @p li (approx, monospace). */
     int xOfChar(int li, int col) const;
-    /// Full rendered plain text of a line for measuring selection.
+    /** @brief Full rendered plain text of a line for measuring selection. */
     QString fullLineText(int li) const;
 
     void copySelectionToClipboard(int layerIndex) const;
@@ -226,21 +245,16 @@ private:
     QVector<CapturedChunk> m_pending;
     QTimer *m_flushTimer;
 
-    // Finalized display lines (ring buffer).
-    QVector<DisplayLine> m_lines;
+    QVector<DisplayLine> m_lines;  ///< Finalized display lines (ring buffer).
 
-    // Raw chunk history for reapplyHistory().
-    QVector<CapturedChunk> m_history;
+    QVector<CapturedChunk> m_history;  ///< Raw chunk history for reapplyHistory().
 
-    // Currently open (not-yet-finalized) line being assembled.
-    DisplayLine m_openLine;
+    DisplayLine m_openLine;  ///< Currently open (not-yet-finalized) line being assembled.
     bool m_openLineActive = false;  ///< true while m_openLine is in m_lines tail
 
-    // CrLf mode state.
-    bool m_pendingCr = false;
+    bool m_pendingCr = false;  ///< CrLf mode state.
 
-    // TLV parsing state.
-    int m_tlvTargetSize = -1;
+    int m_tlvTargetSize = -1;  ///< TLV parsing state.
 
     // Display options.
     bool m_showHex = true;
@@ -259,7 +273,9 @@ private:
     bool m_autoScroll = true;
     bool m_paused = false;
 
-    // Running byte counters.
+    // Running byte counters; countsChanged is coalesced into flush() so the
+    // labels update at most once per frame, not once per chunk.
+    bool m_countsDirty = false;
     qint64 m_rx = 0;
     qint64 m_tx = 0;
 
@@ -276,13 +292,11 @@ private:
     int m_lineH = 16;  ///< line height in pixels (ascent+descent+leading)
     int m_fontAscent = 12;
 
-    /// Shared content-space x (pre-scroll) where the ASCII "  |  " separator
-    /// begins, so pipes align into a vertical column across lines. Widest
-    /// hex-region end among lines that render a separator.
-    int m_asciiSepCol = 0;
+    int m_asciiSepCol = 0;  ///< Shared content-space x (pre-scroll) where the ASCII "  |  " separator begins, so pipes
+                            ///< align into a vertical column across lines. Widest hex-region end among lines that
+                            ///< render a separator.
 
-    // Cursor (for find / wrap-around).
-    CursorPos m_cursor;
+    CursorPos m_cursor;  ///< Cursor (for find / wrap-around).
 
     // Selection (anchor → active end).
     CursorPos m_selAnchor;
@@ -300,11 +314,9 @@ private:
     QString m_searchText;
     SearchMode m_searchMode = SearchMode::Auto;
 
-    // Optional full-session log file (owned; parented to this).
-    QFile *m_logFile = nullptr;
+    QFile *m_logFile = nullptr;  ///< Optional full-session log file (owned; parented to this).
 
-    // Pixel scroll offset within a line (horizontal).
-    int m_hScroll = 0;
+    int m_hScroll = 0;  ///< Pixel scroll offset within a line (horizontal).
 
     static constexpr int kLeftPad = 4;
     static constexpr int kFindBackward = 1;

@@ -356,21 +356,11 @@ void BusTest::mainWindowTileGridShape() {
 }
 
 void BusTest::mainWindowTiledMinimumSizeScales() {
-    // Regression guard: the tiled workspace used to enforce one fixed
-    // minimum window size regardless of how many sessions were tiled, so a
-    // non-fullscreen window could squeeze several tiles below what their own
-    // content actually needs. The minimum should now be derived from the
-    // tile grid and each session's own minimumSizeHint(), and relax back
-    // down once untiled.
-    //
-    // This mirrors MainWindow::updateMinimumSizeForTiling()'s formula
-    // exactly (rather than just asserting the size "grew") because the
-    // offscreen test platform's virtual screen is tiny (800x800 — smaller
-    // than even the base minimum), so everything clamps down to fit it
-    // regardless of tile count; a raw growth comparison isn't reliably
-    // observable in this harness, but the formula's correctness is.
+    // Mirrors updateMinimumSizeForTiling()'s formula directly since the
+    // offscreen test screen is smaller than the base minimum, so a plain
+    // growth check isn't reliable here.
     QSettings().remove(QStringLiteral("sessions"));  // isolate from other tests' persisted workspaces
-    MainWindow w;  // starts with exactly 1 default Serial session
+    MainWindow w;                                    // starts with exactly 1 default Serial session
     const QSize baseMin = w.minimumSize();
 
     QMetaObject::invokeMethod(&w, "addNewCanSession");
@@ -389,7 +379,7 @@ void BusTest::mainWindowTiledMinimumSizeScales() {
     int tileMinWidth = 0;
     int tileMinHeight = 0;
     for (SessionView *session : sessions) {
-        const QSize hint = session->minimumSizeHint();
+        const QSize hint = session->sizeHint();
         tileMinWidth = qMax(tileMinWidth, hint.width());
         tileMinHeight = qMax(tileMinHeight, hint.height());
     }

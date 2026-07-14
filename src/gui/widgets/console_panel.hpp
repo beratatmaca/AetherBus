@@ -9,6 +9,7 @@ class QPushButton;
 class QLabel;
 class QFrame;
 class QHBoxLayout;
+class QTimer;
 
 namespace aether {
 
@@ -102,6 +103,7 @@ private:
     // Find bar controls
     QLineEdit *m_findEdit = nullptr;
     QLabel *m_matchCountLabel = nullptr;
+    QTimer *m_searchDebounce = nullptr;  ///< coalesces per-keystroke re-highlights
 };
 
 }  // namespace aether

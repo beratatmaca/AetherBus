@@ -34,7 +34,28 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
     }
 
     const int firstLine = vOff / m_lineH;
-    const int lastLine = qMin(m_lines.size() - 1, firstLine + viewH / m_lineH + 1);
+    const int lastLine = qMin(static_cast<int>(m_lines.size()) - 1, firstLine + viewH / m_lineH + 1);
+
+    // Which display format each active column holds, in the same order
+    // buildLine() appends them. Computed once per paint instead of being
+    // re-derived per byte per column.
+    int colFormat[3] = {-1, -1, -1};
+    int activeCols = 0;
+    if (m_showHex) {
+        colFormat[activeCols++] = 0;
+    }
+    if (m_showDec) {
+        colFormat[activeCols++] = 1;
+    }
+    if (m_showBin) {
+        colFormat[activeCols++] = 2;
+    }
+
+    // Selection span is constant across the paint; compute it once.
+    const bool anchorFirst =
+        m_selAnchor.line < m_selEnd.line || (m_selAnchor.line == m_selEnd.line && m_selAnchor.column <= m_selEnd.column);
+    const CursorPos selLo = anchorFirst ? m_selAnchor : m_selEnd;
+    const CursorPos selHi = anchorFirst ? m_selEnd : m_selAnchor;
 
     for (int li = firstLine; li <= lastLine; ++li) {
         const DisplayLine &dl = m_lines.at(li);
@@ -53,124 +74,75 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
         x += (dl.prefix.length() + 1) * m_charW;
 
         const QColor &fgColor = isRx ? kRxFg : kTxFg;
-        int numCols = dl.cols.size();
-        int numBytes = dl.bytes.size();
+        const int numCols = static_cast<int>(dl.cols.size());
+        const int numBytes = static_cast<int>(dl.bytes.size());
 
         if (numCols > 0) {
-            for (int bi = 0; bi < numBytes; ++bi) {
-                // Calculate dynamic cell width based on active columns and their badges
-                int cellW = 0;
-                for (int ci = 0; ci < numCols; ++ci) {
-                    int formatType = -1;
-                    int activeCount = 0;
-                    if (m_showHex) {
-                        if (activeCount == ci) {
-                            formatType = 0;
-                        }
-                        activeCount++;
-                    }
-                    if (m_showDec) {
-                        if (activeCount == ci) {
-                            formatType = 1;
-                        }
-                        activeCount++;
-                    }
-                    if (m_showBin) {
-                        if (activeCount == ci) {
-                            formatType = 2;
-                        }
-                        activeCount++;
-                    }
-
-                    int tokenLen = dl.cols.at(ci).at(bi).length();
-                    if (formatType == 0) {
-                        cellW += tokenLen * m_charW;
-                    } else {
-                        cellW += tokenLen * m_charW + 6;
-                    }
-                    if (ci < numCols - 1) {
-                        cellW += 4;
-                    }
+            // Every byte renders the same fixed-width tokens (HEX=2, DEC=3,
+            // BIN=8 chars per buildLine's zero-padding), so cell geometry and
+            // the per-byte character offset are constant across the line —
+            // compute them once rather than re-deriving per byte.
+            int cellW = 0;
+            int cellCharLen = 0;  // '/'-joined token length, matching lineToPlain
+            for (int ci = 0; ci < numCols; ++ci) {
+                const int tokenLen = static_cast<int>(dl.cols.at(ci).at(0).length());
+                cellW += (colFormat[ci] == 0) ? tokenLen * m_charW : tokenLen * m_charW + 6;
+                if (ci < numCols - 1) {
+                    cellW += 4;
                 }
+                cellCharLen += tokenLen + (ci > 0 ? 1 : 0);  // '/' between columns
+            }
+            const int prefixLen = static_cast<int>(dl.prefix.length()) + 1;
+            const int cellStride = cellW + m_charW;
+            const int charStride = cellCharLen + 1;  // token span plus trailing space
+            const int cellCharWidth = cellW / m_charW;
 
-                for (const SearchHit &hit : m_searchHits) {
-                    if (hit.line != li) {
-                        continue;
-                    }
-                    const int prefixLen = dl.prefix.length() + 1;
-                    int charOff = prefixLen;
-                    for (int j = 0; j < bi; ++j) {
-                        QStringList prevParts;
-                        for (int ci = 0; ci < numCols; ++ci) {
-                            if (j < dl.cols.at(ci).size()) {
-                                prevParts << dl.cols.at(ci).at(j);
-                            }
-                        }
-                        charOff += prevParts.join(QLatin1Char('/')).length() + 1;
-                    }
+            // Narrow the hit list to this line once (hits are stored in
+            // ascending line order) instead of scanning it per byte.
+            int hitBegin = 0;
+            int hitHi = static_cast<int>(m_searchHits.size());
+            while (hitBegin < hitHi) {
+                const int mid = (hitBegin + hitHi) / 2;
+                if (m_searchHits.at(mid).line < li) {
+                    hitBegin = mid + 1;
+                } else {
+                    hitHi = mid;
+                }
+            }
+            int hitEnd = hitBegin;
+            while (hitEnd < m_searchHits.size() && m_searchHits.at(hitEnd).line == li) {
+                ++hitEnd;
+            }
+
+            for (int bi = 0; bi < numBytes; ++bi) {
+                const int charOff = prefixLen + bi * charStride;
+
+                for (int h = hitBegin; h < hitEnd; ++h) {
+                    const SearchHit &hit = m_searchHits.at(h);
                     if (hit.start <= charOff && charOff < hit.start + hit.len) {
                         p.fillRect(x, yTop, cellW, m_lineH, kSearchBg);
+                        break;
                     }
                 }
 
                 if (m_hasSelection) {
-                    const CursorPos selLo =
-                        (m_selAnchor.line < m_selEnd.line || (m_selAnchor.line == m_selEnd.line && m_selAnchor.column <= m_selEnd.column))
-                            ? m_selAnchor
-                            : m_selEnd;
-                    const CursorPos selHi =
-                        (m_selAnchor.line < m_selEnd.line || (m_selAnchor.line == m_selEnd.line && m_selAnchor.column <= m_selEnd.column))
-                            ? m_selEnd
-                            : m_selAnchor;
-
                     const bool lineInSel = li > selLo.line && li < selHi.line;
                     const bool lineIsLo = li == selLo.line;
                     const bool lineIsHi = li == selHi.line;
+                    const int cellEnd = charOff + cellCharWidth;
 
                     if (lineInSel) {
                         p.fillRect(x, yTop, cellW + m_charW, m_lineH, kSelBg);
-                    } else if (lineIsLo && lineIsHi) {
-                        const int prefixLen = dl.prefix.length() + 1;
-                        int charOff = prefixLen;
-                        for (int j = 0; j < bi; ++j) {
-                            QStringList pp;
-                            for (int ci = 0; ci < numCols; ++ci) {
-                                if (j < dl.cols.at(ci).size())
-                                    pp << dl.cols.at(ci).at(j);
-                            }
-                            charOff += pp.join(QLatin1Char('/')).length() + 1;
+                    } else {
+                        bool fill = false;
+                        if (lineIsLo && lineIsHi) {
+                            fill = (cellEnd > selLo.column && charOff < selHi.column);
+                        } else if (lineIsLo) {
+                            fill = (charOff >= selLo.column);
+                        } else if (lineIsHi) {
+                            fill = (cellEnd <= selHi.column);
                         }
-                        const int cellEnd = charOff + (cellW / m_charW);
-                        if (cellEnd > selLo.column && charOff < selHi.column) {
-                            p.fillRect(x, yTop, cellW, m_lineH, kSelBg);
-                        }
-                    } else if (lineIsLo) {
-                        const int prefixLen = dl.prefix.length() + 1;
-                        int charOff = prefixLen;
-                        for (int j = 0; j < bi; ++j) {
-                            QStringList pp;
-                            for (int ci = 0; ci < numCols; ++ci) {
-                                if (j < dl.cols.at(ci).size())
-                                    pp << dl.cols.at(ci).at(j);
-                            }
-                            charOff += pp.join(QLatin1Char('/')).length() + 1;
-                        }
-                        if (charOff >= selLo.column) {
-                            p.fillRect(x, yTop, cellW, m_lineH, kSelBg);
-                        }
-                    } else if (lineIsHi) {
-                        const int prefixLen = dl.prefix.length() + 1;
-                        int charOff = prefixLen;
-                        for (int j = 0; j < bi; ++j) {
-                            QStringList pp;
-                            for (int ci = 0; ci < numCols; ++ci) {
-                                if (j < dl.cols.at(ci).size())
-                                    pp << dl.cols.at(ci).at(j);
-                            }
-                            charOff += pp.join(QLatin1Char('/')).length() + 1;
-                        }
-                        const int cellEnd = charOff + (cellW / m_charW);
-                        if (cellEnd <= selHi.column) {
+                        if (fill) {
                             p.fillRect(x, yTop, cellW, m_lineH, kSelBg);
                         }
                     }
@@ -182,35 +154,16 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
                         continue;
                     }
                     const QString token = dl.cols.at(ci).at(bi);
-                    int formatType = -1;
-                    int activeCount = 0;
-                    if (m_showHex) {
-                        if (activeCount == ci) {
-                            formatType = 0;
-                        }
-                        activeCount++;
-                    }
-                    if (m_showDec) {
-                        if (activeCount == ci) {
-                            formatType = 1;
-                        }
-                        activeCount++;
-                    }
-                    if (m_showBin) {
-                        if (activeCount == ci) {
-                            formatType = 2;
-                        }
-                        activeCount++;
-                    }
+                    const int formatType = colFormat[ci];
+                    const int tokenW = static_cast<int>(token.length()) * m_charW;
 
-                    int tokenW = token.length() * m_charW;
                     if (formatType == 0) {
-                        // HEX (Clean text)
+                        // HEX (clean text)
                         p.setPen(fgColor);
                         p.drawText(innerX, yBase, token);
                         innerX += tokenW;
                     } else {
-                        // DEC or BIN (Badged pill)
+                        // DEC or BIN (badged pill)
                         QColor bg = (formatType == 1) ? QColor(76, 175, 80, 20) : QColor(156, 39, 176, 20);
                         QColor border = (formatType == 1) ? QColor(76, 175, 80, 60) : QColor(156, 39, 176, 60);
 
@@ -229,7 +182,7 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
                     }
                 }
 
-                x += cellW + m_charW;  // advance x to next cell (including inter-cell space)
+                x += cellStride;  // advance to the next cell (including inter-cell space)
             }
         }
 

@@ -40,16 +40,15 @@ protected:
 private:
     friend class CollapsibleSplitterHandle;
 
-    /// Collapse @p paneIndex if expanded, or restore it if collapsed.
+    /** @brief Collapse @p paneIndex if expanded, or restore it if collapsed. */
     void toggleCollapse(int paneIndex);
 
-    /// Whether @p paneIndex has been marked collapsible via @ref setPaneCollapsible.
+    /** @brief Whether @p paneIndex has been marked collapsible via @ref setPaneCollapsible. */
     [[nodiscard]] bool isPaneCollapsible(int paneIndex) const;
 
-    /// paneIndex -> the full sizes() list at the moment it was collapsed, so
-    /// restoring replays exactly what Qt already normalized once before
-    /// instead of re-deriving it (which can drift by a rounding pixel).
-    QHash<int, QList<int>> m_lastFullSizes;
+    QHash<int, QList<int>> m_lastFullSizes;  ///< paneIndex -> the full sizes() list at the moment it was collapsed, so restoring
+                                             ///< replays exactly what Qt already normalized once before instead of re-deriving it
+                                             ///< (which can drift by a rounding pixel).
     QList<int> m_collapsiblePanes;
 };
 

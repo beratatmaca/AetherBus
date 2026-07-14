@@ -81,11 +81,12 @@ signals:
     void finished();
 
 private:
-    void scheduleNext();  ///< Arm the timer for the next chunk (or finish).
-    void emitCurrent();   ///< Emit the chunk at @c m_index and advance.
+    /** @brief Arm the timer for the next chunk (or finish). */
+    void scheduleNext();
+    /** @brief Emit the chunk at @c m_index and advance. */
+    void emitCurrent();
 
-    /// Upper bound on a single inter-packet wait, so idle gaps don't stall replay.
-    static constexpr int kMaxGapMs = 2000;
+    static constexpr int kMaxGapMs = 2000;  ///< Upper bound on a single inter-packet wait, so idle gaps don't stall replay.
 
     QVector<CapturedChunk> m_chunks;
     int m_index = 0;

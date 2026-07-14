@@ -57,15 +57,15 @@ private slots:
     void pollModemLines();
     void onDisconnected();
     void toggleCapture();
-    /// Open a captured pcap file and replay it through the console (offline analysis).
+    /** @brief Open a captured pcap file and replay it through the console (offline analysis). */
     void toggleReplay();
-    /// Restore UI state once a replay reaches the end.
+    /** @brief Restore UI state once a replay reaches the end. */
     void onReplayFinished();
-    /// Reflect a slave-PTY line-setting change the backend mirrored to the device.
+    /** @brief Reflect a slave-PTY line-setting change the backend mirrored to the device. */
     void onLineReconfigured(int baud, int dataBits, aether::Parity parity, int stopBits);
-    /// Warn that a write queue overflowed and bytes were dropped.
+    /** @brief Warn that a write queue overflowed and bytes were dropped. */
     void onWriteStalled(aether::Direction dir, quint64 droppedTotal);
-    void onChunkCaptured(const aether::CapturedChunk &chunk);
+    void onChunksCaptured(const QVector<aether::CapturedChunk> &chunks);
 
 private:
     void buildUi();

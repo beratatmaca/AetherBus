@@ -114,16 +114,25 @@ void EthernetPcapWriter::writePacket(qint64 timestampMs, const QByteArray &data)
         return;
     }
 
-    QDataStream out(m_file.get());
-    out.setByteOrder(QDataStream::LittleEndian);
     const auto sec = static_cast<quint32>(timestampMs / 1000);
     const auto usec = static_cast<quint32>((timestampMs % 1000) * 1000);
     const auto len = static_cast<quint32>(data.size());
-    out << sec;
-    out << usec;
-    out << len;  // saved size
-    out << len;  // original size
-    m_file->write(data);
+
+    // One reused buffer, one write() per packet — no per-packet QDataStream.
+    m_scratch.resize(0);
+    m_scratch.reserve(16 + data.size());
+    const auto appendLe32 = [this](quint32 v) {
+        m_scratch.append(static_cast<char>(v & 0xFF));
+        m_scratch.append(static_cast<char>((v >> 8) & 0xFF));
+        m_scratch.append(static_cast<char>((v >> 16) & 0xFF));
+        m_scratch.append(static_cast<char>((v >> 24) & 0xFF));
+    };
+    appendLe32(sec);
+    appendLe32(usec);
+    appendLe32(len);  // saved size
+    appendLe32(len);  // original size
+    m_scratch.append(data);
+    m_file->write(m_scratch);
 }
 
 }  // namespace aether

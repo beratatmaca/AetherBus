@@ -84,7 +84,7 @@ private:
 
     QPushButton *m_playPcapBtn = nullptr;
 
-    /// A saved, ready-to-send raw packet, quick-sent with a single click.
+    /** @brief A saved, ready-to-send raw packet, quick-sent with a single click. */
     struct EthernetMacro {
         QString name;
         QByteArray rawPacket;

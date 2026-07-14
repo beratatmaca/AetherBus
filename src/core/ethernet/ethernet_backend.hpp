@@ -15,6 +15,7 @@
 
 namespace aether {
 
+/** @brief libpcap capture/injection backend implementing @ref aether::IBusBackend. */
 class EthernetBackend : public IBusBackend {
     Q_OBJECT
 
@@ -22,25 +23,33 @@ public:
     explicit EthernetBackend(QObject *parent = nullptr);
     ~EthernetBackend() override;
 
-    /// Open pcap capture and injection on @p config.interfaceName.
+    /** @brief Open pcap capture and injection on @p config.interfaceName. */
     bool open(const EthernetConfig &config);
     void close() final;
     [[nodiscard]] bool isRunning() const override;
 
-    /// Send a raw packet onto the network interface.
+    /** @brief Send a raw packet onto the network interface. */
     bool sendPacket(const QByteArray &rawFrame);
 
-    /// Consume all currently accumulated packet chunks from the thread-safe buffer.
+    /** @brief Consume all currently accumulated packet chunks from the thread-safe buffer. */
     std::vector<CapturedChunk> consumeBufferedChunks();
 
-    /// @return names of network interfaces currently present (via pcap_findalldevs).
+    /** @return names of network interfaces currently present (via pcap_findalldevs). */
     [[nodiscard]] static QStringList listInterfaces();
 
 private:
     void runCaptureLoop();
 
-    /// Resolve @p ifaceName's own hardware address into @p outMac.
-    /// @return false (leaving @p outMac untouched) if it cannot be determined.
+    /**
+     * @brief pcap_dispatch() callback (user data is the EthernetBackend*): builds a
+     * CapturedChunk from one captured packet and pushes it onto the buffer.
+     */
+    static void packetCallback(u_char *user, const struct pcap_pkthdr *header, const u_char *pktData);
+
+    /**
+     * @brief Resolve @p ifaceName's own hardware address into @p outMac.
+     * @return false (leaving @p outMac untouched) if it cannot be determined.
+     */
     static bool resolveLocalMac(const QString &ifaceName, std::array<unsigned char, 6> &outMac);
 
     pcap_t *m_pcapHandle = nullptr;

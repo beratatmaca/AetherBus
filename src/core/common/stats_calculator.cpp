@@ -32,9 +32,11 @@ void StatsCalculator::reset() {
     m_txRateHistory.fill(0.0, 60);
 
     m_perId.clear();
+    ++m_revision;
 }
 
 void StatsCalculator::addChunk(const CapturedChunk &chunk) {
+    ++m_revision;
     const int size = chunk.data.size();
     if (chunk.dir == Direction::Rx) {
         m_rxBytes += size;
@@ -102,6 +104,7 @@ void StatsCalculator::setSerialConfig(int baud, int dataBits, aether::Parity par
 }
 
 void StatsCalculator::rollRates() {
+    ++m_revision;
     m_currentRxRate = static_cast<double>(m_rxBytesThisPeriod);
     m_currentTxRate = static_cast<double>(m_txBytesThisPeriod);
     m_rxBytesThisPeriod = 0;

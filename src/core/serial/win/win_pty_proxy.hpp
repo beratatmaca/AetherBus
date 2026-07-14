@@ -77,8 +77,10 @@ private:
 
     // Queue a chunk for a target and (worker context) kick the write.
     void enqueue(std::deque<QByteArray> &queue, std::size_t &queued, const QByteArray &data, Direction dir);
-    bool startComWrite();   ///< Begin one overlapped write to the COM port.
-    bool startPipeWrite();  ///< Begin one overlapped write to the pipe.
+    /** @brief Begin one overlapped write to the COM port. */
+    bool startComWrite();
+    /** @brief Begin one overlapped write to the pipe. */
+    bool startPipeWrite();
 
     void teardown();
 

@@ -19,6 +19,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVector>
 
 namespace aether {
 
@@ -32,27 +33,38 @@ public:
     IBusBackend(const IBusBackend &) = delete;
     IBusBackend &operator=(const IBusBackend &) = delete;
 
-    /// Stop capture and release all resources. Idempotent.
+    /** @brief Stop capture and release all resources. Idempotent. */
     virtual void close() = 0;
 
-    /// @return true while the backend is actively capturing.
+    /** @return true while the backend is actively capturing. */
     [[nodiscard]] virtual bool isRunning() const = 0;
 
 signals:
-    /// A timestamped, direction-tagged unit of traffic (bytes or a framed message).
+    /** @brief A timestamped, direction-tagged unit of traffic (bytes or a framed message). */
     void chunkCaptured(const aether::CapturedChunk &chunk);
 
-    /// Capture started; @p info is a human-readable description (slave PTY path
-    /// for serial, or an interface summary such as "can0 @ 500000" for CAN).
+    /**
+     * @brief All chunks captured during one worker-loop wakeup, delivered as a single batch.
+     *
+     * Worker threads emit this instead of one chunkCaptured per chunk:
+     * a cross-thread (queued) emission heap-allocates one event per receiver,
+     * which floods the GUI event loop at high frame rates.
+     */
+    void chunksCaptured(const QVector<aether::CapturedChunk> &chunks);
+
+    /**
+     * @brief Capture started; @p info is a human-readable description (slave PTY path
+     *        for serial, or an interface summary such as "can0 @ 500000" for CAN).
+     */
     void started(const QString &info);
 
-    /// Capture stopped cleanly (via @ref close).
+    /** @brief Capture stopped cleanly (via @ref close). */
     void stopped();
 
-    /// A recoverable or fatal error occurred; @p message is human-readable.
+    /** @brief A recoverable or fatal error occurred; @p message is human-readable. */
     void errorOccurred(const QString &message);
 
-    /// The underlying device/interface disappeared unexpectedly.
+    /** @brief The underlying device/interface disappeared unexpectedly. */
     void disconnected();
 };
 
