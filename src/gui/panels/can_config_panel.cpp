@@ -231,6 +231,58 @@ bool CanConfigPanel::buildConfig(CanConfig &out) {
     return true;
 }
 
+CanConfig CanConfigPanel::currentConfig() const {
+    CanConfig cfg;
+    cfg.iface = m_ifaceBox->currentText().trimmed();
+    cfg.fdMode = m_fdCheck->isChecked();
+    cfg.loopback = m_loopbackCheck->isChecked();
+    cfg.receiveOwn = m_recvOwnCheck->isChecked();
+    cfg.errorFrames = m_errorCheck->isChecked();
+    for (int i = 0; i < m_filterTable->rowCount(); ++i) {
+        if (m_filterTable->item(i, 0)->checkState() != Qt::Checked) {
+            continue;
+        }
+        const QString idPart = m_filterTable->item(i, 1)->text().trimmed();
+        if (idPart.isEmpty()) {
+            continue;
+        }
+        bool okId = false;
+        CanFilter f;
+        f.id = idPart.toUInt(&okId, 16);
+        if (!okId) {
+            continue;  // best-effort snapshot: skip a malformed row rather than fail
+        }
+        f.extended = (m_filterTable->item(i, 3)->checkState() == Qt::Checked);
+        f.invert = (m_filterTable->item(i, 4)->checkState() == Qt::Checked);
+        const QString maskPart = m_filterTable->item(i, 2)->text().trimmed();
+        if (!maskPart.isEmpty()) {
+            bool okMask = false;
+            const quint32 mask = maskPart.toUInt(&okMask, 16);
+            if (okMask) {
+                f.mask = mask;
+            }
+        } else {
+            f.mask = f.extended ? kExtIdMask : kStdIdMask;
+        }
+        cfg.filters.push_back(f);
+    }
+    return cfg;
+}
+
+void CanConfigPanel::applyConfig(const CanConfig &cfg) {
+    if (!cfg.iface.isEmpty()) {
+        m_ifaceBox->setCurrentText(cfg.iface);
+    }
+    m_fdCheck->setChecked(cfg.fdMode);
+    m_loopbackCheck->setChecked(cfg.loopback);
+    m_recvOwnCheck->setChecked(cfg.receiveOwn);
+    m_errorCheck->setChecked(cfg.errorFrames);
+    m_filterTable->setRowCount(0);
+    for (const CanFilter &f : cfg.filters) {
+        addFilterRow(true, QString::number(f.id, 16), QString::number(f.mask, 16), f.extended, f.invert);
+    }
+}
+
 void CanConfigPanel::saveSettings(QSettings &settings) const {
     settings.setValue(QStringLiteral("iface"), m_ifaceBox->currentText().trimmed());
     settings.setValue(QStringLiteral("fdMode"), m_fdCheck->isChecked());

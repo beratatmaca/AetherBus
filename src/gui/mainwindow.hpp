@@ -39,6 +39,14 @@ public:
     explicit MainWindow(bool enableControl = false, QWidget *parent = nullptr);
     ~MainWindow() override;
 
+    /**
+     * @brief Create a new session of @p type on the GUI thread (for the control
+     * channel's `open` verb), returning its freshly-assigned control id.
+     * @param error Populated with a human-readable reason on failure.
+     * @return the new session's @c controlId(), or 0 if it could not be created.
+     */
+    int createControlSession(SessionType type, QString *error);
+
 private slots:
     /** @brief New serial session (Ctrl+N). */
     void addNewSession();

@@ -486,18 +486,67 @@ namespace {
 /// Minimal SessionView for exercising ControlServer without a real backend.
 class StubControlSession : public SessionView {
 public:
-    [[nodiscard]] bool isRunning() const override { return true; }
-    void stopSession() override {}
+    [[nodiscard]] bool isRunning() const override { return running; }
+    void stopSession() override { running = false; }
     [[nodiscard]] SessionType sessionType() const override { return SessionType::Serial; }
     void saveSettings(QSettings &) const override {}
     void loadSettings(const QSettings &) override {}
-    bool sendControl(const QJsonObject &cmd, QString *) override {
-        lastData = cmd.value(QStringLiteral("data")).toString();
+    bool startSession(QString *) override {
+        running = true;
         return true;
+    }
+    bool applyControlConfig(const QJsonObject &config, QString *) override {
+        appliedDevice = config.value(QStringLiteral("device")).toString();
+        return true;
+    }
+    bool handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) override {
+        if (verb == QLatin1String("send")) {
+            lastData = args.value(QStringLiteral("data")).toString();
+            ++sendCount;
+            return true;
+        }
+        if (verb == QLatin1String("start")) {
+            if (args.contains(QStringLiteral("config")) && !applyControlConfig(args.value(QStringLiteral("config")).toObject(), error)) {
+                return false;
+            }
+            return startSession(error);
+        }
+        if (verb == QLatin1String("stop")) {
+            stopSession();
+            return true;
+        }
+        if (verb == QLatin1String("stats")) {
+            reply.insert(QStringLiteral("stats"), QJsonObject{{QStringLiteral("rxBytes"), 7}, {QStringLiteral("running"), running}});
+            return true;
+        }
+        if (verb == QLatin1String("capture")) {
+            const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("status"));
+            if (action == QLatin1String("start")) {
+                capturing = true;
+            } else if (action == QLatin1String("stop")) {
+                capturing = false;
+            }
+            reply.insert(QStringLiteral("capturing"), capturing);
+            return true;
+        }
+        if (verb == QLatin1String("run_macro")) {
+            macroIndex = args.value(QStringLiteral("index")).toInt(-1);
+            reply.insert(QStringLiteral("index"), macroIndex);
+            return true;
+        }
+        if (error != nullptr) {
+            *error = QStringLiteral("stub does not support verb '%1'").arg(verb);
+        }
+        return false;
     }
     /// Publicly fire the inherited traffic signal (can't `emit` it from outside).
     void fire(const QVector<CapturedChunk> &chunks) { emit controlTraffic(chunks); }
     QString lastData;
+    QString appliedDevice;
+    bool running = false;
+    bool capturing = false;
+    int macroIndex = -1;
+    int sendCount = 0;
 };
 }  // namespace
 
@@ -581,7 +630,7 @@ void BusTest::controlServerRoundTrip() {
     // The very first async line is the hello handshake.
     const QJsonObject hello = nextLine();
     QCOMPARE(hello.value(QStringLiteral("event")).toString(), QStringLiteral("hello"));
-    QCOMPARE(hello.value(QStringLiteral("protocol")).toInt(), 1);
+    QCOMPARE(hello.value(QStringLiteral("protocol")).toInt(), 2);
 
     // list -> our stub session (and the id is echoed)
     QJsonObject reply = command({{QStringLiteral("cmd"), QStringLiteral("list")}});
@@ -629,6 +678,70 @@ void BusTest::controlServerRoundTrip() {
     QCOMPARE(evChunks.size(), 1);
     QCOMPARE(evChunks.at(0).toObject().value(QStringLiteral("dir")).toString(), QStringLiteral("rx"));
     QCOMPARE(evChunks.at(0).toObject().value(QStringLiteral("data")).toString(), QStringLiteral("cafe"));
+
+    // --- Phase-A verbs -----------------------------------------------------
+
+    // start with an inline config -> applies config then starts the backend.
+    QVERIFY(!stub.running);
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("start")},
+                     {QStringLiteral("session"), 1},
+                     {QStringLiteral("config"), QJsonObject{{QStringLiteral("device"), QStringLiteral("/dev/pts/9")}}}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QVERIFY(stub.running);
+    QCOMPARE(stub.appliedDevice, QStringLiteral("/dev/pts/9"));
+
+    // stats -> nested snapshot object.
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("stats")}, {QStringLiteral("session"), 1}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(reply.value(QStringLiteral("stats")).toObject().value(QStringLiteral("rxBytes")).toInt(), 7);
+    QVERIFY(reply.value(QStringLiteral("stats")).toObject().value(QStringLiteral("running")).toBool());
+
+    // capture start/stop -> reply carries the resulting flag.
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("capture")},
+                     {QStringLiteral("session"), 1},
+                     {QStringLiteral("action"), QStringLiteral("start")},
+                     {QStringLiteral("path"), QStringLiteral("/tmp/ignored.pcap")}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QVERIFY(reply.value(QStringLiteral("capturing")).toBool());
+    QVERIFY(stub.capturing);
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("capture")},
+                     {QStringLiteral("session"), 1},
+                     {QStringLiteral("action"), QStringLiteral("stop")}});
+    QVERIFY(!reply.value(QStringLiteral("capturing")).toBool());
+
+    // run_macro by index -> echoes the index back.
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("run_macro")}, {QStringLiteral("session"), 1}, {QStringLiteral("index"), 2}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(reply.value(QStringLiteral("index")).toInt(), 2);
+    QCOMPARE(stub.macroIndex, 2);
+
+    // schedule_send -> fires `count` times then auto-cancels.
+    const int baselineSends = stub.sendCount;
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("schedule_send")},
+                     {QStringLiteral("session"), 1},
+                     {QStringLiteral("data"), QStringLiteral("55")},
+                     {QStringLiteral("interval_ms"), 20},
+                     {QStringLiteral("count"), 3}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QVERIFY(reply.value(QStringLiteral("schedule")).toInt() > 0);
+    {
+        QElapsedTimer timer;
+        timer.start();
+        while (stub.sendCount < baselineSends + 3 && timer.elapsed() < 3000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+    }
+    QCOMPARE(stub.sendCount, baselineSends + 3);
+    QCOMPARE(stub.lastData, QStringLiteral("55"));
+
+    // stop -> backend goes idle.
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("stop")}, {QStringLiteral("session"), 1}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QVERIFY(!stub.running);
+
+    // open with no host window wired -> graceful failure, not a crash.
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("open")}, {QStringLiteral("type"), QStringLiteral("serial")}});
+    QVERIFY(!reply.value(QStringLiteral("ok")).toBool());
 
     sock.disconnectFromServer();
     // joiner stops the server on its thread and joins before returning.

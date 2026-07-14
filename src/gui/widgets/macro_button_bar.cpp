@@ -50,4 +50,22 @@ void MacroButtonBar::rebuildButtons() {
     }
 }
 
+bool MacroButtonBar::triggerMacro(int index) {
+    if (index < 0 || index >= macroCount()) {
+        return false;
+    }
+    onMacroTriggered(index);
+    return true;
+}
+
+int MacroButtonBar::indexOfMacro(const QString &name) const {
+    const int count = macroCount();
+    for (int i = 0; i < count; ++i) {
+        if (macroName(i) == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 }  // namespace aether

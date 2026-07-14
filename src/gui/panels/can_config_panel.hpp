@@ -37,6 +37,11 @@ public:
     /** @brief Restore field values previously written by @ref saveSettings. */
     void loadSettings(const QSettings &settings);
 
+    /** @brief Snapshot the current field values (best-effort; skips malformed filter rows). */
+    [[nodiscard]] CanConfig currentConfig() const;
+    /** @brief Populate fields from @p cfg, rebuilding the receive-filter table. */
+    void applyConfig(const CanConfig &cfg);
+
 signals:
     void startCan(const CanConfig &cfg);
     void stopCan();

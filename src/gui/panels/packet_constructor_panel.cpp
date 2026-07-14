@@ -472,6 +472,14 @@ void PacketConstructorPanel::resetPlaybackButton() {
     m_playPcapBtn->setText(tr("Play PCAP…"));
 }
 
+bool PacketConstructorPanel::triggerMacro(int index) {
+    return m_macroBar->triggerMacro(index);
+}
+
+int PacketConstructorPanel::indexOfMacro(const QString &name) const {
+    return m_macroBar->indexOfMacro(name);
+}
+
 // ---------------------------------------------------------------------------
 // EthernetMacroBar
 // ---------------------------------------------------------------------------

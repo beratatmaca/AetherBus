@@ -29,6 +29,15 @@ public:
     /** @brief Restore field values previously written by @ref saveSettings. */
     void loadSettings(const QSettings &settings);
 
+    /** @brief Snapshot the current field values (no validation, no side effects). */
+    [[nodiscard]] SerialConfig currentConfig() const;
+    /**
+     * @brief Populate fields from @p cfg.
+     *
+     * Empty/non-positive fields keep their default.
+     */
+    void applyConfig(const SerialConfig &cfg);
+
 signals:
     void startInterception(const SerialConfig &cfg);
     void stopInterception();
@@ -43,15 +52,6 @@ private slots:
     void onStartButtonClicked();
 
 private:
-    /** @brief Snapshot the current field values (no validation, no side effects). */
-    [[nodiscard]] SerialConfig currentConfig() const;
-    /**
-     * @brief Populate fields from @p cfg.
-     *
-     * Empty/non-positive fields keep their default.
-     */
-    void applyConfig(const SerialConfig &cfg);
-
     QComboBox *m_deviceBox = nullptr;
     QComboBox *m_baudBox = nullptr;
     QComboBox *m_dataBitsBox = nullptr;

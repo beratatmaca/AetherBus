@@ -43,7 +43,11 @@ public:
     [[nodiscard]] SessionType sessionType() const override { return SessionType::Can; }
     void saveSettings(QSettings &settings) const override;
     void loadSettings(const QSettings &settings) override;
-    bool sendControl(const QJsonObject &cmd, QString *error) override;
+    bool handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) override;
+    bool startSession(QString *error) override;
+    bool applyControlConfig(const QJsonObject &config, QString *error) override;
+
+    StatsCalculator &stats() { return m_stats; }
 
 private slots:
     void startCapture(const CanConfig &cfg);
@@ -110,9 +114,9 @@ private:
         void save();
         void addMacro(const CanMacro &macro);
     protected:
-        int macroCount() const override;
-        QString macroName(int index) const override;
-        QString macroToolTip(int index) const override;
+        [[nodiscard]] int macroCount() const override;
+        [[nodiscard]] QString macroName(int index) const override;
+        [[nodiscard]] QString macroToolTip(int index) const override;
         void onMacroTriggered(int index) override;
         void buildContextMenu(int index, QMenu &menu) override;
     private:

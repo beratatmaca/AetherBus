@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QByteArray>
 
+class QJsonObject;
+
 namespace aether {
 
 struct StatValue {
@@ -122,5 +124,14 @@ private:
     aether::Parity m_parity = Parity::None;
     int m_stopBits = 1;
 };
+
+/**
+ * @brief Snapshot a calculator's counters as a control-channel JSON object.
+ *
+ * Shared by every session type's `stats` control verb so the wire format stays
+ * identical. Produces `{rxBytes, txBytes, rxChunks, txChunks, rxRate, txRate,
+ * running}` (rates in bytes/sec).
+ */
+QJsonObject statsToControlJson(const StatsCalculator &stats, bool running);
 
 }  // namespace aether

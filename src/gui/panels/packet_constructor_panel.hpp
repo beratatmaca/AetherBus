@@ -23,6 +23,16 @@ public:
 
     void resetPlaybackButton();
 
+    /**
+     * @brief Fire the quick-send macro at @p index (emits @ref packetReady), for the
+     * control channel's `run_macro` verb.
+     * @return false if @p index is out of range.
+     */
+    bool triggerMacro(int index);
+
+    /** @brief Index of the first quick-send macro named @p name, or -1 if none. */
+    [[nodiscard]] int indexOfMacro(const QString &name) const;
+
 signals:
     void packetReady(const QByteArray &packet);
     void playPcapRequested(const QString &filePath);
@@ -97,9 +107,9 @@ private:
         void save();
         void addMacro(const EthernetMacro &macro);
     protected:
-        int macroCount() const override;
-        QString macroName(int index) const override;
-        QString macroToolTip(int index) const override;
+        [[nodiscard]] int macroCount() const override;
+        [[nodiscard]] QString macroName(int index) const override;
+        [[nodiscard]] QString macroToolTip(int index) const override;
         void onMacroTriggered(int index) override;
         void buildContextMenu(int index, QMenu &menu) override;
     private:

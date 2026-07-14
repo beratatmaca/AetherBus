@@ -448,7 +448,7 @@ void EthernetSessionWidget::onPacketReady(const QByteArray &packet) {
     }
 }
 
-bool EthernetSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+bool EthernetSessionWidget::handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) {
     const auto fail = [&](const QString &msg) {
         if (error != nullptr) {
             *error = msg;
@@ -456,17 +456,143 @@ bool EthernetSessionWidget::sendControl(const QJsonObject &cmd, QString *error) 
         return false;
     };
 
-    QByteArray frame;
-    if (!codec::parseHexString(cmd.value(QStringLiteral("data")).toString(), frame)) {
-        return fail(QStringLiteral("ethernet send: 'data' must be a hex string (a full raw frame)"));
+    if (verb == QLatin1String("send")) {
+        QByteArray frame;
+        if (!codec::parseHexString(args.value(QStringLiteral("data")).toString(), frame)) {
+            return fail(QStringLiteral("ethernet send: 'data' must be a hex string (a full raw frame)"));
+        }
+        if (frame.isEmpty()) {
+            return fail(QStringLiteral("ethernet send: 'data' is empty"));
+        }
+        if (!m_backend->isRunning()) {
+            return fail(QStringLiteral("ethernet send failed — capture not started"));
+        }
+        m_backend->sendPacket(frame);
+        return true;
     }
-    if (frame.isEmpty()) {
-        return fail(QStringLiteral("ethernet send: 'data' is empty"));
+
+    if (verb == QLatin1String("start")) {
+        if (args.contains(QStringLiteral("config")) && !applyControlConfig(args.value(QStringLiteral("config")).toObject(), error)) {
+            return false;
+        }
+        return startSession(error);
     }
-    if (!m_backend->isRunning()) {
-        return fail(QStringLiteral("ethernet send failed — capture not started"));
+
+    if (verb == QLatin1String("stop")) {
+        stopSession();
+        return true;
     }
-    m_backend->sendPacket(frame);
+
+    if (verb == QLatin1String("stats")) {
+        reply.insert(QStringLiteral("stats"), statsToControlJson(m_stats, isRunning()));
+        return true;
+    }
+
+    if (verb == QLatin1String("capture")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("status"));
+        if (action == QLatin1String("start")) {
+            const QString path = args.value(QStringLiteral("path")).toString();
+            if (path.isEmpty()) {
+                return fail(QStringLiteral("capture start: 'path' is required"));
+            }
+            QString openErr;
+            if (!m_captureWriter.open(path, &openErr)) {
+                return fail(QStringLiteral("capture start failed — %1").arg(openErr));
+            }
+            m_captureBtn->setChecked(true);
+        } else if (action == QLatin1String("stop")) {
+            m_captureWriter.close();
+            m_captureBtn->setChecked(false);
+        } else if (action != QLatin1String("status")) {
+            return fail(QStringLiteral("capture: 'action' must be 'start', 'stop' or 'status'"));
+        }
+        reply.insert(QStringLiteral("capturing"), m_captureWriter.isOpen());
+        return true;
+    }
+
+    if (verb == QLatin1String("replay")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("start"));
+        if (action == QLatin1String("stop")) {
+            m_offlineReplayTimer->stop();
+            m_offlineReplayChunks.clear();
+            m_offlineReplayIndex = 0;
+            m_replayBtn->setChecked(false);
+            return true;
+        }
+        if (action != QLatin1String("start")) {
+            return fail(QStringLiteral("replay: 'action' must be 'start' or 'stop'"));
+        }
+        // Offline analysis only; refuse while a live capture owns the packet list.
+        if (m_backend->isRunning()) {
+            return fail(QStringLiteral("replay: stop the live capture before replaying a capture file"));
+        }
+        const QString path = args.value(QStringLiteral("path")).toString();
+        if (path.isEmpty()) {
+            return fail(QStringLiteral("replay start: 'path' is required"));
+        }
+        QString loadErr;
+        auto parsed = readEthernetPcap(path, &loadErr);
+        if (!parsed) {
+            return fail(QStringLiteral("replay: could not open capture: %1").arg(loadErr));
+        }
+        onClearLog();
+        m_offlineReplayChunks = *parsed;
+        m_offlineReplayIndex = 0;
+        if (m_offlineReplayChunks.isEmpty()) {
+            m_replayBtn->setChecked(false);
+            return fail(QStringLiteral("replay: capture file has no packets"));
+        }
+        m_replayBtn->setChecked(true);
+        onOfflineReplayTick();
+        return true;
+    }
+
+    if (verb == QLatin1String("run_macro")) {
+        int index = -1;
+        if (args.contains(QStringLiteral("index"))) {
+            index = args.value(QStringLiteral("index")).toInt(-1);
+        } else if (args.contains(QStringLiteral("name"))) {
+            index = m_constructor->indexOfMacro(args.value(QStringLiteral("name")).toString());
+        } else {
+            return fail(QStringLiteral("run_macro: 'name' or 'index' is required"));
+        }
+        if (!m_constructor->triggerMacro(index)) {
+            return fail(QStringLiteral("run_macro: no such macro"));
+        }
+        reply.insert(QStringLiteral("index"), index);
+        return true;
+    }
+
+    return fail(QStringLiteral("ethernet session does not support verb '%1'").arg(verb));
+}
+
+bool EthernetSessionWidget::startSession(QString *error) {
+    if (m_backend->isRunning()) {
+        return true;  // already running — idempotent
+    }
+    if (m_interfaceBox->currentText().trimmed().isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("start: no capture interface selected");
+        }
+        return false;
+    }
+    startCapture();
+    return true;
+}
+
+bool EthernetSessionWidget::applyControlConfig(const QJsonObject &config, QString *error) {
+    Q_UNUSED(error);
+    if (config.contains(QStringLiteral("interface"))) {
+        const QString iface = config.value(QStringLiteral("interface")).toString();
+        if (m_interfaceBox->findText(iface) < 0) {
+            m_interfaceBox->addItem(iface);
+        }
+        m_interfaceBox->setCurrentText(iface);
+    }
+    if (config.contains(QStringLiteral("bpfFilter"))) {
+        m_filterEdit->setText(config.value(QStringLiteral("bpfFilter")).toString());
+    }
+    // `promiscuous` is always enabled for a capture session; accepted but ignored.
     return true;
 }
 

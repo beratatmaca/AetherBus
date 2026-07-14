@@ -302,6 +302,7 @@ void MainWindow::setControlEnabled(bool on) {
 
     if (on) {
         m_controlBridge = new ControlBridge(this);  // GUI thread
+        m_controlBridge->setWindow(this);
         m_controlThread = new QThread(this);
         m_control = new ControlServer();  // no parent — moved to its own thread
         m_control->setBridge(m_controlBridge);
@@ -554,6 +555,26 @@ void MainWindow::addSession(SessionType type) {
         m_stack->setCurrentWidget(m_tabWidget);
         m_tabWidget->setCurrentWidget(session);
     }
+}
+
+int MainWindow::createControlSession(SessionType type, QString *error) {
+#ifndef AETHER_HAVE_ETHERNET
+    if (type == SessionType::Ethernet) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Ethernet support is not built into this binary");
+        }
+        return 0;
+    }
+#endif
+    addSession(type);
+    m_sessions.removeAll(nullptr);
+    if (m_sessions.isEmpty() || m_sessions.last() == nullptr) {
+        if (error != nullptr) {
+            *error = QStringLiteral("session creation failed");
+        }
+        return 0;
+    }
+    return m_sessions.last()->controlId();
 }
 
 void MainWindow::closeCurrentSession() {

@@ -579,7 +579,7 @@ void SessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &chunk
     emit controlTraffic(chunks);
 }
 
-bool SessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+bool SessionWidget::handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) {
     const auto fail = [&](const QString &msg) {
         if (error != nullptr) {
             *error = msg;
@@ -587,29 +587,191 @@ bool SessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
         return false;
     };
 
-    QByteArray bytes;
-    if (!codec::parseCompactHex(cmd.value(QStringLiteral("data")).toString(), bytes)) {
-        return fail(QStringLiteral("serial send: 'data' must be a hex string"));
-    }
-    if (bytes.isEmpty()) {
-        return fail(QStringLiteral("serial send: 'data' is empty"));
+    if (verb == QLatin1String("send")) {
+        QByteArray bytes;
+        if (!codec::parseCompactHex(args.value(QStringLiteral("data")).toString(), bytes)) {
+            return fail(QStringLiteral("serial send: 'data' must be a hex string"));
+        }
+        if (bytes.isEmpty()) {
+            return fail(QStringLiteral("serial send: 'data' is empty"));
+        }
+        // side=device (default) injects toward the physical UART; side=app injects
+        // toward the slave-PTY / target application.
+        const QString side = args.value(QStringLiteral("side")).toString(QStringLiteral("device"));
+        bool ok = false;
+        if (side == QLatin1String("app")) {
+            ok = m_proxy->injectToApp(bytes);
+        } else if (side == QLatin1String("device")) {
+            ok = m_proxy->injectToDevice(bytes);
+        } else {
+            return fail(QStringLiteral("serial send: 'side' must be 'device' or 'app'"));
+        }
+        if (!ok) {
+            return fail(m_proxy->isRunning() ? QStringLiteral("serial send failed — write buffer full")
+                                             : QStringLiteral("serial send failed — interception not started"));
+        }
+        return true;
     }
 
-    // side=device (default) injects toward the physical UART; side=app injects
-    // toward the slave-PTY / target application.
-    const QString side = cmd.value(QStringLiteral("side")).toString(QStringLiteral("device"));
-    bool ok = false;
-    if (side == QLatin1String("app")) {
-        ok = m_proxy->injectToApp(bytes);
-    } else if (side == QLatin1String("device")) {
-        ok = m_proxy->injectToDevice(bytes);
-    } else {
-        return fail(QStringLiteral("serial send: 'side' must be 'device' or 'app'"));
+    if (verb == QLatin1String("start")) {
+        if (args.contains(QStringLiteral("config")) && !applyControlConfig(args.value(QStringLiteral("config")).toObject(), error)) {
+            return false;
+        }
+        return startSession(error);
     }
-    if (!ok) {
-        return fail(m_proxy->isRunning() ? QStringLiteral("serial send failed — write buffer full")
-                                         : QStringLiteral("serial send failed — interception not started"));
+
+    if (verb == QLatin1String("stop")) {
+        stopSession();
+        return true;
     }
+
+    if (verb == QLatin1String("stats")) {
+        reply.insert(QStringLiteral("stats"), statsToControlJson(m_stats, isRunning()));
+        return true;
+    }
+
+    if (verb == QLatin1String("capture")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("status"));
+        if (action == QLatin1String("start")) {
+            const QString path = args.value(QStringLiteral("path")).toString();
+            if (path.isEmpty()) {
+                return fail(QStringLiteral("capture start: 'path' is required"));
+            }
+            if (!m_proxy->startCapture(path)) {
+                return fail(QStringLiteral("capture start failed — already capturing or file not writable"));
+            }
+            m_consolePanel->captureButton()->setChecked(true);
+        } else if (action == QLatin1String("stop")) {
+            m_proxy->stopCapture();
+            m_consolePanel->captureButton()->setChecked(false);
+        } else if (action != QLatin1String("status")) {
+            return fail(QStringLiteral("capture: 'action' must be 'start', 'stop' or 'status'"));
+        }
+        reply.insert(QStringLiteral("capturing"), m_proxy->isCapturing());
+        return true;
+    }
+
+    if (verb == QLatin1String("replay")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("start"));
+        if (action == QLatin1String("stop")) {
+            m_replayer->stop();
+            m_consolePanel->replayButton()->setChecked(false);
+            return true;
+        }
+        if (action != QLatin1String("start")) {
+            return fail(QStringLiteral("replay: 'action' must be 'start' or 'stop'"));
+        }
+        // Replay is offline analysis; refuse while a live session owns the console.
+        if (m_proxy->isRunning()) {
+            return fail(QStringLiteral("replay: stop interception before replaying a capture file"));
+        }
+        const QString path = args.value(QStringLiteral("path")).toString();
+        if (path.isEmpty()) {
+            return fail(QStringLiteral("replay start: 'path' is required"));
+        }
+        QString loadErr;
+        if (!m_replayer->load(path, &loadErr)) {
+            return fail(QStringLiteral("replay: could not open capture: %1").arg(loadErr));
+        }
+        m_consolePanel->console()->clearConsole();
+        m_consolePanel->replayButton()->setChecked(true);
+        m_replayer->start();
+        return true;
+    }
+
+    if (verb == QLatin1String("run_macro")) {
+        int index = -1;
+        if (args.contains(QStringLiteral("index"))) {
+            index = args.value(QStringLiteral("index")).toInt(-1);
+        } else if (args.contains(QStringLiteral("name"))) {
+            index = m_macroBar->indexOfMacro(args.value(QStringLiteral("name")).toString());
+        } else {
+            return fail(QStringLiteral("run_macro: 'name' or 'index' is required"));
+        }
+        if (!m_macroBar->triggerMacro(index)) {
+            return fail(QStringLiteral("run_macro: no such macro, or its payload is invalid"));
+        }
+        reply.insert(QStringLiteral("index"), index);
+        return true;
+    }
+
+    return fail(QStringLiteral("serial session does not support verb '%1'").arg(verb));
+}
+
+bool SessionWidget::startSession(QString *error) {
+    if (m_proxy->isRunning()) {
+        return true;  // already running — idempotent
+    }
+    const SerialConfig cfg = m_configPanel->currentConfig();
+    const QString invalid = cfg.validate();
+    if (!invalid.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("start: %1").arg(invalid);
+        }
+        return false;
+    }
+    startInterception(cfg);
+    return true;
+}
+
+bool SessionWidget::applyControlConfig(const QJsonObject &config, QString *error) {
+    SerialConfig cfg = m_configPanel->currentConfig();
+    if (config.contains(QStringLiteral("device"))) {
+        cfg.device = config.value(QStringLiteral("device")).toString();
+    }
+    if (config.contains(QStringLiteral("symlinkPath"))) {
+        cfg.symlinkPath = config.value(QStringLiteral("symlinkPath")).toString();
+    }
+    if (config.contains(QStringLiteral("baud"))) {
+        cfg.baud = config.value(QStringLiteral("baud")).toInt(cfg.baud);
+    }
+    if (config.contains(QStringLiteral("dataBits"))) {
+        cfg.dataBits = config.value(QStringLiteral("dataBits")).toInt(cfg.dataBits);
+    }
+    if (config.contains(QStringLiteral("stopBits"))) {
+        cfg.stopBits = config.value(QStringLiteral("stopBits")).toInt(cfg.stopBits);
+    }
+    if (config.contains(QStringLiteral("directMode"))) {
+        cfg.directMode = config.value(QStringLiteral("directMode")).toBool(cfg.directMode);
+    }
+    if (config.contains(QStringLiteral("parity"))) {
+        const QString parity = config.value(QStringLiteral("parity")).toString().toLower();
+        if (parity == QLatin1String("none") || parity == QLatin1String("n")) {
+            cfg.parity = Parity::None;
+        } else if (parity == QLatin1String("even") || parity == QLatin1String("e")) {
+            cfg.parity = Parity::Even;
+        } else if (parity == QLatin1String("odd") || parity == QLatin1String("o")) {
+            cfg.parity = Parity::Odd;
+        } else {
+            if (error != nullptr) {
+                *error = QStringLiteral("config: 'parity' must be none/even/odd");
+            }
+            return false;
+        }
+    }
+    if (config.contains(QStringLiteral("flow"))) {
+        const QString flow = config.value(QStringLiteral("flow")).toString().toLower();
+        if (flow == QLatin1String("none")) {
+            cfg.flow = FlowControl::None;
+        } else if (flow == QLatin1String("rtscts") || flow == QLatin1String("hardware")) {
+            cfg.flow = FlowControl::RtsCts;
+        } else if (flow == QLatin1String("xonxoff") || flow == QLatin1String("software")) {
+            cfg.flow = FlowControl::XonXoff;
+        } else {
+            if (error != nullptr) {
+                *error = QStringLiteral("config: 'flow' must be none/rtscts/xonxoff");
+            }
+            return false;
+        }
+    }
+    const QString invalid = cfg.validate();
+    if (!invalid.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("config: %1").arg(invalid);
+        }
+        return false;
+    }
+    m_configPanel->applyConfig(cfg);
     return true;
 }
 

@@ -44,19 +44,32 @@ public:
      */
     void rebuildButtons();
 
+    /**
+     * @brief Programmatically fire the macro at @p index — identical effect to a
+     * left-click on its button. Used by the control channel's `run_macro` verb.
+     * @return false if @p index is out of range.
+     */
+    bool triggerMacro(int index);
+
+    /** @brief Index of the first macro named @p name, or -1 if there is none. */
+    [[nodiscard]] int indexOfMacro(const QString &name) const;
+
+    /** @brief Number of macros currently defined (public view of @ref macroCount). */
+    [[nodiscard]] int count() const { return macroCount(); }
+
 protected:
     // ------------------------------------------------------------------ //
     //  Subclass interface                                                  //
     // ------------------------------------------------------------------ //
 
     /** @brief Number of macros in the data model. */
-    virtual int macroCount() const = 0;
+    [[nodiscard]] virtual int macroCount() const = 0;
 
     /** @brief Display name for macro at @p index. */
-    virtual QString macroName(int index) const = 0;
+    [[nodiscard]] virtual QString macroName(int index) const = 0;
 
     /** @brief Tooltip text for the button at @p index. */
-    virtual QString macroToolTip(int index) const = 0;
+    [[nodiscard]] virtual QString macroToolTip(int index) const = 0;
 
     /**
      * @brief Called when the user left-clicks the button at @p index.

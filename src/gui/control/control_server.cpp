@@ -19,7 +19,8 @@ namespace aether {
 
 namespace {
 /// Wire-protocol version, greeted in the hello line. Bump on incompatible changes.
-constexpr int kProtocolVersion = 1;
+/// v2 added the lifecycle/capture/stats/macro/schedule verbs (additive — v1 clients still work).
+constexpr int kProtocolVersion = 2;
 }  // namespace
 
 ControlServer::ControlServer(QObject *parent) : QObject(parent) {}
@@ -127,6 +128,15 @@ void ControlServer::handleLine(QLocalSocket *socket, const QByteArray &line) {
         return;
     }
 
+    // Forward a bridge-built reply object verbatim, echoing the request id.
+    const auto writeResult = [&](const QByteArray &resBytes) {
+        QJsonObject res = QJsonDocument::fromJson(resBytes).object();
+        if (!reqId.isUndefined()) {
+            res.insert(QStringLiteral("id"), reqId);
+        }
+        writeMessage(socket, res);
+    };
+
     if (verb == QLatin1String("list")) {
         // Session state lives on the GUI thread — build the array there.
         QByteArray arr;
@@ -139,14 +149,26 @@ void ControlServer::handleLine(QLocalSocket *socket, const QByteArray &line) {
         return;
     }
 
+    if (verb == QLatin1String("open")) {
+        QByteArray res;
+        QMetaObject::invokeMethod(m_bridge, "openSession", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QByteArray, res),
+                                  Q_ARG(QString, cmd.value(QStringLiteral("type")).toString()),
+                                  Q_ARG(QJsonObject, cmd.value(QStringLiteral("config")).toObject()),
+                                  Q_ARG(bool, cmd.value(QStringLiteral("start")).toBool(false)));
+        writeResult(res);
+        return;
+    }
+
     const int id = cmd.value(QStringLiteral("session")).toInt(-1);
 
-    if (verb == QLatin1String("send")) {
+    if (verb == QLatin1String("close")) {
         QString err;
-        QMetaObject::invokeMethod(m_bridge, "doSend", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QString, err), Q_ARG(int, id),
-                                  Q_ARG(QJsonObject, cmd));
+        QMetaObject::invokeMethod(m_bridge, "closeSession", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QString, err), Q_ARG(int, id));
         reply(err.isEmpty(), err);
-    } else if (verb == QLatin1String("subscribe")) {
+        return;
+    }
+
+    if (verb == QLatin1String("subscribe")) {
         bool exists = false;
         QMetaObject::invokeMethod(m_bridge, "hasSession", Qt::BlockingQueuedConnection, Q_RETURN_ARG(bool, exists), Q_ARG(int, id));
         if (!exists) {
@@ -155,12 +177,43 @@ void ControlServer::handleLine(QLocalSocket *socket, const QByteArray &line) {
         }
         m_clients[socket].subscriptions.insert(id);
         reply(true);
-    } else if (verb == QLatin1String("unsubscribe")) {
+        return;
+    }
+
+    if (verb == QLatin1String("unsubscribe")) {
         m_clients[socket].subscriptions.remove(id);
         reply(true);
-    } else {
-        reply(false, QStringLiteral("unknown cmd '%1'").arg(verb));
+        return;
     }
+
+    if (verb == QLatin1String("cancel_send")) {
+        QString err;
+        QMetaObject::invokeMethod(m_bridge, "cancelSchedule", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QString, err),
+                                  Q_ARG(int, cmd.value(QStringLiteral("schedule")).toInt(-1)));
+        reply(err.isEmpty(), err);
+        return;
+    }
+
+    if (verb == QLatin1String("schedule_send")) {
+        QByteArray res;
+        QMetaObject::invokeMethod(m_bridge, "scheduleSend", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QByteArray, res), Q_ARG(int, id),
+                                  Q_ARG(QJsonObject, cmd));
+        writeResult(res);
+        return;
+    }
+
+    // Session-scoped verbs delegated to SessionView::handleControl on the GUI thread.
+    if (verb == QLatin1String("send") || verb == QLatin1String("start") || verb == QLatin1String("stop") ||
+        verb == QLatin1String("stats") || verb == QLatin1String("capture") || verb == QLatin1String("replay") ||
+        verb == QLatin1String("run_macro")) {
+        QByteArray res;
+        QMetaObject::invokeMethod(m_bridge, "sessionVerb", Qt::BlockingQueuedConnection, Q_RETURN_ARG(QByteArray, res), Q_ARG(int, id),
+                                  Q_ARG(QString, verb), Q_ARG(QJsonObject, cmd));
+        writeResult(res);
+        return;
+    }
+
+    reply(false, QStringLiteral("unknown cmd '%1'").arg(verb));
 }
 
 void ControlServer::writeMessage(QLocalSocket *socket, const QJsonObject &obj) {

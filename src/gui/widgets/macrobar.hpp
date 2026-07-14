@@ -52,6 +52,20 @@ public:
      */
     void addMacroFromState(int format, const QString &payload, int ending, bool toDevice);
 
+    /**
+     * @brief Fire the macro at @p index — encode its payload and emit @ref send,
+     * identical to a left-click on its button. Used by the control channel's
+     * `run_macro` verb.
+     * @return false if @p index is out of range or the macro's payload is invalid.
+     */
+    bool triggerMacro(int index);
+
+    /** @brief Index of the first macro named @p name, or -1 if there is none. */
+    [[nodiscard]] int indexOfMacro(const QString &name) const;
+
+    /** @brief Number of defined macros (including any with invalid payloads). */
+    [[nodiscard]] int count() const { return static_cast<int>(m_macros.size()); }
+
 signals:
     /**
      * @brief Request that a payload be transmitted.

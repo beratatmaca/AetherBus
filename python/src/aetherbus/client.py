@@ -125,6 +125,121 @@ class Client:
             cmd["side"] = side
         self._command(cmd)
 
+    def open_session(
+        self,
+        type: str,
+        config: Optional[dict] = None,
+        *,
+        start: bool = False,
+    ) -> int:
+        """Create a new session and return its id.
+
+        ``type`` is ``"serial"``, ``"can"`` or ``"ethernet"``. ``config`` is an
+        optional dict applied to the new session before it starts:
+
+        - serial: ``device, baud, dataBits, parity, stopBits, flow, symlinkPath, directMode``
+        - can: ``iface, fdMode, loopback, receiveOwn, errorFrames, filters``
+          (``filters`` is a list of ``{"id", "mask", "extended", "invert"}``)
+        - ethernet: ``interface, bpfFilter``
+
+        With ``start=True`` the session's backend is started immediately.
+        """
+        cmd = {"cmd": "open", "type": type, "start": bool(start)}
+        if config:
+            cmd["config"] = config
+        return int(self._command(cmd)["session"])
+
+    def close_session(self, session: int) -> None:
+        """Close (and destroy) ``session``."""
+        self._command({"cmd": "close", "session": session})
+
+    def start(self, session: int, config: Optional[dict] = None) -> None:
+        """Start ``session``'s backend, optionally applying ``config`` first.
+
+        See :meth:`open_session` for the per-type ``config`` keys.
+        """
+        cmd = {"cmd": "start", "session": session}
+        if config:
+            cmd["config"] = config
+        self._command(cmd)
+
+    def stop(self, session: int) -> None:
+        """Stop ``session``'s backend (leaves the tab open)."""
+        self._command({"cmd": "stop", "session": session})
+
+    def stats(self, session: int) -> dict:
+        """Return ``session``'s counters: ``{rxBytes, txBytes, rxChunks, txChunks, rxRate, txRate, running}``."""
+        return self._command({"cmd": "stats", "session": session}).get("stats", {})
+
+    def capture(self, session: int, action: str, path: Optional[str] = None) -> bool:
+        """Control ``session``'s pcap capture.
+
+        ``action`` is ``"start"`` (needs ``path``), ``"stop"`` or ``"status"``.
+        Returns whether a capture is now active.
+        """
+        cmd = {"cmd": "capture", "session": session, "action": action}
+        if path is not None:
+            cmd["path"] = path
+        return bool(self._command(cmd).get("capturing", False))
+
+    def replay(self, session: int, path: str, action: str = "start") -> None:
+        """Replay a saved pcap through ``session`` (offline view). ``action`` is ``"start"`` or ``"stop"``."""
+        cmd = {"cmd": "replay", "session": session, "action": action}
+        if path is not None:
+            cmd["path"] = path
+        self._command(cmd)
+
+    def run_macro(
+        self,
+        session: int,
+        name: Optional[str] = None,
+        index: Optional[int] = None,
+    ) -> int:
+        """Fire one of ``session``'s quick-send macros by ``name`` or ``index``; returns the index fired."""
+        if name is None and index is None:
+            raise ValueError("run_macro needs a name or an index")
+        cmd = {"cmd": "run_macro", "session": session}
+        if index is not None:
+            cmd["index"] = int(index)
+        else:
+            cmd["name"] = name
+        return int(self._command(cmd)["index"])
+
+    def schedule_send(
+        self,
+        session: int,
+        data: bytes,
+        interval_ms: int,
+        *,
+        count: Optional[int] = None,
+        side: str = "device",
+        frame_id: Optional[int] = None,
+        flags: int = 0,
+    ) -> int:
+        """Repeat a send every ``interval_ms`` ms; returns the schedule id.
+
+        Without ``count`` it repeats until :meth:`cancel_send` (or the session
+        closes). ``side``/``frame_id``/``flags`` mirror :meth:`send`.
+        """
+        cmd = {
+            "cmd": "schedule_send",
+            "session": session,
+            "data": data.hex(),
+            "interval_ms": int(interval_ms),
+        }
+        if count is not None:
+            cmd["count"] = int(count)
+        if frame_id is not None:
+            cmd["frameId"] = int(frame_id)
+            cmd["flags"] = int(flags)
+        else:
+            cmd["side"] = side
+        return int(self._command(cmd)["schedule"])
+
+    def cancel_send(self, schedule: int) -> None:
+        """Cancel a repeating send created by :meth:`schedule_send`."""
+        self._command({"cmd": "cancel_send", "schedule": schedule})
+
     def stream(self, session: int) -> Iterator[dict]:
         """Subscribe to ``session`` and yield one dict per captured chunk.
 

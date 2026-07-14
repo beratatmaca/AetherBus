@@ -430,6 +430,29 @@ void MacroBar::addMacroFromState(int format, const QString &payload, int ending,
     openEditor(&macro, -1);
 }
 
+bool MacroBar::triggerMacro(int index) {
+    if (index < 0 || index >= static_cast<int>(m_macros.size())) {
+        return false;
+    }
+    const Macro &macro = m_macros.at(index);
+    QByteArray bytes;
+    QString error;
+    if (!codec::encodePayload(macro.format, macro.payload, macro.ending, bytes, &error) || bytes.isEmpty()) {
+        return false;
+    }
+    emit send(bytes, macro.toDevice);
+    return true;
+}
+
+int MacroBar::indexOfMacro(const QString &name) const {
+    for (int i = 0; i < static_cast<int>(m_macros.size()); ++i) {
+        if (m_macros.at(i).name == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void MacroBar::pushHistory(const QByteArray &bytes, bool toDevice) {
     if (bytes.isEmpty()) {
         return;

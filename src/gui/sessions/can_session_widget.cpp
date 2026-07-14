@@ -3,6 +3,7 @@
 #include "core/can/can_backend.hpp"
 #include "core/common/format_codec.hpp"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include "gui/panels/can_config_panel.hpp"
@@ -370,7 +371,7 @@ void CanSessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &ch
     emit controlTraffic(chunks);
 }
 
-bool CanSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+bool CanSessionWidget::handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) {
     const auto fail = [&](const QString &msg) {
         if (error != nullptr) {
             *error = msg;
@@ -378,24 +379,172 @@ bool CanSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
         return false;
     };
 
-    const QJsonValue idVal = cmd.value(QStringLiteral("frameId"));
-    if (!idVal.isDouble()) {
-        return fail(QStringLiteral("CAN send: 'frameId' (integer) is required"));
+    if (verb == QLatin1String("send")) {
+        const QJsonValue idVal = args.value(QStringLiteral("frameId"));
+        if (!idVal.isDouble()) {
+            return fail(QStringLiteral("CAN send: 'frameId' (integer) is required"));
+        }
+        const auto id = static_cast<quint32>(idVal.toDouble());
+        const auto flags = static_cast<quint16>(args.value(QStringLiteral("flags")).toDouble(0));
+        QByteArray payload;
+        // 'data' is optional (RTR frames carry none); when present it must be hex.
+        const QString dataStr = args.value(QStringLiteral("data")).toString();
+        if (!dataStr.isEmpty() && !codec::parseCompactHex(dataStr, payload)) {
+            return fail(QStringLiteral("CAN send: 'data' must be a hex string"));
+        }
+        if (!m_backend->sendFrame(id, flags, payload)) {
+            return fail(m_backend->isRunning() ? QStringLiteral("CAN send failed — payload too large for the frame type")
+                                               : QStringLiteral("CAN send failed — capture not started"));
+        }
+        return true;
     }
-    const auto id = static_cast<quint32>(idVal.toDouble());
-    const auto flags = static_cast<quint16>(cmd.value(QStringLiteral("flags")).toDouble(0));
 
-    QByteArray payload;
-    // 'data' is optional (RTR frames carry none); when present it must be hex.
-    const QString dataStr = cmd.value(QStringLiteral("data")).toString();
-    if (!dataStr.isEmpty() && !codec::parseCompactHex(dataStr, payload)) {
-        return fail(QStringLiteral("CAN send: 'data' must be a hex string"));
+    if (verb == QLatin1String("start")) {
+        if (args.contains(QStringLiteral("config")) && !applyControlConfig(args.value(QStringLiteral("config")).toObject(), error)) {
+            return false;
+        }
+        return startSession(error);
     }
 
-    if (!m_backend->sendFrame(id, flags, payload)) {
-        return fail(m_backend->isRunning() ? QStringLiteral("CAN send failed — payload too large for the frame type")
-                                           : QStringLiteral("CAN send failed — capture not started"));
+    if (verb == QLatin1String("stop")) {
+        stopSession();
+        return true;
     }
+
+    if (verb == QLatin1String("stats")) {
+        reply.insert(QStringLiteral("stats"), statsToControlJson(m_stats, isRunning()));
+        return true;
+    }
+
+    if (verb == QLatin1String("capture")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("status"));
+        if (action == QLatin1String("start")) {
+            const QString path = args.value(QStringLiteral("path")).toString();
+            if (path.isEmpty()) {
+                return fail(QStringLiteral("capture start: 'path' is required"));
+            }
+            if (!m_backend->startCapture(path)) {
+                return fail(QStringLiteral("capture start failed — already capturing or file not writable"));
+            }
+            m_consolePanel->captureButton()->setChecked(true);
+        } else if (action == QLatin1String("stop")) {
+            m_backend->stopCapture();
+            m_consolePanel->captureButton()->setChecked(false);
+        } else if (action != QLatin1String("status")) {
+            return fail(QStringLiteral("capture: 'action' must be 'start', 'stop' or 'status'"));
+        }
+        reply.insert(QStringLiteral("capturing"), m_backend->isCapturing());
+        return true;
+    }
+
+    if (verb == QLatin1String("replay")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("start"));
+        if (action == QLatin1String("stop")) {
+            m_replayer->stop();
+            m_consolePanel->replayButton()->setChecked(false);
+            return true;
+        }
+        if (action != QLatin1String("start")) {
+            return fail(QStringLiteral("replay: 'action' must be 'start' or 'stop'"));
+        }
+        if (m_backend->isRunning()) {
+            return fail(QStringLiteral("replay: stop SocketCAN capture before replaying a capture file"));
+        }
+        const QString path = args.value(QStringLiteral("path")).toString();
+        if (path.isEmpty()) {
+            return fail(QStringLiteral("replay start: 'path' is required"));
+        }
+        QString loadErr;
+        if (!m_replayer->load(path, &loadErr)) {
+            return fail(QStringLiteral("replay: could not open capture: %1").arg(loadErr));
+        }
+        m_consolePanel->console()->clearConsole();
+        m_consolePanel->replayButton()->setChecked(true);
+        m_replayer->start();
+        return true;
+    }
+
+    if (verb == QLatin1String("run_macro")) {
+        int index = -1;
+        if (args.contains(QStringLiteral("index"))) {
+            index = args.value(QStringLiteral("index")).toInt(-1);
+        } else if (args.contains(QStringLiteral("name"))) {
+            index = m_macroBar->indexOfMacro(args.value(QStringLiteral("name")).toString());
+        } else {
+            return fail(QStringLiteral("run_macro: 'name' or 'index' is required"));
+        }
+        if (!m_macroBar->triggerMacro(index)) {
+            return fail(QStringLiteral("run_macro: no such macro"));
+        }
+        reply.insert(QStringLiteral("index"), index);
+        return true;
+    }
+
+    return fail(QStringLiteral("CAN session does not support verb '%1'").arg(verb));
+}
+
+bool CanSessionWidget::startSession(QString *error) {
+    if (m_backend->isRunning()) {
+        return true;  // already running — idempotent
+    }
+    const CanConfig cfg = m_configPanel->currentConfig();
+    const QString invalid = cfg.validate();
+    if (!invalid.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("start: %1").arg(invalid);
+        }
+        return false;
+    }
+    startCapture(cfg);
+    return true;
+}
+
+bool CanSessionWidget::applyControlConfig(const QJsonObject &config, QString *error) {
+    CanConfig cfg = m_configPanel->currentConfig();
+    if (config.contains(QStringLiteral("iface"))) {
+        cfg.iface = config.value(QStringLiteral("iface")).toString();
+    }
+    if (config.contains(QStringLiteral("fdMode"))) {
+        cfg.fdMode = config.value(QStringLiteral("fdMode")).toBool(cfg.fdMode);
+    }
+    if (config.contains(QStringLiteral("loopback"))) {
+        cfg.loopback = config.value(QStringLiteral("loopback")).toBool(cfg.loopback);
+    }
+    if (config.contains(QStringLiteral("receiveOwn"))) {
+        cfg.receiveOwn = config.value(QStringLiteral("receiveOwn")).toBool(cfg.receiveOwn);
+    }
+    if (config.contains(QStringLiteral("errorFrames"))) {
+        cfg.errorFrames = config.value(QStringLiteral("errorFrames")).toBool(cfg.errorFrames);
+    }
+    if (config.contains(QStringLiteral("filters"))) {
+        cfg.filters.clear();
+        const QJsonArray filters = config.value(QStringLiteral("filters")).toArray();
+        for (const auto &val : filters) {
+            const QJsonObject spec = val.toObject();
+            if (!spec.contains(QStringLiteral("id"))) {
+                if (error != nullptr) {
+                    *error = QStringLiteral("config: each filter needs an integer 'id'");
+                }
+                return false;
+            }
+            CanFilter f;
+            f.id = static_cast<quint32>(spec.value(QStringLiteral("id")).toDouble());
+            f.extended = spec.value(QStringLiteral("extended")).toBool(false);
+            f.invert = spec.value(QStringLiteral("invert")).toBool(false);
+            if (spec.contains(QStringLiteral("mask"))) {
+                f.mask = static_cast<quint32>(spec.value(QStringLiteral("mask")).toDouble());
+            }
+            cfg.filters.push_back(f);
+        }
+    }
+    const QString invalid = cfg.validate();
+    if (!invalid.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("config: %1").arg(invalid);
+        }
+        return false;
+    }
+    m_configPanel->applyConfig(cfg);
     return true;
 }
 

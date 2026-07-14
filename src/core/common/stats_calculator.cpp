@@ -1,5 +1,7 @@
 #include "core/common/stats_calculator.hpp"
 
+#include <QJsonObject>
+
 namespace aether {
 
 StatsCalculator::StatsCalculator() {
@@ -139,6 +141,18 @@ double StatsCalculator::txBaudUtilization() const {
     if (maxBytesPerSec <= 0.0)
         return 0.0;
     return (m_currentTxRate / maxBytesPerSec) * 100.0;
+}
+
+QJsonObject statsToControlJson(const StatsCalculator &stats, bool running) {
+    QJsonObject obj;
+    obj.insert(QStringLiteral("rxBytes"), static_cast<double>(stats.rxBytes()));
+    obj.insert(QStringLiteral("txBytes"), static_cast<double>(stats.txBytes()));
+    obj.insert(QStringLiteral("rxChunks"), static_cast<double>(stats.rxChunks()));
+    obj.insert(QStringLiteral("txChunks"), static_cast<double>(stats.txChunks()));
+    obj.insert(QStringLiteral("rxRate"), stats.currentRxRate());
+    obj.insert(QStringLiteral("txRate"), stats.currentTxRate());
+    obj.insert(QStringLiteral("running"), running);
+    return obj;
 }
 
 }  // namespace aether

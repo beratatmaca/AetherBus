@@ -78,10 +78,64 @@ void UsbSessionWidget::loadSettings(const QSettings &settings) {
     m_configPanel->setInterfaceName(name);
 }
 
-bool UsbSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
-    Q_UNUSED(cmd);
+bool UsbSessionWidget::handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) {
+    const auto fail = [&](const QString &msg) {
+        if (error != nullptr) {
+            *error = msg;
+        }
+        return false;
+    };
+
+    if (verb == QLatin1String("send")) {
+        return fail(QStringLiteral("USB injection (transmit) is not implemented."));
+    }
+
+    if (verb == QLatin1String("stop")) {
+        stopSession();
+        return true;
+    }
+
+    if (verb == QLatin1String("stats")) {
+        reply.insert(QStringLiteral("stats"), statsToControlJson(m_stats, isRunning()));
+        return true;
+    }
+
+    if (verb == QLatin1String("capture")) {
+        const QString action = args.value(QStringLiteral("action")).toString(QStringLiteral("status"));
+        if (action == QLatin1String("start")) {
+            const QString path = args.value(QStringLiteral("path")).toString();
+            if (path.isEmpty()) {
+                return fail(QStringLiteral("capture start: 'path' is required"));
+            }
+            QString openErr;
+            if (!m_captureWriter.open(path, m_backend->linkType(), &openErr)) {
+                return fail(QStringLiteral("capture start failed — %1").arg(openErr));
+            }
+            m_consolePanel->captureButton()->setChecked(true);
+        } else if (action == QLatin1String("stop")) {
+            m_captureWriter.close();
+            m_consolePanel->captureButton()->setChecked(false);
+        } else if (action != QLatin1String("status")) {
+            return fail(QStringLiteral("capture: 'action' must be 'start', 'stop' or 'status'"));
+        }
+        reply.insert(QStringLiteral("capturing"), m_captureWriter.isOpen());
+        return true;
+    }
+
+    return fail(QStringLiteral("USB session does not support verb '%1'").arg(verb));
+}
+
+bool UsbSessionWidget::startSession(QString *error) {
     if (error != nullptr) {
-        *error = QStringLiteral("USB injection (transmit) is not implemented in Phase 3.");
+        *error = QStringLiteral("USB start over the control channel is not supported");
+    }
+    return false;
+}
+
+bool UsbSessionWidget::applyControlConfig(const QJsonObject &config, QString *error) {
+    Q_UNUSED(config);
+    if (error != nullptr) {
+        *error = QStringLiteral("USB config over the control channel is not supported");
     }
     return false;
 }

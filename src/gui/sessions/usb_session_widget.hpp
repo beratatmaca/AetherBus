@@ -33,7 +33,9 @@ public:
     [[nodiscard]] SessionType sessionType() const override { return SessionType::Usb; }
     void saveSettings(QSettings &settings) const override;
     void loadSettings(const QSettings &settings) override;
-    bool sendControl(const QJsonObject &cmd, QString *error) override;
+    bool handleControl(const QString &verb, const QJsonObject &args, QJsonObject &reply, QString *error) override;
+    bool startSession(QString *error) override;
+    bool applyControlConfig(const QJsonObject &config, QString *error) override;
 
 private slots:
     void startCapture(const UsbConfig &cfg);

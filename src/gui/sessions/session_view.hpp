@@ -72,12 +72,35 @@ public:
     [[nodiscard]] virtual QString sessionName() const { return objectName(); }
 
     /**
-     * @brief Execute a control `send` command decoded from JSON, delegating to this
-     * session's own backend. @p cmd carries transport-specific fields (serial: `side`,
-     * `data`; CAN: `frameId`, `flags`, `data`; Ethernet: `data`).
+     * @brief Execute a control-channel @p verb against this session, delegating to its
+     * own backend/widgets. @p args carries the verb's fields decoded from JSON:
+     *   - `send`   — serial: `side`,`data`; CAN: `frameId`,`flags`,`data`; Ethernet: `data`.
+     *   - `start`  — optional `config` object (applied first); `stop` — no args.
+     *   - `stats`  — none; fills @p reply with `{rxBytes,txBytes,rxChunks,txChunks,rxRate,txRate,running}`.
+     *   - `capture`— `action` (`start`|`stop`|`status`), `path` (for start); fills `reply["capturing"]`.
+     *   - `replay` — `path`, optional `action` (`start`|`stop`).
+     *   - `run_macro` — `name` or `index`; fills `reply["index"]`.
+     * Verbs a transport does not support fail with a message rather than crashing.
+     * @param reply out-parameter for verbs that return data (merged into the client reply).
      * @return false with a human-readable @p error on bad args or an inactive session.
      */
-    virtual bool sendControl(const QJsonObject &cmd, QString *error) = 0;
+    virtual bool handleControl(const QString &verb, const QJsonObject &args,
+                               QJsonObject &reply, QString *error) = 0;
+
+    /**
+     * @brief Start this session's backend using its current configuration (the same
+     * path the Start/Connect button drives). Symmetric with @ref stopSession.
+     * @return false with a human-readable @p error if it can't start.
+     */
+    virtual bool startSession(QString *error) = 0;
+
+    /**
+     * @brief Apply a control-channel config object to this session's widgets before
+     * starting (transport-specific keys; see @ref handleControl). Only pre-fills
+     * fields — never starts the backend.
+     * @return false with a human-readable @p error on invalid config.
+     */
+    virtual bool applyControlConfig(const QJsonObject &config, QString *error) = 0;
 
 signals:
     /** @brief Request the hosting tab's label be updated. */
