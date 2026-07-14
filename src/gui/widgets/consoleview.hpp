@@ -59,6 +59,7 @@ struct DisplayLine {
     bool isFrame = false;
     quint32 frameId = 0;
     quint16 frameFlags = 0;
+    QString extraInfo;
 };
 
 /** @brief Lightweight text cursor pointing into the DisplayLine vector. */
@@ -202,7 +203,7 @@ private:
     void finalizeLine();
 
     DisplayLine buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame = false, quint32 frameId = 0,
-                          quint16 frameFlags = 0) const;
+                          quint16 frameFlags = 0, const QString &extraInfo = QString()) const;
     /** @brief Compose the per-frame header shown after the timestamp, e.g. "123 [4] R". */
     [[nodiscard]] static QString frameHeader(quint32 id, quint16 flags, int payloadLen);
     [[nodiscard]] QString lineToPlain(const DisplayLine &dl) const;

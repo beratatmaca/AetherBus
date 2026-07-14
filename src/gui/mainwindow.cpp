@@ -5,6 +5,7 @@
 #ifdef AETHER_HAVE_ETHERNET
 #include "gui/sessions/ethernet_session_widget.hpp"
 #endif
+#include "gui/sessions/usb_session_widget.hpp"
 #include "gui/common/theme_controller.hpp"
 #include "gui/control/control_bridge.hpp"
 #include "gui/control/control_server.hpp"
@@ -49,6 +50,8 @@ QString sessionTypeKey(SessionType type) {
             return QStringLiteral("can");
         case SessionType::Ethernet:
             return QStringLiteral("ethernet");
+        case SessionType::Usb:
+            return QStringLiteral("usb");
         case SessionType::Serial:
             break;
     }
@@ -61,6 +64,9 @@ SessionType sessionTypeFromKey(const QString &key) {
     }
     if (key == QStringLiteral("ethernet")) {
         return SessionType::Ethernet;
+    }
+    if (key == QStringLiteral("usb")) {
+        return SessionType::Usb;
     }
     return SessionType::Serial;
 }
@@ -89,6 +95,9 @@ MainWindow::MainWindow(bool enableControl, QWidget *parent) : QMainWindow(parent
     QAction *newEthernetSessionAct = fileMenu->addAction(tr("New &Ethernet Session"));
     connect(newEthernetSessionAct, &QAction::triggered, this, &MainWindow::addNewEthernetSession);
 #endif
+    QAction *newUsbSessionAct = fileMenu->addAction(tr("New &USB Session"));
+    newUsbSessionAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
+    connect(newUsbSessionAct, &QAction::triggered, this, &MainWindow::addNewUsbSession);
 
     QAction *closeSessionAct = fileMenu->addAction(tr("&Close Session"));
     closeSessionAct->setShortcut(QKeySequence::Close);
@@ -470,6 +479,10 @@ void MainWindow::addNewEthernetSession() {
 }
 #endif
 
+void MainWindow::addNewUsbSession() {
+    addSession(SessionType::Usb);
+}
+
 void MainWindow::addSession(SessionType type) {
     SessionView *session = nullptr;
     QString title;
@@ -483,6 +496,9 @@ void MainWindow::addSession(SessionType type) {
         session = new EthernetSessionWidget(this);
         title = QStringLiteral("Ethernet Session %1").arg(count);
 #endif
+    } else if (type == SessionType::Usb) {
+        session = new UsbSessionWidget(this);
+        title = QStringLiteral("USB Session %1").arg(count);
     } else {
         session = new SessionWidget(this);
         title = QStringLiteral("Serial Session %1").arg(count);

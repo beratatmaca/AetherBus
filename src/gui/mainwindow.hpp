@@ -48,6 +48,8 @@ private slots:
     /** @brief New Ethernet/IP session. */
     void addNewEthernetSession();
 #endif
+    /** @brief New USB session (Ctrl+U). */
+    void addNewUsbSession();
     void closeCurrentSession();
     void showAboutQt();
     void tileWorkspace();

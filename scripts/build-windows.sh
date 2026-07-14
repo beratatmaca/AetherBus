@@ -26,7 +26,7 @@ mkdir -p "$OUT"
 
 # The repo is mounted read-only; the build happens on a throwaway copy inside the
 # container and only the staged dist/ is written back to the mounted $OUT.
-docker run --rm -v "$REPO":/src:ro -v "$OUT":/out "$IMAGE" bash -euo pipefail -c '
+docker run --rm -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) -v "$REPO":/src:ro -v "$OUT":/out "$IMAGE" bash -euo pipefail -c '
     SR=/usr/x86_64-w64-mingw32/sys-root/mingw
     cp -r /src /work && cd /work && rm -rf build build-* dist
 
@@ -59,6 +59,7 @@ docker run --rm -v "$REPO":/src:ro -v "$OUT":/out "$IMAGE" bash -euo pipefail -c
     fi
 
     cp -r "$STAGE"/. /out/
+    chown -R "$HOST_UID:$HOST_GID" /out
 '
 
 echo ""

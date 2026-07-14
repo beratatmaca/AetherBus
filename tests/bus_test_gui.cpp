@@ -8,6 +8,7 @@
 #include "gui/panels/can_config_panel.hpp"
 #include "gui/dialogs/welcome_tutorial_dialog.hpp"
 #include "gui/sessions/session_view.hpp"
+#include "gui/sessions/usb_session_widget.hpp"
 #include "gui/control/control_server.hpp"
 #include <QSignalSpy>
 #include <QJsonArray>
@@ -631,4 +632,25 @@ void BusTest::controlServerRoundTrip() {
 
     sock.disconnectFromServer();
     // joiner stops the server on its thread and joins before returning.
+}
+
+void BusTest::usbSessionSettingsRoundTrip() {
+    QSettings in;
+    in.beginGroup(QStringLiteral("test_usb_in"));
+    in.setValue(QStringLiteral("interfaceName"), QStringLiteral("usbmon2"));
+    in.endGroup();
+
+    UsbSessionWidget session;
+    in.beginGroup(QStringLiteral("test_usb_in"));
+    session.loadSettings(in);
+    in.endGroup();
+
+    QSettings out;
+    out.beginGroup(QStringLiteral("test_usb_out"));
+    session.saveSettings(out);
+    out.endGroup();
+
+    out.beginGroup(QStringLiteral("test_usb_out"));
+    QCOMPARE(out.value(QStringLiteral("interfaceName")).toString(), QStringLiteral("usbmon2"));
+    out.endGroup();
 }

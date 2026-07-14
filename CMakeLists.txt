@@ -110,6 +110,13 @@ set(AETHER_CORE_SOURCES
     src/core/can/dbc_parser.hpp
     src/core/ethernet/ethernet_pcap.cpp
     src/core/ethernet/ethernet_pcap.hpp
+    src/core/usb/usb_types.hpp
+    src/core/usb/usb_backend.cpp
+    src/core/usb/usb_backend.hpp
+    src/core/usb/usb_parser.cpp
+    src/core/usb/usb_parser.hpp
+    src/core/usb/usb_pcap.cpp
+    src/core/usb/usb_pcap.hpp
 )
 if(WIN32)
     list(APPEND AETHER_CORE_SOURCES
@@ -151,6 +158,16 @@ if(PCAP_INCLUDE_DIR AND PCAP_LIB)
     target_include_directories(aether_core PUBLIC ${PCAP_INCLUDE_DIR})
     target_link_libraries(aether_core PUBLIC ${PCAP_LIB})
     target_compile_definitions(aether_core PUBLIC AETHER_HAVE_ETHERNET)
+    target_compile_definitions(aether_core PUBLIC AETHER_HAVE_PCAP)
+endif()
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(LIBUSB QUIET libusb-1.0)
+    if(LIBUSB_FOUND)
+        target_include_directories(aether_core PUBLIC ${LIBUSB_INCLUDE_DIRS})
+        target_link_libraries(aether_core PUBLIC ${LIBUSB_LIBRARIES})
+        target_compile_definitions(aether_core PUBLIC AETHER_HAVE_LIBUSB)
+    endif()
 endif()
 # macOS custom-baud support (IOSSIOSPEED) lives in <IOKit/serial/ioss.h>.
 if(APPLE)
@@ -170,6 +187,12 @@ add_library(aether_gui STATIC
     src/gui/sessions/session_widget.hpp
     src/gui/sessions/can_session_widget.cpp
     src/gui/sessions/can_session_widget.hpp
+    src/gui/sessions/usb_session_widget.cpp
+    src/gui/sessions/usb_session_widget.hpp
+    src/gui/panels/usb_config_panel.cpp
+    src/gui/panels/usb_config_panel.hpp
+    src/gui/panels/usb_injection_panel.cpp
+    src/gui/panels/usb_injection_panel.hpp
     src/gui/panels/can_decoder_panel.cpp
     src/gui/panels/can_decoder_panel.hpp
     src/gui/panels/config_panel.cpp

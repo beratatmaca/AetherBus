@@ -56,10 +56,19 @@ AetherBus is a desktop tool for working with serial ports, SocketCAN buses, and 
 2. Point your target app (minicom, a flasher, test scripts) at that virtual port instead of the real device.
 3. Watch traffic in the console, color-coded by direction, and use the injection panel to send your own bytes.
 
-### CAN and Ethernet
+### CAN, Ethernet, and USB
 
 * **File → New CAN Session**: pick an interface (`vcan0`, ...), **Start Capture**, get a live per-ID table plus DBC decoding.
 * **File → New Ethernet Session**: pick an interface, **Start Capture**, get BPF-filtered live traffic.
+* **File → New USB Session**: pick a USB interface (e.g. `usbmon1`, `USBPcap2`) and **Start Capture** to inspect raw URBs and control requests.
+
+  > [!NOTE]
+  > Linux USB sniffing requires the `usbmon` module to be loaded and read permissions on device nodes:
+>
+  > ```bash
+  > sudo modprobe usbmon
+  > sudo chmod +r /dev/usbmon*
+  > ```
 
 ---
 
@@ -74,7 +83,10 @@ Classic CAN and CAN-FD over `PF_CAN` sockets. A per-ID table with changed-byte h
 **Ethernet**
 `libpcap`-based capture with standard BPF filters. A Wireshark-style packet list, protocol tree, and hex/ASCII dump kept in sync. A packet constructor for crafting Ethernet II/IPv4/UDP/ICMP frames (checksums computed for you), one-off or periodic sends, and pcap save/replay paced by original packet timing.
 
-**Across all three**
+**USB**
+`libpcap`-based raw USB packet sniffing (`usbmon` on Linux, `USBPcap` on Windows). Real-time parser for USB Request Blocks (URBs) decoding descriptors (Device, Configuration, etc.) and control request commands.
+
+**Across all four**
 Side-by-side HEX/ASCII/BIN/DEC console rendering that stays fast at megabaud rates, live throughput graphs and inter-packet gap stats, a byte inspector for decoding selected bytes as int8–64/float/double, and multiple sessions running side by side in tabs or a tiled grid.
 
 ---
@@ -112,7 +124,7 @@ AetherBus sits between your client app and the target hardware, proxying both di
 * CMake 3.16+
 * Qt6 (Core, Widgets, Network, Test)
 * A C++17 compiler (GCC 10+, Clang 12+, MSVC 2019+)
-* `libpcap-dev` (Linux/macOS, optional — needed for the Ethernet session)
+* `libpcap-dev` (Linux/macOS, optional — needed for Ethernet and USB sessions)
 
 ### Build
 

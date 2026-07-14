@@ -25,6 +25,7 @@ enum class SessionType : std::uint8_t {
     Serial,  ///< UART interception via the PTY proxy.
     Can,     ///< SocketCAN receive/transmit.
     Ethernet, ///< Raw Ethernet packet capture/crafting.
+    Usb,      ///< USB packet sniffing/capture.
 };
 
 class SessionView : public QWidget {

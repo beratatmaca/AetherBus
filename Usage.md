@@ -44,6 +44,22 @@ This tutorial walks through every session type, the workspace layouts, and how t
 
 ---
 
+## USB Sessions
+
+**File ➔ New USB Session** (or `Ctrl+U`) opens a raw USB packet sniffing session (requires libpcap):
+
+* **Capture**: choose a USB interface (e.g. `usbmon1`, `USBPcap2`) and **Start Capture**.
+* **Linux Permissions**: Capturing USB traffic on Linux requires loading the `usbmon` kernel module and granting read permissions to the device nodes:
+
+  ```bash
+  sudo modprobe usbmon
+  sudo chmod +r /dev/usbmon*
+  ```
+
+* **Real-time Parsing**: AetherBus parses USB Request Blocks (URBs) in real time. The log view shows decoded descriptors (Device, Configuration, etc.) and Control commands (like `GET_DESCRIPTOR`, `SET_ADDRESS`) side-by-side with their raw payload bytes.
+
+---
+
 ## Workspace Layouts
 
 All open sessions — Serial, CAN, and Ethernet alike — live in the same workspace and can be arranged dynamically:
@@ -68,8 +84,8 @@ AetherBus remembers your whole workspace between launches — you don't have to 
 
 ## Tips & Shortcuts
 
-* `Ctrl+N` — new Serial session. `Ctrl+W` — close the current session. `Ctrl+Q` — quit.
-* `F5` (while a Serial or CAN config panel has focus) — rescan available ports/interfaces.
+* `Ctrl+N` — new Serial session. `Ctrl+U` — new USB session. `Ctrl+W` — close the current session. `Ctrl+Q` — quit.
+* `F5` (while a Serial, CAN, or USB config panel has focus) — rescan available ports/interfaces.
 * **View ➔ Theme** — switch between System, Light, and Dark; the choice is remembered.
 * Recently used serial ports are kept in the device dropdown so you don't have to retype them.
 * **Help ➔ Welcome Tutorial…** reopens this guide at any time.

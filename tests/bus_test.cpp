@@ -3,6 +3,7 @@
 #include "core/common/stats_calculator.hpp"
 #include "core/serial/serial_types.hpp"
 #include "core/ethernet/ethernet_pcap.hpp"
+#include "core/usb/usb_parser.hpp"
 
 #include <QCoreApplication>
 #include <QDataStream>
@@ -326,6 +327,46 @@ void BusTest::ethernetPcapWriterRoundTrip() {
     QCOMPARE((*parsed)[0].timestampMs, static_cast<qint64>(5500));
     QCOMPARE((*parsed)[1].data, frame2);
     QCOMPARE((*parsed)[1].timestampMs, static_cast<qint64>(6000));
+}
+
+void BusTest::usbParserUrbDecoding() {
+    // Construct a mock 48-byte usbmon header
+    QByteArray header(48, 0);
+    header[8] = 'S';    // Submit
+    header[9] = 2;      // Control
+    header[10] = 0x81;  // Endpoint 1, Direction IN (Rx)
+    header[11] = 3;     // Device address
+    header[12] = 1;     // Bus ID
+    header[14] = 0;     // Setup packet present
+
+    // Set 8-byte setup packet at offset 40: GET_DESCRIPTOR (Device)
+    header[40] = static_cast<char>(0x80);
+    header[41] = 0x06;
+    header[42] = 0x00;
+    header[43] = 0x01;
+    header[44] = 0x00;
+    header[45] = 0x00;
+    header[46] = 0x12;
+    header[47] = 0x00;
+
+    UsbUrbInfo info = UsbParser::parseUrb(header);
+    QVERIFY(info.isValid);
+    QCOMPARE(info.eventType, UsbEventType::Submit);
+    QCOMPARE(info.transferType, UsbTransferType::Control);
+    QCOMPARE(info.direction, Direction::Rx);
+    QCOMPARE(info.endpoint, 1);
+    QCOMPARE(info.deviceAddress, 3);
+    QCOMPARE(info.busId, 1);
+    QVERIFY(info.infoText.contains(QStringLiteral("GET_DESCRIPTOR")));
+}
+
+void BusTest::usbParserDescriptorDecoding() {
+    // Construct mock device descriptor bytes (18 bytes)
+    QByteArray devDesc = QByteArray::fromHex("120100020000004047050011000100000001");
+    QString decoded = UsbParser::decodeDescriptor(1, devDesc);
+    QVERIFY(decoded.contains(QStringLiteral("USB Device Descriptor")));
+    QVERIFY(decoded.contains(QStringLiteral("idVendor:        0x0547")));
+    QVERIFY(decoded.contains(QStringLiteral("idProduct:       0x1100")));
 }
 
 QTEST_MAIN(BusTest)

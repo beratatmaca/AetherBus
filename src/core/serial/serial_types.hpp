@@ -89,6 +89,7 @@ struct CapturedChunk {
     bool isFrame = false;    ///< When true, @c frameId / @c frameFlags are meaningful.
     quint32 frameId = 0;     ///< Frame identifier (e.g. CAN id, with flag bits masked off).
     quint16 frameFlags = 0;  ///< Bitmask of @ref FrameFlag values.
+    QString extraInfo;       ///< Optional human-readable metadata (e.g. decoded info, USB request info)
 };
 
 /**

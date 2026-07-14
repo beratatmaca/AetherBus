@@ -74,7 +74,7 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
         const int numCols = static_cast<int>(dl.cols.size());
         const int numBytes = static_cast<int>(dl.bytes.size());
 
-        if (numCols > 0) {
+        if (numCols > 0 && numBytes > 0) {
             int cellW = 0;
             int cellCharLen = 0;  // '/'-joined token length, matching lineToPlain
             for (int ci = 0; ci < numCols; ++ci) {

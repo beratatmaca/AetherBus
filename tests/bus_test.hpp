@@ -80,6 +80,11 @@ private slots:
     void ethernetPcapRejectsTruncatedRecord();
     void ethernetPcapWriterRoundTrip();
 
+    // USB Parser Tests
+    void usbParserUrbDecoding();
+    void usbParserDescriptorDecoding();
+    void usbSessionSettingsRoundTrip();
+
 #ifdef AETHER_HAVE_ETHERNET
     // Ethernet Tests (backend + GUI; only built where libpcap is available)
     void ethernetBackendAndParsing();

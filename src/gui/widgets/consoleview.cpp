@@ -209,12 +209,13 @@ void ConsoleView::beginLineIfEmpty(const CapturedChunk &chunk) {
         m_openLine.isFrame = chunk.isFrame;
         m_openLine.frameId = chunk.frameId;
         m_openLine.frameFlags = chunk.frameFlags;
+        m_openLine.extraInfo = chunk.extraInfo;
     }
 }
 
 void ConsoleView::renderOpenLine() {
-    m_openLine =
-        buildLine(m_openLine.dir, m_openLine.timestampMs, m_openLine.bytes, m_openLine.isFrame, m_openLine.frameId, m_openLine.frameFlags);
+    m_openLine = buildLine(m_openLine.dir, m_openLine.timestampMs, m_openLine.bytes, m_openLine.isFrame, m_openLine.frameId,
+                           m_openLine.frameFlags, m_openLine.extraInfo);
     if (m_openLineActive) {
         m_lines.last() = m_openLine;
     } else {
@@ -361,8 +362,8 @@ QString ConsoleView::frameHeader(quint32 id, quint16 flags, int payloadLen) {
     return header;
 }
 
-DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame, quint32 frameId,
-                                   quint16 frameFlags) const {
+DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray &bytes, bool isFrame, quint32 frameId, quint16 frameFlags,
+                                   const QString &extraInfo) const {
     DisplayLine dl;
     dl.dir = dir;
     dl.timestampMs = tsMs;
@@ -370,6 +371,7 @@ DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray 
     dl.isFrame = isFrame;
     dl.frameId = frameId;
     dl.frameFlags = frameFlags;
+    dl.extraInfo = extraInfo;
 
     const QString tag = (dir == Direction::Rx) ? QStringLiteral("Rx") : QStringLiteral("Tx");
     if (m_showTimestamps) {
@@ -379,7 +381,11 @@ DisplayLine ConsoleView::buildLine(Direction dir, qint64 tsMs, const QByteArray 
         dl.prefix = QStringLiteral("[%1]").arg(tag);
     }
     if (isFrame) {
-        dl.prefix += QLatin1Char(' ') + frameHeader(frameId, frameFlags, static_cast<int>(bytes.size()));
+        if (!extraInfo.isEmpty()) {
+            dl.prefix += QLatin1Char(' ') + extraInfo;
+        } else {
+            dl.prefix += QLatin1Char(' ') + frameHeader(frameId, frameFlags, static_cast<int>(bytes.size()));
+        }
     }
 
     dl.cols.clear();
