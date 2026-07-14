@@ -6,8 +6,13 @@
 #include "gui/sessions/ethernet_session_widget.hpp"
 #endif
 #include "gui/common/theme_controller.hpp"
+#include "gui/control/control_bridge.hpp"
+#include "gui/control/control_server.hpp"
 #include "gui/dialogs/welcome_tutorial_dialog.hpp"
 #include "aether/version.h"
+
+#include <QThread>
+#include <QSignalBlocker>
 
 #include <QMenuBar>
 #include <QMenu>
@@ -61,7 +66,7 @@ SessionType sessionTypeFromKey(const QString &key) {
 }
 }  // namespace
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(bool enableControl, QWidget *parent) : QMainWindow(parent) {
     m_theme = new ThemeController(qApp, this);
     QSettings settings;
     m_theme->setMode(ThemeController::modeFromString(settings.value(QStringLiteral("ui/theme")).toString()));
@@ -138,6 +143,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(tileAct, &QAction::triggered, this, &MainWindow::tileWorkspace);
     QAction *resetAct = windowMenu->addAction(tr("&Reset Layout (Stack tabs)"));
     connect(resetAct, &QAction::triggered, this, &MainWindow::resetWorkspaceLayout);
+
+    windowMenu->addSeparator();
+    m_controlAction = windowMenu->addAction(tr("Enable &Control Channel"));
+    m_controlAction->setCheckable(true);
+    m_controlAction->setToolTip(tr("Allow local scripts to send/receive on your sessions over a control socket"));
+    connect(m_controlAction, &QAction::toggled, this, &MainWindow::setControlEnabled);
 
     QMenu *helpMenu = menu->addMenu(tr("&Help"));
     QAction *tutorialAct = helpMenu->addAction(tr("Welcome &Tutorial…"));
@@ -244,6 +255,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     // start with one default Serial session on first run.
     restoreWorkspaceState();
 
+    // Control channel is opt-in: enabled by the --control flag or a remembered
+    // Window-menu toggle. setControlEnabled updates the action's checkbox.
+    const bool controlOn = enableControl || settings.value(QStringLiteral("control/enabled"), false).toBool();
+    if (controlOn) {
+        setControlEnabled(true);
+    }
+
     // Trigger welcome tutorial if requested
     QTimer::singleShot(100, this, [this]() {
         QSettings settings;
@@ -260,6 +278,59 @@ MainWindow::~MainWindow() {
             session->disconnect(this);
         }
     }
+    setControlEnabled(false);  // join the control thread cleanly
+}
+
+void MainWindow::setControlEnabled(bool on) {
+    if (on == (m_control != nullptr)) {
+        // Keep the menu checkbox in sync even on a redundant call.
+        if (m_controlAction != nullptr && m_controlAction->isChecked() != on) {
+            const QSignalBlocker block(m_controlAction);
+            m_controlAction->setChecked(on);
+        }
+        return;
+    }
+
+    if (on) {
+        m_controlBridge = new ControlBridge(this);  // GUI thread
+        m_controlThread = new QThread(this);
+        m_control = new ControlServer();  // no parent — moved to its own thread
+        m_control->setBridge(m_controlBridge);
+        m_control->moveToThread(m_controlThread);
+        // listen() must run on the worker thread that owns the QLocalServer.
+        connect(m_controlThread, &QThread::started, m_control, &ControlServer::start);
+        // Cross-thread (queued) traffic hand-off, GUI -> control thread.
+        connect(m_controlBridge, &ControlBridge::traffic, m_control, &ControlServer::onTraffic);
+        m_controlThread->start();
+
+        // Register every currently-open session (ids were assigned in addSession).
+        for (SessionView *session : m_sessions) {
+            if (session != nullptr) {
+                m_controlBridge->registerSession(session);
+            }
+        }
+    } else {
+        if (m_control != nullptr) {
+            // Close the socket on its own thread, then join.
+            QMetaObject::invokeMethod(m_control, "stop", Qt::BlockingQueuedConnection);
+        }
+        if (m_controlThread != nullptr) {
+            m_controlThread->quit();
+            m_controlThread->wait();
+            delete m_controlThread;  // thread joined; safe to delete it and its worker
+            m_controlThread = nullptr;
+        }
+        delete m_control;  // safe: worker thread has stopped
+        m_control = nullptr;
+        delete m_controlBridge;
+        m_controlBridge = nullptr;
+    }
+
+    if (m_controlAction != nullptr && m_controlAction->isChecked() != on) {
+        const QSignalBlocker block(m_controlAction);
+        m_controlAction->setChecked(on);
+    }
+    QSettings().setValue(QStringLiteral("control/enabled"), on);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
@@ -424,6 +495,14 @@ void MainWindow::addSession(SessionType type) {
     session->setAttribute(Qt::WA_DeleteOnClose);
     m_sessions.append(session);
 
+    // Always assign a stable control id (cheap; harmless when the channel is
+    // off) so it can be registered as-is if the channel is enabled later.
+    const int controlId = ++m_nextControlId;
+    session->setControlId(controlId);
+    if (m_controlBridge != nullptr) {
+        m_controlBridge->registerSession(session);
+    }
+
     connect(session, &SessionView::sessionTitleChanged, this, [this, session](const QString &newTitle) {
         int idx = m_tabWidget->indexOf(session);
         if (idx != -1) {
@@ -439,9 +518,12 @@ void MainWindow::addSession(SessionType type) {
         showStatus(prefix.isEmpty() ? text : QStringLiteral("[%1] %2").arg(prefix, text), isError);
     });
 
-    connect(session, &QObject::destroyed, this, [this, session]() {
+    connect(session, &QObject::destroyed, this, [this, session, controlId]() {
         m_sessionStatus.remove(session);
         m_sessions.removeAll(session);
+        if (m_controlBridge != nullptr) {
+            m_controlBridge->unregisterSession(controlId);
+        }
         if (m_stack && m_dashboard && m_sessions.isEmpty()) {
             m_stack->setCurrentWidget(m_dashboard);
         } else if (m_tiledMode && !m_sessions.isEmpty()) {

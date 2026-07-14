@@ -108,6 +108,23 @@ void BusTest::parseValidHex() {
     QCOMPARE(out, QByteArray::fromHex("07FF"));
 }
 
+void BusTest::parseCompactHexValidAndInvalid() {
+    QByteArray out;
+    // The contiguous hex form used on the control wire (Python bytes.hex()).
+    QVERIFY(codec::parseCompactHex(QStringLiteral("48490d0a"), out));
+    QCOMPARE(out, QByteArray::fromHex("48490D0A"));
+
+    QVERIFY(codec::parseCompactHex(QStringLiteral("DEADBEEF"), out));  // case-insensitive
+    QCOMPARE(out, QByteArray::fromHex("DEADBEEF"));
+
+    QByteArray untouched = QByteArrayLiteral("keep");
+    QVERIFY(!codec::parseCompactHex(QStringLiteral("abc"), untouched));    // odd length
+    QVERIFY(!codec::parseCompactHex(QStringLiteral("zz"), untouched));     // non-hex
+    QVERIFY(!codec::parseCompactHex(QStringLiteral("48 49"), untouched));  // spaces not allowed (compact form)
+    QVERIFY(!codec::parseCompactHex(QString(), untouched));                // empty
+    QCOMPARE(untouched, QByteArrayLiteral("keep"));                        // failures leave out untouched
+}
+
 void BusTest::parseDecAndBin() {
     QByteArray out;
     int err = -1;

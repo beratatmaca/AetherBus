@@ -33,6 +33,7 @@ private slots:
     void asciiEscapedFormatting();
     void binaryAndDecimalFormatting();
     void parseValidHex();
+    void parseCompactHexValidAndInvalid();
     void parseRejectsGarbage();
     void parseDecAndBin();
     void encodePayloadFormatsAndEndings();
@@ -70,6 +71,7 @@ private slots:
     void guiMacroBar();
     void guiThemeController();
     void guiMainWindow();
+    void controlServerRoundTrip();
 
     // Ethernet pcap parsing (core-only; no libpcap dependency, always built)
     void ethernetPcapRoundTrip();

@@ -2,6 +2,9 @@
 
 #include "core/can/can_backend.hpp"
 #include "core/common/format_codec.hpp"
+
+#include <QJsonObject>
+#include <QJsonValue>
 #include "gui/panels/can_config_panel.hpp"
 #include "gui/widgets/consoleview.hpp"
 #include "gui/widgets/console_panel.hpp"
@@ -364,6 +367,36 @@ void CanSessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &ch
         m_decoderPanel->processChunk(chunk);
         m_stats.addChunk(chunk);
     }
+    emit controlTraffic(chunks);
+}
+
+bool CanSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+    const auto fail = [&](const QString &msg) {
+        if (error != nullptr) {
+            *error = msg;
+        }
+        return false;
+    };
+
+    const QJsonValue idVal = cmd.value(QStringLiteral("frameId"));
+    if (!idVal.isDouble()) {
+        return fail(QStringLiteral("CAN send: 'frameId' (integer) is required"));
+    }
+    const auto id = static_cast<quint32>(idVal.toDouble());
+    const auto flags = static_cast<quint16>(cmd.value(QStringLiteral("flags")).toDouble(0));
+
+    QByteArray payload;
+    // 'data' is optional (RTR frames carry none); when present it must be hex.
+    const QString dataStr = cmd.value(QStringLiteral("data")).toString();
+    if (!dataStr.isEmpty() && !codec::parseCompactHex(dataStr, payload)) {
+        return fail(QStringLiteral("CAN send: 'data' must be a hex string"));
+    }
+
+    if (!m_backend->sendFrame(id, flags, payload)) {
+        return fail(m_backend->isRunning() ? QStringLiteral("CAN send failed — payload too large for the frame type")
+                                           : QStringLiteral("CAN send failed — capture not started"));
+    }
+    return true;
 }
 
 void CanSessionWidget::transmit() {

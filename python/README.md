@@ -24,6 +24,50 @@ aetherbus
 `aetherbus --version` prints the installed version. Any other arguments are
 forwarded to the application.
 
+## Scripting a running GUI (control channel)
+
+With the control channel enabled, a script can enumerate the open sessions,
+send data/frames into them, and stream their captured traffic — over a local
+socket (a Unix domain socket / Windows named pipe; owner-only, no network).
+
+Enable it in one of two ways:
+
+- launch with `aetherbus --control`, or
+- toggle **Window → Enable Control Channel** in the GUI (remembered across
+  restarts).
+
+It is **off by default**: nothing listens until you enable it.
+
+```python
+import aetherbus
+
+c = aetherbus.connect()                     # finds the running GUI's socket
+print(c.hello)                              # {"protocol": 1, "version": "..."}
+
+for s in c.sessions():
+    print(s["id"], s["type"], s["name"], s["running"])
+
+# Serial: send toward the device (default) or the target app side.
+c.send(1, b"AT\r\n", side="device")
+
+# CAN: pass a frame id (and optional flags).
+c.send(2, b"\xde\xad\xbe\xef", frame_id=0x123)
+
+# Ethernet: data is a full raw frame.
+c.send(3, bytes.fromhex("ffffffffffff..."))
+
+# Stream captured traffic (use a separate connection if you also send).
+stream = aetherbus.connect()
+for msg in stream.stream(1):
+    print(msg["dir"], msg["data"])          # data is bytes
+```
+
+**Notes.** Use a dedicated `connect()` for `stream()` if you also issue commands
+concurrently. The snap build runs under strict confinement, which relocates the
+socket inside the sandbox — the control client works against the pip / DEB /
+source builds, not the confined snap. See `--no-control` to force it off even if
+a saved toggle would enable it.
+
 ## Supported platforms
 
 Wheels are built for Linux x86_64 (glibc 2.35+, e.g. Ubuntu 22.04+,

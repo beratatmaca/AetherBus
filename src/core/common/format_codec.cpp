@@ -103,6 +103,26 @@ bool parseHexString(const QString &text, QByteArray &out, int *errorPos) {
     return true;
 }
 
+bool parseCompactHex(const QString &text, QByteArray &out) {
+    if (text.isEmpty() || (text.size() % 2) != 0) {
+        return false;
+    }
+    QByteArray parsed;
+    parsed.reserve(text.size() / 2);
+    for (int i = 0; i < text.size(); i += 2) {
+        bool okHi = false;
+        bool okLo = false;
+        const int hi = QStringView(text).mid(i, 1).toInt(&okHi, 16);
+        const int lo = QStringView(text).mid(i + 1, 1).toInt(&okLo, 16);
+        if (!okHi || !okLo) {
+            return false;
+        }
+        parsed.append(static_cast<char>((hi << 4) | lo));
+    }
+    out = parsed;
+    return true;
+}
+
 bool parseDecString(const QString &text, QByteArray &out, int *errorPos) {
     const QStringList tokens = text.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
 

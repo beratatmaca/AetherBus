@@ -40,6 +40,7 @@ public:
     [[nodiscard]] SessionType sessionType() const override { return SessionType::Ethernet; }
     void saveSettings(QSettings &settings) const override;
     void loadSettings(const QSettings &settings) override;
+    bool sendControl(const QJsonObject &cmd, QString *error) override;
 
 private slots:
     void startCapture();

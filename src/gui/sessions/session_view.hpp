@@ -8,11 +8,15 @@
  */
 #pragma once
 
+#include "core/serial/serial_types.hpp"
+
+#include <QVector>
 #include <QWidget>
 
 #include <cstdint>
 
 class QSettings;
+class QJsonObject;
 
 namespace aether {
 
@@ -55,9 +59,35 @@ public:
      */
     virtual void loadSettings(const QSettings &settings) = 0;
 
+    // --- Control API surface (see gui/control/control_server.hpp) ---------
+    // Kept transport-agnostic here so ControlServer never depends on concrete
+    // session widgets or backends.
+
+    /** @brief Stable id assigned by MainWindow; addresses this session over the control socket. */
+    [[nodiscard]] int controlId() const { return m_controlId; }
+    void setControlId(int id) { m_controlId = id; }
+
+    /** @brief Human-readable session name for the control `list` reply (defaults to the tab title). */
+    [[nodiscard]] virtual QString sessionName() const { return objectName(); }
+
+    /**
+     * @brief Execute a control `send` command decoded from JSON, delegating to this
+     * session's own backend. @p cmd carries transport-specific fields (serial: `side`,
+     * `data`; CAN: `frameId`, `flags`, `data`; Ethernet: `data`).
+     * @return false with a human-readable @p error on bad args or an inactive session.
+     */
+    virtual bool sendControl(const QJsonObject &cmd, QString *error) = 0;
+
 signals:
     /** @brief Request the hosting tab's label be updated. */
     void sessionTitleChanged(const QString &title);
+
+    /**
+     * @brief Traffic captured by this session, mirrored to any subscribed control
+     * clients. Re-emitted from the concrete widget's existing batched-chunk path;
+     * cheap when nothing is connected.
+     */
+    void controlTraffic(const QVector<aether::CapturedChunk> &chunks);
 
     /**
      * @brief Status/error text for this session, mirrored into the main window's
@@ -66,6 +96,9 @@ signals:
      * @p isError marks messages that should persist.
      */
     void statusMessage(const QString &text, bool isError);
+
+private:
+    int m_controlId = 0;  ///< Assigned by MainWindow::addSession; 0 = unregistered.
 };
 
 }  // namespace aether

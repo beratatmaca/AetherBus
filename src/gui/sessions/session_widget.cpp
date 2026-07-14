@@ -2,6 +2,8 @@
 
 #include "core/common/capture_replay.hpp"
 #include "core/common/format_codec.hpp"
+
+#include <QJsonObject>
 #include "core/serial/pty_proxy.hpp"
 #include "gui/widgets/consoleview.hpp"
 #include "gui/widgets/console_panel.hpp"
@@ -577,6 +579,41 @@ void SessionWidget::onChunksCaptured(const QVector<aether::CapturedChunk> &chunk
         console->appendChunk(chunk);
         m_stats.addChunk(chunk);
     }
+    emit controlTraffic(chunks);
+}
+
+bool SessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+    const auto fail = [&](const QString &msg) {
+        if (error != nullptr) {
+            *error = msg;
+        }
+        return false;
+    };
+
+    QByteArray bytes;
+    if (!codec::parseCompactHex(cmd.value(QStringLiteral("data")).toString(), bytes)) {
+        return fail(QStringLiteral("serial send: 'data' must be a hex string"));
+    }
+    if (bytes.isEmpty()) {
+        return fail(QStringLiteral("serial send: 'data' is empty"));
+    }
+
+    // side=device (default) injects toward the physical UART; side=app injects
+    // toward the slave-PTY / target application.
+    const QString side = cmd.value(QStringLiteral("side")).toString(QStringLiteral("device"));
+    bool ok = false;
+    if (side == QLatin1String("app")) {
+        ok = m_proxy->injectToApp(bytes);
+    } else if (side == QLatin1String("device")) {
+        ok = m_proxy->injectToDevice(bytes);
+    } else {
+        return fail(QStringLiteral("serial send: 'side' must be 'device' or 'app'"));
+    }
+    if (!ok) {
+        return fail(m_proxy->isRunning() ? QStringLiteral("serial send failed — write buffer full")
+                                         : QStringLiteral("serial send failed — interception not started"));
+    }
+    return true;
 }
 
 }  // namespace aether

@@ -65,6 +65,18 @@ QString toDecimal(const QByteArray &bytes);
 bool parseHexString(const QString &text, QByteArray &out, int *errorPos = nullptr);
 
 /**
+ * @brief Parse a compact (non-separated) hex string like @c "48490d" into bytes.
+ *
+ * Unlike @ref parseHexString this takes one continuous run of hex digits (the
+ * form produced by Python's @c bytes.hex()), which the control protocol uses on
+ * the wire.
+ * @param[in]  text Continuous hex digits; must be even length.
+ * @param[out] out  Receives the parsed bytes on success; untouched on failure.
+ * @return @c true on success, @c false on odd length or any non-hex character.
+ */
+bool parseCompactHex(const QString &text, QByteArray &out);
+
+/**
  * @brief Parse space-separated decimal byte values (e.g. @c "65 66 13").
  *
  * Each token must be in 0..255. Same contract as @ref parseHexString.

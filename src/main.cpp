@@ -11,10 +11,14 @@
 int main(int argc, char **argv) {
     // Answered before QApplication exists so it works with no display server
     // (used by packaging smoke tests and scripting).
+    bool enableControl = true;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--version") == 0) {
             std::printf("AetherBus %s\n", AETHER_VERSION_STRING);
             return 0;
+        }
+        if (std::strcmp(argv[i], "--no-control") == 0) {
+            enableControl = false;  // disable the localhost scripting/control socket
         }
     }
 
@@ -28,7 +32,7 @@ int main(int argc, char **argv) {
 
     aether::installSignalHandlers();
 
-    aether::MainWindow window;
+    aether::MainWindow window(enableControl);
     window.show();
     return QApplication::exec();
 }

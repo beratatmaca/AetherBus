@@ -202,6 +202,10 @@ add_library(aether_gui STATIC
     src/gui/widgets/can_sniffer_widget.hpp
     src/gui/widgets/collapsible_splitter.cpp
     src/gui/widgets/collapsible_splitter.hpp
+    src/gui/control/control_server.cpp
+    src/gui/control/control_server.hpp
+    src/gui/control/control_bridge.cpp
+    src/gui/control/control_bridge.hpp
     src/gui/resources.qrc
 )
 if(PCAP_INCLUDE_DIR AND PCAP_LIB)

@@ -6,7 +6,11 @@ The wheel ships the compiled Qt application plus its Qt runtime under
 
 from importlib.metadata import PackageNotFoundError, version
 
+from .client import Client, ControlError, connect, default_socket_path
+
 try:
     __version__ = version("aetherbus")
 except PackageNotFoundError:  # running from a source checkout
     __version__ = "0.0.0"
+
+__all__ = ["connect", "Client", "ControlError", "default_socket_path", "__version__"]

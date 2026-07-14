@@ -37,6 +37,7 @@ public:
     [[nodiscard]] SessionType sessionType() const override { return SessionType::Serial; }
     void saveSettings(QSettings &settings) const override;
     void loadSettings(const QSettings &settings) override;
+    bool sendControl(const QJsonObject &cmd, QString *error) override;
 
     StatsCalculator &stats() { return m_stats; }
 

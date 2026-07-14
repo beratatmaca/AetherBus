@@ -1,6 +1,8 @@
 #include "gui/sessions/ethernet_session_widget.hpp"
 #include "core/ethernet/ethernet_pcap.hpp"
 #include "core/common/format_codec.hpp"
+
+#include <QJsonObject>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -392,13 +394,16 @@ void EthernetSessionWidget::onThrottleTimeout() {
     // Per-packet accounting stays per-chunk; the visible list gets ONE
     // batched model insert + scroll for the whole tick.
     QVector<CapturedChunk> visible;
+    QVector<CapturedChunk> all;
     visible.reserve(static_cast<int>(chunks.size()));
+    all.reserve(static_cast<int>(chunks.size()));
     const bool paused = m_pauseBtn->isChecked();
     for (const auto &chunk : chunks) {
         m_stats.addChunk(chunk);
         if (m_captureWriter.isOpen()) {
             m_captureWriter.writePacket(chunk.timestampMs, chunk.data);
         }
+        all.append(chunk);
         if (paused) {
             m_pausedChunks.append(chunk);
         } else {
@@ -406,6 +411,9 @@ void EthernetSessionWidget::onThrottleTimeout() {
         }
     }
     appendToPacketList(visible);
+    // Control subscribers see all live traffic — the UI Pause only freezes
+    // the visible list, not the stream.
+    emit controlTraffic(all);
 }
 
 void EthernetSessionWidget::processCapturedPacket(const aether::CapturedChunk &chunk) {
@@ -446,6 +454,28 @@ void EthernetSessionWidget::onPacketReady(const QByteArray &packet) {
     if (m_backend->isRunning()) {
         m_backend->sendPacket(packet);
     }
+}
+
+bool EthernetSessionWidget::sendControl(const QJsonObject &cmd, QString *error) {
+    const auto fail = [&](const QString &msg) {
+        if (error != nullptr) {
+            *error = msg;
+        }
+        return false;
+    };
+
+    QByteArray frame;
+    if (!codec::parseHexString(cmd.value(QStringLiteral("data")).toString(), frame)) {
+        return fail(QStringLiteral("ethernet send: 'data' must be a hex string (a full raw frame)"));
+    }
+    if (frame.isEmpty()) {
+        return fail(QStringLiteral("ethernet send: 'data' is empty"));
+    }
+    if (!m_backend->isRunning()) {
+        return fail(QStringLiteral("ethernet send failed — capture not started"));
+    }
+    m_backend->sendPacket(frame);
+    return true;
 }
 
 void EthernetSessionWidget::onPacketSelected(const QModelIndex &current, const QModelIndex & /*previous*/) {

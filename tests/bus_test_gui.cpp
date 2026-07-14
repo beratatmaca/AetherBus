@@ -8,7 +8,16 @@
 #include "gui/panels/can_config_panel.hpp"
 #include "gui/dialogs/welcome_tutorial_dialog.hpp"
 #include "gui/sessions/session_view.hpp"
+#include "gui/control/control_server.hpp"
 #include <QSignalSpy>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocalSocket>
+#include <QTemporaryDir>
+#include <QElapsedTimer>
+#include <QThread>
+#include "gui/control/control_bridge.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -470,4 +479,156 @@ void BusTest::collapsibleSplitterTogglesPane() {
     QTest::mouseClick(handle, Qt::LeftButton, Qt::NoModifier, center);
     QVERIFY(!splitter.isPaneCollapsed(0));
     QCOMPARE(splitter.sizes()[0], expandedWidth);
+}
+
+namespace {
+/// Minimal SessionView for exercising ControlServer without a real backend.
+class StubControlSession : public SessionView {
+public:
+    [[nodiscard]] bool isRunning() const override { return true; }
+    void stopSession() override {}
+    [[nodiscard]] SessionType sessionType() const override { return SessionType::Serial; }
+    void saveSettings(QSettings &) const override {}
+    void loadSettings(const QSettings &) override {}
+    bool sendControl(const QJsonObject &cmd, QString *) override {
+        lastData = cmd.value(QStringLiteral("data")).toString();
+        return true;
+    }
+    /// Publicly fire the inherited traffic signal (can't `emit` it from outside).
+    void fire(const QVector<CapturedChunk> &chunks) { emit controlTraffic(chunks); }
+    QString lastData;
+};
+}  // namespace
+
+void BusTest::controlServerRoundTrip() {
+    // Isolate the control socket into a throwaway XDG_RUNTIME_DIR so this never
+    // collides with a real running GUI or a parallel test run.
+    QTemporaryDir runtimeDir;
+    QVERIFY(runtimeDir.isValid());
+    qputenv("XDG_RUNTIME_DIR", runtimeDir.path().toLocal8Bit());
+
+    // Mirror the production topology: bridge on this (GUI) thread, server on a
+    // worker thread. Same-thread BlockingQueuedConnection would deadlock.
+    ControlBridge bridge;
+    StubControlSession stub;
+    stub.setControlId(1);
+    bridge.registerSession(&stub);
+
+    QThread serverThread;
+    ControlServer server;  // no parent — moved to the worker thread
+    server.setBridge(&bridge);
+    server.moveToThread(&serverThread);
+    QObject::connect(&serverThread, &QThread::started, &server, &ControlServer::start);
+    QObject::connect(&bridge, &ControlBridge::traffic, &server, &ControlServer::onTraffic);
+    serverThread.start();
+
+    QLocalSocket sock;
+    // The socket file may not exist the instant the thread starts; retry briefly.
+    {
+        QElapsedTimer connectTimer;
+        connectTimer.start();
+        do {
+            sock.connectToServer(ControlServer::socketName());
+            if (sock.waitForConnected(200)) {
+                break;
+            }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        } while (connectTimer.elapsed() < 3000);
+    }
+    QVERIFY2(sock.state() == QLocalSocket::ConnectedState, qPrintable(sock.errorString()));
+
+    // Ensure the worker thread is joined however the test exits.
+    struct ThreadJoiner {
+        QThread &thread;
+        ControlServer &server;
+        ~ThreadJoiner() {
+            QMetaObject::invokeMethod(&server, "stop", Qt::BlockingQueuedConnection);
+            thread.quit();
+            thread.wait();
+        }
+    } joiner{serverThread, server};
+
+    // Pump the shared event loop until a full line is buffered, then return it.
+    const auto nextLine = [&]() -> QJsonObject {
+        QElapsedTimer timer;
+        timer.start();
+        while (!sock.canReadLine() && timer.elapsed() < 2000) {
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        }
+        return QJsonDocument::fromJson(sock.readLine()).object();
+    };
+    int nextId = 0;
+    // Send a command (auto-tagged with an id) and return its reply, skipping any
+    // interleaved async event lines — mirrors the correlation the client does.
+    const auto command = [&](QJsonObject o) -> QJsonObject {
+        const int rid = ++nextId;
+        o.insert(QStringLiteral("id"), rid);
+        sock.write(QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n');
+        sock.flush();
+        for (;;) {
+            const QJsonObject msg = nextLine();
+            if (msg.contains(QStringLiteral("event"))) {
+                continue;  // hello / chunks / dropped
+            }
+            // Reply must echo our request id.
+            if (msg.value(QStringLiteral("id")).toInt(-1) == rid) {
+                return msg;
+            }
+        }
+    };
+
+    // The very first async line is the hello handshake.
+    const QJsonObject hello = nextLine();
+    QCOMPARE(hello.value(QStringLiteral("event")).toString(), QStringLiteral("hello"));
+    QCOMPARE(hello.value(QStringLiteral("protocol")).toInt(), 1);
+
+    // list -> our stub session (and the id is echoed)
+    QJsonObject reply = command({{QStringLiteral("cmd"), QStringLiteral("list")}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(reply.value(QStringLiteral("id")).toInt(), 1);
+    const QJsonArray sessions = reply.value(QStringLiteral("sessions")).toArray();
+    QCOMPARE(sessions.size(), 1);
+    QCOMPARE(sessions.at(0).toObject().value(QStringLiteral("id")).toInt(), 1);
+    QCOMPARE(sessions.at(0).toObject().value(QStringLiteral("type")).toString(), QStringLiteral("serial"));
+
+    // send -> reaches the session backend
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("send")},
+                     {QStringLiteral("session"), 1},
+                     {QStringLiteral("data"), QStringLiteral("4142")}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(stub.lastData, QStringLiteral("4142"));
+
+    // unknown session -> error reply, no crash
+    reply = command(
+        {{QStringLiteral("cmd"), QStringLiteral("send")}, {QStringLiteral("session"), 99}, {QStringLiteral("data"), QStringLiteral("00")}});
+    QVERIFY(!reply.value(QStringLiteral("ok")).toBool());
+
+    // subscribe -> traffic fans out as a batched `chunks` event
+    reply = command({{QStringLiteral("cmd"), QStringLiteral("subscribe")}, {QStringLiteral("session"), 1}});
+    QVERIFY(reply.value(QStringLiteral("ok")).toBool());
+
+    CapturedChunk chunk;
+    chunk.dir = Direction::Rx;
+    chunk.timestampMs = 4242;
+    chunk.data = QByteArray::fromHex("cafe");
+    stub.fire({chunk});
+
+    // Read lines until the chunks event arrives.
+    QJsonObject ev;
+    {
+        QElapsedTimer timer;
+        timer.start();
+        do {
+            ev = nextLine();
+        } while (ev.value(QStringLiteral("event")).toString() != QLatin1String("chunks") && timer.elapsed() < 2000);
+    }
+    QCOMPARE(ev.value(QStringLiteral("event")).toString(), QStringLiteral("chunks"));
+    QCOMPARE(ev.value(QStringLiteral("session")).toInt(), 1);
+    const QJsonArray evChunks = ev.value(QStringLiteral("chunks")).toArray();
+    QCOMPARE(evChunks.size(), 1);
+    QCOMPARE(evChunks.at(0).toObject().value(QStringLiteral("dir")).toString(), QStringLiteral("rx"));
+    QCOMPARE(evChunks.at(0).toObject().value(QStringLiteral("data")).toString(), QStringLiteral("cafe"));
+
+    sock.disconnectFromServer();
+    // joiner stops the server on its thread and joins before returning.
 }
