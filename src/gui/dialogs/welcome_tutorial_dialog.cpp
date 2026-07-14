@@ -45,12 +45,6 @@ void WelcomeTutorialDialog::setupUi() {
         browser->setFrameStyle(QFrame::NoFrame);
         browser->setReadOnly(true);
         browser->setOpenExternalLinks(true);
-        // QTextBrowser is a QTextEdit, so leaving color unset would inherit the
-        // theme's global "QTextEdit, QPlainTextEdit" rule meant for the
-        // hex/ASCII console views (terminal green) — wrong here. Reference the
-        // palette directly instead of a hardcoded hex so this is always
-        // correct for the active theme (a fixed hex was the earlier bug: fine
-        // on dark, nearly invisible on light).
         browser->setStyleSheet(QStringLiteral("background: transparent; color: palette(text); font-size: 11pt;"));
         browser->setMarkdown(slideText.trimmed());
         m_stack->addWidget(browser);

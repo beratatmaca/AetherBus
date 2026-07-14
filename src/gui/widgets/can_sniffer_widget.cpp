@@ -28,9 +28,6 @@ void CanSnifferWidget::buildUi() {
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(6);
 
-    // Controls row. Tag the buttons with the shared toolbar properties so the
-    // theme styles them like the console toolbar — in particular so checkable
-    // toggles show a highlighted "on" state via the QSS ":checked" rule.
     const auto markToolbarButton = [](QPushButton *button, const char *kind) {
         button->setProperty(kind, true);
         button->setCursor(Qt::PointingHandCursor);
@@ -93,10 +90,6 @@ void CanSnifferWidget::refreshUi() {
         return;
     }
 
-    // Skip the full rebuild once the bus has been quiet long enough for the
-    // time-driven visuals to settle (the <1 s changed-byte highlight and the
-    // 3 s stale-gray threshold); keep refreshing until then so they fade
-    // correctly after the last frame.
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const quint64 revision = m_calc->revision();
     if (revision != m_lastSeenRevision) {
@@ -116,9 +109,6 @@ void CanSnifferWidget::refreshUi() {
         return ta != tb ? ta < tb : a < b;
     });
 
-    // Rows reorder as traffic arrives, so a row index is no longer tied to a
-    // fixed id. Recreate the item/widget objects only when the row count
-    // changes; the content of every row is rewritten by position below.
     if (m_table->rowCount() != keys.size()) {
         m_table->setRowCount(keys.size());
         for (int i = 0; i < keys.size(); ++i) {
@@ -165,9 +155,6 @@ void CanSnifferWidget::refreshUi() {
             dataLabel->setText(formatDataHtml(id, s.lastPayload, now));
         }
 
-        // Gray out stale rows (>3 s since last reception). Fresh rows clear their
-        // explicit foreground so the themed stylesheet/palette text colour applies
-        // — otherwise the default palette's dark text is invisible on a dark table.
         const qint64 elapsed = now - s.lastTimestampMs;
         const bool stale = (s.lastTimestampMs != -1 && elapsed > 3000);
         for (int col = 0; col < 4; ++col) {

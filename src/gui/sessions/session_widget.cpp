@@ -166,9 +166,6 @@ void SessionWidget::buildUi() {
     m_mainSplitter->setObjectName(QStringLiteral("mainSplitter"));
     auto *mainSplitter = m_mainSplitter;
 
-    // Left column: config, signal lines and stats stacked tightly in a plain
-    // layout (no inner splitter), so the panels stay compact at the top rather
-    // than floating apart. Stats takes the remaining vertical space.
     auto *leftColumn = new QWidget(mainSplitter);
     leftColumn->setMinimumWidth(320);
     auto *leftLayout = new QVBoxLayout(leftColumn);

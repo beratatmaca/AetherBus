@@ -489,14 +489,9 @@ void MainWindow::addSession(SessionType type) {
     }
 
     session->setObjectName(title);
-    // close() only hides a plain child widget by default; without this, neither
-    // the tab's 'X' button nor Ctrl+W ever actually destroys the session, so the
-    // destroyed-signal cleanup below never fires.
     session->setAttribute(Qt::WA_DeleteOnClose);
     m_sessions.append(session);
 
-    // Always assign a stable control id (cheap; harmless when the channel is
-    // off) so it can be registered as-is if the channel is enabled later.
     const int controlId = ++m_nextControlId;
     session->setControlId(controlId);
     if (m_controlBridge != nullptr) {
@@ -527,10 +522,6 @@ void MainWindow::addSession(SessionType type) {
         if (m_stack && m_dashboard && m_sessions.isEmpty()) {
             m_stack->setCurrentWidget(m_dashboard);
         } else if (m_tiledMode && !m_sessions.isEmpty()) {
-            // Reflow the remaining tiles into a properly-balanced grid instead of
-            // leaving a gap where the closed session used to be. Deferred so this
-            // doesn't run while the just-destroyed session's own destructor is
-            // still on the call stack.
             QTimer::singleShot(0, this, [this]() {
                 if (m_tiledMode && !m_sessions.isEmpty()) {
                     tileWorkspace();
@@ -552,9 +543,6 @@ void MainWindow::addSession(SessionType type) {
 void MainWindow::closeCurrentSession() {
     m_sessions.removeAll(nullptr);
     if (m_tiledMode) {
-        // isActiveWindow() is true for every tile whenever the main window itself
-        // is active, so it can't distinguish which pane the user is actually in —
-        // only a real focus-in-that-subtree counts.
         for (const auto &session : m_sessions) {
             if (session && session->isAncestorOf(QApplication::focusWidget())) {
                 session->close();

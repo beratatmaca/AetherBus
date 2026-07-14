@@ -199,9 +199,6 @@ ConsolePanel::ConsolePanel(QWidget *parent) : QWidget(parent) {
     m_findEdit->setPlaceholderText(QStringLiteral("find…"));
     m_findEdit->setFixedWidth(160);
 
-    // Re-highlighting rescans the whole (up to 10k-line) history, so debounce
-    // it: typing coalesces into one pass 150 ms after the last keystroke.
-    // Enter / find-next stay immediate below.
     m_searchDebounce = new QTimer(this);
     m_searchDebounce->setSingleShot(true);
     m_searchDebounce->setInterval(150);
@@ -349,9 +346,6 @@ void ConsolePanel::onSelectionChanged() {
         return;
     }
 
-    // Map the selection straight to the underlying payload bytes, so the inspector
-    // reflects exactly what is highlighted (across one or many lines) rather than
-    // the rendered timestamps, column decorations, or ASCII gutter.
     const QByteArray bytes = m_console->selectedBytes();
     m_inspector->setBytes(bytes);
     m_inspector->setVisible(!bytes.isEmpty());

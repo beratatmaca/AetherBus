@@ -23,10 +23,6 @@
 
 namespace aether {
 
-// Helper to format raw bytes into a Wireshark-like dump, with the same
-// HEX/DEC/BIN/ASCII layers the Serial/CAN console toolbar offers (built on
-// the same aether::codec primitives it uses) so columns line up row-to-row
-// even when the last row is short.
 QString formatHexDump(const QByteArray &data, bool showHex, bool showDec, bool showBin, bool showAscii) {
     static constexpr int kHexColWidth = 16 * 2 + 15;
     static constexpr int kDecColWidth = 16 * 3 + 15;
@@ -417,10 +413,6 @@ void EthernetSessionWidget::onThrottleTimeout() {
 }
 
 void EthernetSessionWidget::processCapturedPacket(const aether::CapturedChunk &chunk) {
-    // Counted (and captured-to-disk) immediately even while paused, matching
-    // ConsoleView::setPaused's "counted but not rendered until resumed"
-    // semantics — Pause only freezes the visible list, not the stats or the
-    // continuous file capture below.
     m_stats.addChunk(chunk);
 
     if (m_captureWriter.isOpen()) {

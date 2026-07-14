@@ -95,11 +95,6 @@ QString ByteInspectorPanel::buildText() const {
     }
     const auto len = static_cast<int>(m_bytes.size());
 
-    // Hex / ASCII / binary are already visible in the console, so the inspector
-    // shows only the numeric interpretations. Little-/big-endian are named once
-    // as column headers; each integer row shows the unsigned ("u") and signed
-    // ("s") reading side by side, and everything is space-padded so the columns
-    // line up in the monospace label.
     struct Row {
         QString tag;
         bool isFloat = false;

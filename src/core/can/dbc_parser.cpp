@@ -71,7 +71,7 @@ double DbcDatabase::decodeSignal(const QByteArray &payload, const DbcSignal &sig
             int bitIdx = curBit % 8;
             if (byteIdx >= 0 && byteIdx < payload.size()) {
                 bool bit = (payload.at(byteIdx) >> bitIdx) & 1;
-                rawVal = (rawVal << 1) | bit;
+                rawVal = (rawVal << 1) | static_cast<quint64>(bit);
             }
             if (bitIdx == 0) {
                 curBit = (byteIdx + 1) * 8 + 7;

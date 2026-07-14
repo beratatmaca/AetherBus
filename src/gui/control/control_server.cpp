@@ -78,9 +78,6 @@ void ControlServer::onNewConnection() {
             m_clients.remove(socket);
             socket->deleteLater();
         });
-        // Greet with the protocol version so clients can detect mismatches; it
-        // carries an `event` key so command-reply readers skip it like any
-        // other async line.
         writeMessage(socket, {{QStringLiteral("event"), QStringLiteral("hello")},
                               {QStringLiteral("protocol"), kProtocolVersion},
                               {QStringLiteral("version"), QStringLiteral(AETHER_VERSION_STRING)}});
@@ -112,8 +109,6 @@ void ControlServer::handleLine(QLocalSocket *socket, const QByteArray &line) {
     }
     const QJsonObject cmd = doc.object();
     const QString verb = cmd.value(QStringLiteral("cmd")).toString();
-    // Echo the client's request id so replies correlate even when async traffic
-    // events interleave on the same socket.
     const QJsonValue reqId = cmd.value(QStringLiteral("id"));
 
     const auto reply = [&](bool ok, const QString &error = QString()) {
@@ -185,7 +180,6 @@ void ControlServer::onTraffic(int sessionId, const QVector<CapturedChunk> &chunk
             continue;
         }
 
-        // Backpressure: a slow consumer gets chunks dropped, never blocks us.
         if (socket->bytesToWrite() > kMaxQueuedBytes) {
             client.dropped += chunks.size();
             continue;
@@ -197,8 +191,6 @@ void ControlServer::onTraffic(int sessionId, const QVector<CapturedChunk> &chunk
             client.dropped = 0;
         }
 
-        // One batched `chunks` event per drain (not per chunk): fewer JSON docs
-        // and a distinct `event` key so command-reply readers can skip it.
         QJsonArray arr;
         for (const CapturedChunk &chunk : chunks) {
             QJsonObject c{{QStringLiteral("dir"), chunk.dir == Direction::Tx ? QStringLiteral("tx") : QStringLiteral("rx")},

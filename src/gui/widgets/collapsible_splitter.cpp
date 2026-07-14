@@ -52,11 +52,6 @@ protected:
         const bool paneBeforeHandle = (paneIndex == myIndex - 1);
         const bool collapsed = m_owner->isPaneCollapsed(paneIndex);
 
-        // The chevron always points toward the *next* state, not the current
-        // one — the universal collapse/expand convention (VS Code, DevTools,
-        // etc.): while expanded, it points toward the pane's own edge (that's
-        // the direction it collapses to); once collapsed, it points back into
-        // the content (that's the direction it expands from).
         int sign = paneBeforeHandle ? -1 : 1;
         if (collapsed) {
             sign = -sign;
@@ -165,9 +160,6 @@ private:
 };
 
 CollapsibleSplitter::CollapsibleSplitter(Qt::Orientation orientation, QWidget *parent) : QSplitter(orientation, parent) {
-    // Distinct dynamic property so the theme QSS can give these splitters'
-    // handles a bit more room for the chevron without affecting plain
-    // QSplitters elsewhere in the app.
     setProperty("collapsibleHandles", true);
 }
 
@@ -204,9 +196,6 @@ void CollapsibleSplitter::toggleCollapse(int paneIndex) {
     }
 
     if (currentSizes[paneIndex] > 0) {
-        // Remember the whole layout, not just this pane's width — replaying
-        // the exact list Qt already normalized once avoids a rounding-pixel
-        // drift versus re-deriving sizes from the (now different) sibling.
         m_lastFullSizes[paneIndex] = currentSizes;
         currentSizes[paneIndex] = 0;
         setSizes(currentSizes);

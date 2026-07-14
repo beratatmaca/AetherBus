@@ -440,11 +440,6 @@ QString ConsoleView::lineToPlain(const DisplayLine &dl) const {
 }
 
 QString ConsoleView::lineSearchText(const DisplayLine &dl) const {
-    // Cache the joined plain text: a live-search keystroke re-scans every
-    // line, and findQuery() cycles over them repeatedly, so building it once
-    // per line is worth the stored string. Lines are immutable once finalized;
-    // reapplyHistory() rebuilds them fresh (empty cache) so no invalidation is
-    // needed.
     if (dl.plainCache.isEmpty()) {
         dl.plainCache = lineToPlain(dl);
     }

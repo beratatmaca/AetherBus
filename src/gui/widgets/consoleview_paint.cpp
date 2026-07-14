@@ -36,9 +36,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
     const int firstLine = vOff / m_lineH;
     const int lastLine = qMin(static_cast<int>(m_lines.size()) - 1, firstLine + viewH / m_lineH + 1);
 
-    // Which display format each active column holds, in the same order
-    // buildLine() appends them. Computed once per paint instead of being
-    // re-derived per byte per column.
     int colFormat[3] = {-1, -1, -1};
     int activeCols = 0;
     if (m_showHex) {
@@ -78,10 +75,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
         const int numBytes = static_cast<int>(dl.bytes.size());
 
         if (numCols > 0) {
-            // Every byte renders the same fixed-width tokens (HEX=2, DEC=3,
-            // BIN=8 chars per buildLine's zero-padding), so cell geometry and
-            // the per-byte character offset are constant across the line —
-            // compute them once rather than re-deriving per byte.
             int cellW = 0;
             int cellCharLen = 0;  // '/'-joined token length, matching lineToPlain
             for (int ci = 0; ci < numCols; ++ci) {
@@ -187,9 +180,6 @@ void ConsoleView::paintEvent(QPaintEvent * /*event*/) {
         }
 
         if (numCols > 0 && !dl.ascii.isEmpty()) {
-            // Snap the separator to the shared column so pipes align vertically
-            // across lines; short lines are padded, wider off-window lines keep
-            // their own position (qMax never pulls the pipe left into the hex).
             x = qMax(x, m_asciiSepCol - hOff);
             p.setPen(QColor(85, 85, 85));  // Muted separator color
             p.drawText(x, yBase, QStringLiteral("  |  "));

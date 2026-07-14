@@ -36,11 +36,6 @@ QString loadThemeStylesheet(bool dark) {
     return {};
 }
 
-// Build a QPalette that mirrors the active stylesheet. The app is themed via a
-// stylesheet, but Qt never derives QPalette from it, so any C++ that reads
-// palette() (e.g. table item colours, custom painting) would otherwise see the
-// stale default (usually light) palette. Setting a matching palette keeps those
-// runtime reads correct in both themes.
 QPalette buildPalette(bool dark) {
     QPalette p;
     if (dark) {

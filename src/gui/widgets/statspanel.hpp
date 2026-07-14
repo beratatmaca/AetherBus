@@ -73,7 +73,7 @@ private:
     double m_currentRxPktRate = 0.0;
     double m_currentTxPktRate = 0.0;
 
-    quint64 m_lastSeenRevision = std::numeric_limits<quint64>::max();  ///< Skip the ~20 label updates per 200 ms tick
+    quint64 m_lastSeenRevision = (std::numeric_limits<quint64>::max)();  ///< Skip the ~20 label updates per 200 ms tick
                                                                        ///< while nothing changed.
 };
 
