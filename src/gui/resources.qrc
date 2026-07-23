@@ -6,5 +6,6 @@
         <file alias="theme-dark.qss">../../assets/theme-dark.qss</file>
         <file alias="theme-light.qss">../../assets/theme-light.qss</file>
         <file alias="Usage.md">../../Usage.md</file>
+        <file alias="PythonAPI.md">../../PythonAPI.md</file>
     </qresource>
 </RCC>

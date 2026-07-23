@@ -57,6 +57,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+# Optional: only needed for the doc-regeneration / freshness-check targets below,
+# not for a normal build (the generated PythonAPI.md is committed to the tree).
+find_package(Python3 QUIET COMPONENTS Interpreter)
 
 # Prebuilt Qt 6 for macOS AGL framework fix
 if(APPLE)
@@ -242,6 +245,35 @@ if(PCAP_INCLUDE_DIR AND PCAP_LIB)
     )
 endif()
 target_link_libraries(aether_gui PUBLIC aether_core Qt6::Widgets Qt6::Network)
+
+# --- Python control-API reference (shown in Help -> Python API) ----------------
+# The reference (PythonAPI.md) is generated from the aetherbus client's
+# docstrings/signatures merged with docs/python_api.md.in, and is *committed* to
+# the tree so the normal build just embeds it via resources.qrc (no Python needed
+# to build). Two maintenance targets keep it honest:
+#   * `python-api-docs`       — regenerate PythonAPI.md in the source tree.
+#   * `check-python-api-docs` — CI guard: regenerate to a temp and fail if it
+#                               differs from the committed file (docs went stale).
+if(Python3_Interpreter_FOUND)
+    set(_gen_api
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_python_api.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/src/aetherbus/client.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/python_api.md.in")
+
+    add_custom_target(python-api-docs
+        COMMAND ${_gen_api} "${CMAKE_CURRENT_SOURCE_DIR}/PythonAPI.md"
+        COMMENT "Regenerating PythonAPI.md from the aetherbus client"
+        VERBATIM)
+
+    add_custom_target(check-python-api-docs
+        COMMAND ${_gen_api} "${CMAKE_CURRENT_BINARY_DIR}/PythonAPI.check.md"
+        COMMAND ${CMAKE_COMMAND} -E compare_files
+                "${CMAKE_CURRENT_SOURCE_DIR}/PythonAPI.md"
+                "${CMAKE_CURRENT_BINARY_DIR}/PythonAPI.check.md"
+        COMMENT "Checking PythonAPI.md is up to date (run `cmake --build . --target python-api-docs` if this fails)"
+        VERBATIM)
+endif()
 
 if(APPLE)
     add_executable(aetherbus MACOSX_BUNDLE src/main.cpp)

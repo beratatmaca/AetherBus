@@ -1,0 +1,81 @@
+# Python Control API
+
+AetherBus can expose a **local control channel** while it runs, so a Python
+script can enumerate open sessions, create/configure/start/stop them, inject
+data, stream captured traffic, capture to pcap, replay, run macros, and schedule
+repeating sends — enough to automate a device test with no clicks.
+
+The channel is a local owner-only socket (a Unix domain socket on Linux/macOS, a
+named pipe on Windows). There is **no network exposure**; only processes running
+as the same user can connect.
+
+> The reference below is generated from the `aetherbus` client source, so it
+> always matches the installed package.
+
+---
+
+## Enabling the channel
+
+It is **off by default**. Turn it on one of two ways:
+
+- launch with `aetherbus --control`, or
+- toggle **Window → Enable Control Channel** (remembered across restarts).
+
+`aetherbus --no-control` forces it off even if the saved toggle would enable it.
+
+Install the client from PyPI:
+
+```
+pip install aetherbus
+```
+
+Then:
+
+```python
+import aetherbus
+
+with aetherbus.connect() as c:
+    sid = c.open_session(
+        "serial",
+        {"device": "/dev/ttyUSB0", "baud": 115200},
+        start=True,
+    )
+    c.capture(sid, "start", "/tmp/run.pcap")
+    c.send(sid, b"PING\r\n")
+    print(c.stats(sid))
+    c.close_session(sid)
+```
+
+Config keys by session type (omit a key to keep its current value):
+
+- **serial** — `device`, `baud`, `dataBits`, `parity`
+  (`none`/`even`/`odd`), `stopBits`, `flow`
+  (`none`/`rtscts`/`xonxoff`), `symlinkPath`, `directMode`
+- **can** — `iface`, `fdMode`, `loopback`, `receiveOwn`,
+  `errorFrames`, `filters` (list of
+  `{"id", "mask", "extended", "invert"}`)
+- **ethernet** — `interface`, `bpfFilter`
+
+Stream a session's captured traffic (use a separate connection if you also send
+commands, so a traffic burst never blocks a command reply):
+
+```python
+stream = aetherbus.connect()
+for msg in stream.stream(sid):
+    print(msg["dir"], msg["data"])   # dir is "rx"/"tx", data is bytes
+```
+
+---
+
+<!-- GENERATED_API_REFERENCE -->
+
+---
+
+## Protocol notes
+
+The wire format is newline-delimited JSON, one object per line; binary payloads
+are lowercase hex strings. Each command is tagged with an `id` echoed in its
+reply, so replies correlate even when async traffic events interleave. The
+current protocol version is reported in the `hello` greeting (`"protocol": 2`);
+new verbs are additive, so older clients keep working. Any error is raised
+client-side as `aetherbus.ControlError`.

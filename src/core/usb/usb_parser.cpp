@@ -191,7 +191,6 @@ UsbUrbInfo UsbParser::parseUrb(const QByteArray &packet) {
                                        : QStringLiteral("%1 (Dev %2)").arg(devName).arg(info.deviceAddress);
 
     if (info.transferType == UsbTransferType::Control && !info.setupPacket.isEmpty() && info.setupPacket.size() == 8) {
-        auto reqType = static_cast<quint8>(info.setupPacket.at(0));
         auto request = static_cast<quint8>(info.setupPacket.at(1));
 
         quint16 val = 0;

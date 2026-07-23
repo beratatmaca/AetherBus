@@ -156,7 +156,7 @@ class Client:
     def start(self, session: int, config: Optional[dict] = None) -> None:
         """Start ``session``'s backend, optionally applying ``config`` first.
 
-        See :meth:`open_session` for the per-type ``config`` keys.
+        See `open_session` for the per-type `config` keys.
         """
         cmd = {"cmd": "start", "session": session}
         if config:
@@ -218,8 +218,8 @@ class Client:
     ) -> int:
         """Repeat a send every ``interval_ms`` ms; returns the schedule id.
 
-        Without ``count`` it repeats until :meth:`cancel_send` (or the session
-        closes). ``side``/``frame_id``/``flags`` mirror :meth:`send`.
+        Without `count` it repeats until `cancel_send` (or the session
+        closes). `side`/`frame_id`/`flags` mirror `send`.
         """
         cmd = {
             "cmd": "schedule_send",
@@ -237,7 +237,7 @@ class Client:
         return int(self._command(cmd)["schedule"])
 
     def cancel_send(self, schedule: int) -> None:
-        """Cancel a repeating send created by :meth:`schedule_send`."""
+        """Cancel a repeating send created by `schedule_send`."""
         self._command({"cmd": "cancel_send", "schedule": schedule})
 
     def stream(self, session: int) -> Iterator[dict]:

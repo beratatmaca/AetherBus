@@ -244,13 +244,6 @@ void ConsoleView::finalizeLine() {
     m_tlvTargetSize = -1;
 }
 
-void ConsoleView::commitOpenLine() {
-    if (!m_openLineActive && !m_openLine.bytes.isEmpty()) {
-        renderOpenLine();
-    }
-    finalizeLine();
-}
-
 void ConsoleView::processChunk(const CapturedChunk &chunk) {
     if (!m_openLine.bytes.isEmpty() && chunk.dir != m_openLine.dir) {
         renderOpenLine();
@@ -566,18 +559,6 @@ void ConsoleView::updateScrollBars() {
     hsb->setRange(0, qMax(0, maxW - viewport()->width()));
     hsb->setPageStep(viewport()->width());
     hsb->setSingleStep(m_charW);
-}
-
-int ConsoleView::lineHeight() const {
-    return m_lineH;
-}
-
-int ConsoleView::firstVisibleLine() const {
-    return verticalScrollBar()->value() / m_lineH;
-}
-
-int ConsoleView::visibleLineCount() const {
-    return (viewport()->height() / m_lineH) + 2;
 }
 
 void ConsoleView::resizeEvent(QResizeEvent *event) {

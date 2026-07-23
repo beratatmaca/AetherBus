@@ -42,7 +42,7 @@ It is **off by default**: nothing listens until you enable it.
 import aetherbus
 
 c = aetherbus.connect()                     # finds the running GUI's socket
-print(c.hello)                              # {"protocol": 1, "version": "..."}
+print(c.hello)                              # {"protocol": 2, "version": "..."}
 
 for s in c.sessions():
     print(s["id"], s["type"], s["name"], s["running"])
@@ -61,6 +61,39 @@ stream = aetherbus.connect()
 for msg in stream.stream(1):
     print(msg["dir"], msg["data"])          # data is bytes
 ```
+
+### Driving sessions end-to-end
+
+A script can also create, configure, start/stop, capture, replay and automate
+sessions — enough to run a device test with no clicks:
+
+```python
+c = aetherbus.connect()
+
+# Create a serial session, configure it, and start it — all headless.
+sid = c.open_session("serial",
+                     {"device": "/dev/ttyUSB0", "baud": 115200},
+                     start=True)
+
+c.capture(sid, "start", "/tmp/run.pcap")    # record everything to a pcap
+c.send(sid, b"PING\r\n")
+print(c.stats(sid))                          # {"rxBytes": ..., "running": True, ...}
+
+# Repeat a heartbeat 10 times, 500 ms apart (omit count to repeat forever).
+h = c.schedule_send(sid, b"\x00", interval_ms=500, count=10)
+# ... c.cancel_send(h) to stop early ...
+
+c.run_macro(sid, name="Reset")               # fire a saved quick-send macro
+c.capture(sid, "stop")
+c.stop(sid)
+c.close_session(sid)
+```
+
+Config keys per type — serial: `device, baud, dataBits, parity, stopBits, flow,
+symlinkPath, directMode`; CAN: `iface, fdMode, loopback, receiveOwn,
+errorFrames, filters` (each filter `{"id", "mask", "extended", "invert"}`);
+Ethernet: `interface, bpfFilter`. `stats()` returns the live counters;
+`replay(sid, path)` plays a saved pcap through the session's view.
 
 **Notes.** Use a dedicated `connect()` for `stream()` if you also issue commands
 concurrently. The snap build runs under strict confinement, which relocates the

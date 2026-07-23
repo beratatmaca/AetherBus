@@ -89,6 +89,9 @@ Classic CAN and CAN-FD over `PF_CAN` sockets. A per-ID table with changed-byte h
 **Across all four**
 Side-by-side HEX/ASCII/BIN/DEC console rendering that stays fast at megabaud rates, live throughput graphs and inter-packet gap stats, a byte inspector for decoding selected bytes as int8–64/float/double, and multiple sessions running side by side in tabs or a tiled grid.
 
+**Scripting**
+An optional [`aetherbus`](https://pypi.org/project/aetherbus/) Python package (`pip install aetherbus`) can drive a running instance over a local socket — open/configure/start/stop sessions, inject data, stream traffic, capture, and run macros, for headless test automation. Enable it with `aetherbus --control` or **Window → Enable Control Channel**; the full API reference is in-app under **Help → Python API**.
+
 ---
 
 ## How it works

@@ -35,7 +35,9 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFile>
 #include <QTextBrowser>
+#include <QTextDocument>
 #include <QStatusBar>
 #include <QTimer>
 #include <QDesktopServices>
@@ -44,6 +46,17 @@
 namespace aether {
 
 namespace {
+/// Style a read-only document viewer to match the Welcome Tutorial: a frameless,
+/// transparent browser that uses the palette's text colour instead of inheriting
+/// the console's terminal-green QTextEdit rule from the theme stylesheet.
+void styleDocBrowser(QTextBrowser *browser) {
+    browser->setFrameStyle(QFrame::NoFrame);
+    browser->setReadOnly(true);
+    browser->setOpenExternalLinks(true);
+    browser->setStyleSheet(QStringLiteral("background: transparent; color: palette(text); font-size: 11pt;"));
+    browser->document()->setDocumentMargin(18);  // breathing room so text isn't flush to the edge
+}
+
 QString sessionTypeKey(SessionType type) {
     switch (type) {
         case SessionType::Can:
@@ -165,6 +178,35 @@ MainWindow::MainWindow(bool enableControl, QWidget *parent) : QMainWindow(parent
         WelcomeTutorialDialog dlg(this);
         dlg.exec();
     });
+
+    QAction *pythonApiAct = helpMenu->addAction(tr("&Python API…"));
+    connect(pythonApiAct, &QAction::triggered, this, [this]() {
+        auto *dlg = new QDialog(this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setWindowTitle(tr("Python Control API"));
+        dlg->setWindowIcon(QIcon(QStringLiteral(":/aetherbus/icon.ico")));
+        dlg->resize(760, 640);
+
+        auto *root = new QVBoxLayout(dlg);
+        root->setContentsMargins(0, 0, 0, 0);
+
+        auto *browser = new QTextBrowser(dlg);
+        styleDocBrowser(browser);
+        QFile doc(QStringLiteral(":/aetherbus/PythonAPI.md"));
+        if (doc.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            browser->setMarkdown(QString::fromUtf8(doc.readAll()));
+        } else {
+            browser->setPlainText(tr("Could not load the Python API reference."));
+        }
+        root->addWidget(browser);
+
+        auto *btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);
+        connect(btns, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+        root->addWidget(btns);
+
+        dlg->show();
+    });
+
     helpMenu->addSeparator();
     QAction *projectPageAct = helpMenu->addAction(tr("AetherBus on &GitHub"));
     connect(projectPageAct, &QAction::triggered, this,
@@ -210,9 +252,7 @@ MainWindow::MainWindow(bool enableControl, QWidget *parent) : QMainWindow(parent
 
         // Details
         auto *body = new QTextBrowser(dlg);
-        body->setOpenExternalLinks(true);
-        body->setFrameStyle(QFrame::NoFrame);
-        body->setReadOnly(true);
+        styleDocBrowser(body);
         body->setHtml(
             QStringLiteral("<table cellspacing='4' style='font-size:10pt'>"
                            "<tr><td><b>Version</b></td><td>&nbsp;</td><td>%1</td></tr>"

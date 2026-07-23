@@ -195,8 +195,6 @@ private slots:
 private:
     void processChunk(const CapturedChunk &chunk);
     void beginLineIfEmpty(const CapturedChunk &chunk);
-    /** @brief push m_openLine into m_lines and reset */
-    void commitOpenLine();
     /** @brief re-render m_openLine.cols from m_openLine.bytes */
     void renderOpenLine();
     /** @brief commit + log */
@@ -227,9 +225,6 @@ private:
      * i.e. where its "  |  " separator would begin without alignment.
      */
     [[nodiscard]] int hexRegionEndX(const DisplayLine &dl) const;
-    int lineHeight() const;
-    int firstVisibleLine() const;
-    int visibleLineCount() const;
 
     /** @brief Translate a viewport pixel position to (line, charOffset). */
     CursorPos posFromPoint(QPoint pt) const;

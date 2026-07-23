@@ -139,7 +139,7 @@ void UsbBackend::packetCallback(u_char *user, const struct pcap_pkthdr *header, 
 
     // Parse direction from header byte 10
     if (chunk.data.size() >= 48) {
-        quint8 endpointNum = static_cast<quint8>(chunk.data.at(10));
+        auto endpointNum = static_cast<quint8>(chunk.data.at(10));
         chunk.dir = (endpointNum & 0x80) ? Direction::Rx : Direction::Tx;
     } else {
         chunk.dir = Direction::Rx;
@@ -285,8 +285,8 @@ bool UsbBackend::injectControlTransfer(uint16_t vid, uint16_t pid, uint8_t bmReq
         return false;
     }
 
-    unsigned char *dataPtr = const_cast<unsigned char *>(reinterpret_cast<const unsigned char *>(data.constData()));
-    uint16_t wLength = static_cast<uint16_t>(data.size());
+    auto *dataPtr = const_cast<unsigned char *>(reinterpret_cast<const unsigned char *>(data.constData()));
+    auto wLength = static_cast<uint16_t>(data.size());
 
     int transferred = libusb_control_transfer(handle, bmRequestType, bRequest, wValue, wIndex, dataPtr, wLength, 1000);
     bool ok = true;
@@ -329,7 +329,7 @@ bool UsbBackend::injectBulkTransfer(uint16_t vid, uint16_t pid, uint8_t endpoint
     int interfaceNum = 0;
     libusb_claim_interface(handle, interfaceNum);
 
-    unsigned char *dataPtr = const_cast<unsigned char *>(reinterpret_cast<const unsigned char *>(data.constData()));
+    auto *dataPtr = const_cast<unsigned char *>(reinterpret_cast<const unsigned char *>(data.constData()));
     int transferred = 0;
     int res = libusb_bulk_transfer(handle, endpoint, dataPtr, data.size(), &transferred, 1000);
     bool ok = true;
